@@ -109,8 +109,8 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 
 | Компонент | Ответственность | Вход | Выход | Контракт | Ошибки | Критерии качества |
 |---|---|---|---|---|---|---|
-| **S1 Ingest** | Определить формат, извлечь текст постранично, диагностика; страницы без текста распознаются OCR фоновой задачей | bytes, filename | `RawDocument{format, pages[text], diagnostics}` | `Extractor` Protocol: `extract(data) -> RawDocument`; реестр по `DocFormat` | `unsupported_format`, `file_too_large`, `corrupted_file`, `encrypted_file`, `no_text_layer`, `empty_document`, `encoding_undetected` | 100 % фикстур корректно классифицированы; скан → `needs_ocr`; без исключений наружу, кроме `IngestionError` |
-| **S2 Structure** | Очистка (служебные строки, пометки, колонтитулы), профиль нумерации, дерево фрагментов, метки, смещения, страницы, реквизиты | `RawDocument` | `list[Fragment]`, `DocumentMetadata`, `StructureMode` | `build_structure(raw, patterns) -> StructureResult`; чистая функция | не бросает исключений: деградирует в режим `paragraphs` с предупреждением | инварианты вложенности; снимки структуры dev-корпуса совпадают (SC-012); на регламенте 261 разделы I–V и пункты 3.x.y распознаны |
+| **S1 Ingest** | Определить формат, извлечь текст постранично, диагностика; страницы без текста распознаются OCR фоновой задачей | bytes, filename | `RawDocument{format, blocks: list[Block], diagnostics}` (IR, R-22) | `Extractor` Protocol: `extract(data) -> RawDocument`; реестр по `DocFormat` | `unsupported_format`, `file_too_large`, `corrupted_file`, `encrypted_file`, `no_text_layer`, `empty_document`, `encoding_undetected` | 100 % фикстур корректно классифицированы; скан → `needs_ocr`; без исключений наружу, кроме `IngestionError` |
+| **S2 Structure** | Очистка (служебные строки, пометки, колонтитулы), профиль нумерации, дерево фрагментов, метки, смещения, страницы, реквизиты | `RawDocument` | `list[Fragment]`, `DocumentMetadata`, `StructureMode` | `build_structure(raw, strategies) -> StructureResult`; стратегии соревнуются по оценке (R-22); чистая функция | не бросает исключений: деградирует в режим `paragraphs` с предупреждением | инварианты вложенности; снимки структуры dev-корпуса совпадают (SC-012); на регламенте 261 разделы I–V и пункты 3.x.y распознаны |
 | **S3 Discover** | Карта процессов по оглавлению | fragments → outline | `DiscoveryOut` → кандидаты | [llm.md § S3](./contracts/llm.md#s3--discover--карта-процессов) | LLM-коды; 0 валидных кандидатов → этап `succeeded` с «процессы не найдены» | полнота и точность процессов (eval) |
 | **S4 Detail** | Операции, решения, роли, сроки для каждого процесса | кандидат + фрагменты | `DetailOut` по каждому процессу | [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций) | ошибка одного процесса → процесс помечается `failed`, этап `succeeded` с предупреждением и `completeness.complete=false`, если доля ошибок ≤ 30 %, иначе `failed` | полнота операций, доля `verified` (eval) |
 | **S5 Validate** | Grounding, граф, дедупликация, уверенность, покрытие | `DetailOut[]`, fragments | `ProcessModel{processes, unverified, coverage}` | `validate(detail, fragments, cfg) -> ProcessModel`; чистая | не бросает | 100 % «фактов» с verified/relocated-цитатой (SC-002) |
@@ -153,6 +153,7 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 | `MAX_UNZIPPED_MB` | 100 | лимит распаковки DOCX (R-04) |
 | `APP_PUBLIC_URL` | — | внешний адрес за реверс-прокси (проверка Origin, R-15); обязателен при `APP_ENV=server` |
 | `PARSE_WORKERS` / `PARSE_TIMEOUT_S` | 2 / 120 | пул процессов (NFR-014) |
+| `STRUCTURE_MIN_CONFIDENCE` | 0.5 | ниже — предупреждение о структуре (R-22) |
 | `SQLITE_BUSY_TIMEOUT_MS` | 5000 | |
 | `LLM_MAX_OUTPUT_TOKENS` | 8000 | подбирается под модель (T074) |
 | `OCR_ENABLED` | `true` | OCR сканов (FR-008) |
@@ -220,9 +221,10 @@ src/gr/
 │   ├── assumptions.py, priority.py, review.py, run.py
 ├── ingestion/                    # S1
 │   ├── base.py, detect.py, registry.py
-│   ├── pdf.py, pdf_layout.py, docx.py, docx_numbering.py, txt.py, html.py, ocr.py, convert.py
+│   ├── ir.py, pdf.py, pdf_layout.py, docx.py, docx_numbering.py, txt.py, html.py, ocr.py,
+│   │   convert.py
 ├── structure/                    # S2
-│   ├── cleanup.py, patterns.py, profiles.py, builder.py, metadata.py
+│   ├── cleanup.py, patterns.py, profiles.py, strategies.py, scoring.py, builder.py, metadata.py
 ├── grounding/                    # R-11
 │   ├── normalize.py, quotes.py, numerals_ru.py, deadlines.py, roles.py
 ├── llm/
@@ -260,6 +262,7 @@ tests/
 ├── unit/          # grounding, structure, economics, scoring, gating, overlay, mermaid, ingestion
 ├── integration/   # pipeline на FakeLLM, runner, API + web через TestClient
 ├── contract/      # OpenAPI ↔ contracts/api.md, JSON Schema экспорта
+├── property/      # инварианты разбора и fuzz на любом входе (SC-014)
 └── fixtures/
     ├── make_fixtures.py, fonts/DejaVuSans.ttf
     ├── synthetic/  # мини-регламент (txt/docx/pdf), скан, битый файл, инъекция, без нумерации

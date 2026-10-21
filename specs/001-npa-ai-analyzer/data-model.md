@@ -59,6 +59,24 @@
 | `structure_mode` | `StructureMode` | |
 | `user_source?`, `relevance_checked_at?`, `relevance_note?` | `str`, `date`, `str` | вводит пользователь (FR-006) |
 
+### `Block` (промежуточное представление, R-22)
+| Поле | Тип | Примечания |
+|---|---|---|
+| `text` | `str` | текст блока (абзац, строка таблицы, элемент списка) |
+| `page?` | `int` | ≥ 1; для форматов без страниц — `None` |
+| `bbox?` | `(x0, y0, x1, y1)` | PDF и OCR, в пунктах страницы |
+| `indent?` | `float` | отступ первой строки относительно поля (PDF) |
+| `font_size?`, `bold?` | `float`, `bool` | |
+| `align?` | `left` / `center` / `right` / `justify` | |
+| `style?` | `str` | имя стиля DOCX («Heading 1», «Заголовок 2») |
+| `list_level?`, `list_marker?` | `int`, `str` | восстановленная нумерация (R-05) |
+| `table?` | `{table: int, row: int, col: int}` | ячейка таблицы |
+| `html_tag?` | `str` | `h1`…`h6`, `li`, `p`, `td` |
+| `text_source` | `TextSource` | `native` / `ocr` |
+
+`RawDocument = {format: DocFormat, blocks: list[Block], page_count?: int, diagnostics:
+IngestionDiagnostics}`.
+
 ### `IngestionDiagnostics`
 `text_layer: TextLayerStatus`, `empty_pages: list[int]`, `encoding?: str`, `warnings: list[str]`,
 `numbering_restored: bool` (DOCX, R-05), `numbering_profile: NumberingProfile`,
@@ -66,6 +84,8 @@
 low_confidence_pages: list[int], engine_version?: str, error?: str}`,
 `removed_noise: {spps_lines: int, header_footer_lines: int, editorial_notes: int}`,
 `analyzable: bool` — ложно при `needs_ocr` или `empty` без успешного OCR и пока OCR не завершён.
+`structure: {strategy: str, confidence: float, scores: dict[str, float], failed_strategies:
+dict[str, str]}` (R-22), `columns_pages: list[int]` — страницы с многоколоночной вёрсткой.
 
 ### `DocumentMetadata`
 Поля `act_type`, `issuer`, `date`, `number`, `title`, `edition_date`, `minjust_registration`.
