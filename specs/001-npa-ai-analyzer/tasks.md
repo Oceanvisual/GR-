@@ -36,7 +36,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: `uv sync` и `check.sh` проходят, версии зафиксированы в `uv.lock`.
   - **Тесты**: существующий smoke-тест.
 
-- [ ] T002 [P] Каркас пакета и тест слоёв — `tests/unit/test_layering.py`
+- [X] T002 [P] Каркас пакета и тест слоёв — `tests/unit/test_layering.py`
   - **Цель**: зафиксировать структуру из plan.md и запрет обратных зависимостей.
   - **Зависит**: T001
   - **Файлы**: `src/gr/**/__init__.py` (все пакеты плана), `tests/unit/test_layering.py`
@@ -47,7 +47,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: тест зелёный, а намеренное нарушение его роняет (проверено вручную).
   - **Тесты**: `test_layering.py`.
 
-- [ ] T003 [P] Настройки и `.env.example` — `src/gr/settings.py`
+- [X] T003 [P] Настройки и `.env.example` — `src/gr/settings.py`
   - **Цель**: вся конфигурация через env (plan § Конфигурация).
   - **Зависит**: T001
   - **Файлы**: `src/gr/settings.py`, `.env.example`, `tests/unit/test_settings.py`
@@ -59,7 +59,7 @@ description: "Task list for 001-npa-ai-analyzer"
     переменные без значений секретов.
   - **Тесты**: `test_settings.py`.
 
-- [ ] T004 [P] Логирование — `src/gr/logging.py`
+- [X] T004 [P] Логирование — `src/gr/logging.py`
   - **Цель**: structlog с контекстом `run_id`, `doc_id`, `stage` (NFR-002).
   - **Зависит**: T001
   - **Файлы**: `src/gr/logging.py`, `tests/unit/test_logging.py`

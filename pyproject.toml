@@ -48,6 +48,8 @@ extend-exclude = [".specify"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+# UI, error messages and domain texts are in Russian: Cyrillic is intentional, not a confusable.
+ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 python_version = "3.12"
