@@ -66,3 +66,17 @@ def test_violation_is_detected(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("import fastapi\nfrom gr.storage import db\nfrom gr.domain import enums\n")
     assert sorted(_violations("analysis", bad)) == ["fastapi", "gr.storage"]
+
+
+# PDFium is not thread-safe and a bad file can crash it: it runs only inside worker processes
+# (T076), so only the PDF extractor, which the services call through CpuWorkers, may import it.
+PDFIUM_ALLOWED = {"ingestion/pdf.py"}
+
+
+def test_pdfium_only_in_pdf_extractor() -> None:
+    importers = {
+        str(path.relative_to(PACKAGE_ROOT))
+        for path in PACKAGE_ROOT.rglob("*.py")
+        if any(m.split(".")[0] == "pypdfium2" for m in _imported_modules(path))
+    }
+    assert importers <= PDFIUM_ALLOWED, f"pypdfium2 imported outside the extractor: {importers}"

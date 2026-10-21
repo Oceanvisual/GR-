@@ -324,7 +324,7 @@ description: "Task list for 001-npa-ai-analyzer"
     читается; пустой файл → `empty_document`.
   - **Тесты**: `test_detect_txt.py`.
 
-- [ ] T016 [P] [US1] PDF — `src/gr/ingestion/pdf.py`
+- [X] T016 [P] [US1] PDF — `src/gr/ingestion/pdf.py`
   - **Цель**: FR-001, FR-003, FR-004 для PDF (R-04).
   - **Зависит**: T015, T072, T076, T077
   - **Файлы**: `ingestion/pdf.py`, `tests/unit/ingestion/test_pdf.py`
