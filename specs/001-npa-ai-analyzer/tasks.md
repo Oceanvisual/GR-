@@ -349,7 +349,7 @@ description: "Task list for 001-npa-ai-analyzer"
     Строка, начинающаяся с «10 дней» или «2020 г.», не становится отдельным абзацем.
   - **Тесты**: `test_pdf.py`.
 
-- [ ] T017 [P] [US1] DOCX с автонумерацией — `src/gr/ingestion/docx.py`
+- [X] T017 [P] [US1] DOCX с автонумерацией — `src/gr/ingestion/docx.py`
   - **Цель**: FR-001, ASU-8, R-05.
   - **Зависит**: T015, T072, T077
   - **Файлы**: `ingestion/docx.py`, `docx_numbering.py`, `tests/unit/ingestion/test_docx.py`

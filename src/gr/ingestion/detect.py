@@ -8,8 +8,10 @@ from gr.domain.enums import DocFormat
 from gr.ingestion.base import IngestionError
 
 _HTML_RE = re.compile(rb"^\s*(<!--.*?-->\s*)*<(!doctype\s+html|html|head|body)\b", re.I | re.S)
-_OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _WORD_STREAM = "WordDocument".encode("utf-16-le")
+# Password-protected OOXML (and DOC) is an OLE container with an EncryptionInfo stream (R-04).
+ENCRYPTION_STREAM = "EncryptionInfo".encode("utf-16-le")
 _TEXT_PROBE = 64 * 1024
 
 # Recognised but never accepted: images are out of MVP scope, spreadsheets are not acts.
@@ -69,7 +71,9 @@ def detect_format(data: bytes) -> DocFormat:
         return DocFormat.PDF
     if data.startswith(b"PK\x03\x04"):
         return _zip_format(data)
-    if data.startswith(_OLE_SIGNATURE):
+    if data.startswith(OLE_SIGNATURE):
+        if ENCRYPTION_STREAM in data:
+            raise IngestionError("encrypted_file", "Файл защищён паролем.")
         if _WORD_STREAM in data:
             return DocFormat.DOC
         raise unsupported("OLE (не Word)")
