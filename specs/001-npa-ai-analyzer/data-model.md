@@ -17,7 +17,7 @@
 | `ReviewStatus` | `pending`, `confirmed`, `edited`, `rejected` | Статус проверки (FR-080) |
 | `GroundingStatus` | `verified`, `relocated`, `partial`, `unverified`, `invalid_quote` | Результат проверки цитаты (R-11). Проверку проходят только `verified` и `relocated` |
 | `Confidence` | `high`, `medium`, `low` | Детерминированная уверенность (FR-027) |
-| `DocFormat` | `pdf`, `docx`, `txt`, `html` | |
+| `DocFormat` | `pdf`, `docx`, `txt`, `html`, `doc`, `rtf`, `odt` | `doc`/`rtf`/`odt` конвертируются в DOCX |
 | `TextLayerStatus` | `ok`, `partial`, `needs_ocr`, `empty` | Диагностика текстового слоя до OCR (FR-003) |
 | `OcrStatus` | `not_needed`, `queued`, `running`, `done`, `failed`, `unavailable` | FR-008 |
 | `TextSource` | `native`, `ocr` | Происхождение текста фрагмента |
@@ -74,7 +74,7 @@ low_confidence_pages: list[int], engine_version?: str, error?: str}`,
 ### `Fragment`
 | Поле | Тип | Правила |
 |---|---|---|
-| `id` | `str` | путь, стабилен для одного текста: `body/III/3.5/3.5.1/sp2` |
+| `id` | `str` | путь, стабилен для одного текста: `body/III/3.5/3.5.1/sp2`; при повторе номера — суффикс `~2`; уникален в документе |
 | `doc_id` | `str` → Document | |
 | `kind` | `FragmentKind` | |
 | `number?` | `str` | «3.5.1», «2)», «а)», «III» |
@@ -253,7 +253,7 @@ element_id, message}`. Коды:
 | `fte_hours_per_year` | 1 970 | = |
 | `horizon_years` | 3 | = |
 | `volume_per_year` | 1 000 (`requires_input=true`) | ×0,7 / ×1,3 |
-| `case_share` | 1,0 для основного пути, 0,3 для ветвей | = |
+| `case_share` | 1,0 для всех операций; для операций после точки решения — `requires_input=true` | = |
 | `time_hours` по `OperationType` | intake 0,25; registration 0,1; completeness_check 0,5; data_verification 1,0; interagency_request 0,5; document_preparation 2,0; approval 0,5; decision 0,5; signing 0,1; notification 0,25; issuance 0,25; record_keeping 0,1; control 1,0; other 0,5 | ×0,8 / ×1,2 |
 | `reduction_share` по `Level5` | very_low 0,05; low 0,15; medium 0,35; high 0,6; very_high 0,8 | ×0,6 / ×1,2 (≤ 1) |
 | `review_hours` = доля × `time_hours` по категории | classic 0; ai_nlp 0,15; hybrid 0,2; llm_rag 0,25; ai_agent 0,3 | ×1,5 / ×0,7 |

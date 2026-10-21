@@ -41,7 +41,8 @@ pypdfium2, python-docx, charset-normalizer, selectolax, rapidfuzz; систем�
 **Performance Goals**: разбор документа до 100 стр. ≤ 30 с (без OCR), OCR ≤ 10 с/стр.; пересчёт экономики и рейтинга ≤ 2 с
 (цель ≤ 200 мс на 100 инициатив); полный анализ документа на ~130 тыс. знаков ≤ 15 мин [Прогноз]
 
-**Constraints**: 1 воркер uvicorn (встроенный runner); ≤ 2 одновременных анализа; лимиты загрузки
+**Constraints**: 1 воркер uvicorn (встроенный runner); CPU-работа (разбор, рендер, конвертация,
+проверка цитат) — в пуле процессов (NFR-014); ≤ 2 одновременных анализа; лимиты загрузки
 20 МБ / 300 стр. / 1 млн знаков; без внешних сервисов, кроме LLM; без сырых текстов в логах
 
 **Scale/Scope**: 1 организация, ≤ 10 пользователей, десятки документов, ≤ 30 процессов и ≤ 150
@@ -150,7 +151,10 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 | `AUTH_USERS` | — | `login:scrypt$salt$hash,…` |
 | `MAX_UPLOAD_MB` / `MAX_PAGES` / `MAX_CHARS` | 20 / 300 / 1 000 000 | FR-002 |
 | `MAX_UNZIPPED_MB` | 100 | лимит распаковки DOCX (R-04) |
-| `APP_PUBLIC_URL` | — | внешний адрес за реверс-прокси (проверка Origin, R-15) |
+| `APP_PUBLIC_URL` | — | внешний адрес за реверс-прокси (проверка Origin, R-15); обязателен при `APP_ENV=server` |
+| `PARSE_WORKERS` / `PARSE_TIMEOUT_S` | 2 / 120 | пул процессов (NFR-014) |
+| `SQLITE_BUSY_TIMEOUT_MS` | 5000 | |
+| `LLM_MAX_OUTPUT_TOKENS` | 8000 | подбирается под модель (T074) |
 | `OCR_ENABLED` | `true` | OCR сканов (FR-008) |
 | `OCR_LANG` / `OCR_DPI` | `rus+eng` / 300 | |
 | `OCR_MAX_PAGES` / `OCR_PAGE_TIMEOUT_S` / `OCR_MIN_CONFIDENCE` / `OCR_CONCURRENCY` | 150 / 60 / 60 / 1 | |
@@ -173,7 +177,10 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 
 - Dockerfile, `compose.prod.yml`, CI доставки и runbook генерируются skill'ом `/deploy-kit` (R-16):
   uv-образ, non-root, `HEALTHCHECK` по `/healthz`. В образ ставятся `tesseract-ocr` и
-  `tesseract-ocr-rus`.
+  `tesseract-ocr-rus`, а для конвертации — `libreoffice-writer-nogui`. Права на том выставляются
+  для пользователя приложения, `HEALTHCHECK` идёт через `python -c`, `OMP_THREAD_LIMIT=1`.
+- Реверс-прокси: `client_max_body_size` ≥ `MAX_UPLOAD_MB`, `proxy_read_timeout` 120 с,
+  `X-Forwarded-*`, `APP_PUBLIC_URL`.
 - `docker-compose.yml` для AC-10: сервис `app` (build `.`, порт `${APP_PORT}`, том `gr-data:/data`,
   `env_file: .env`, `restart: unless-stopped`) и опциональный профиль `local-llm` (`ollama`) для
   `local_only`.
@@ -213,7 +220,7 @@ src/gr/
 │   ├── assumptions.py, priority.py, review.py, run.py
 ├── ingestion/                    # S1
 │   ├── base.py, detect.py, registry.py
-│   ├── pdf.py, docx.py, docx_numbering.py, txt.py, html.py, ocr.py
+│   ├── pdf.py, pdf_layout.py, docx.py, docx_numbering.py, txt.py, html.py, ocr.py, convert.py
 ├── structure/                    # S2
 │   ├── cleanup.py, patterns.py, profiles.py, builder.py, metadata.py
 ├── grounding/                    # R-11
@@ -231,7 +238,7 @@ src/gr/
 │   ├── postprocess.py, tech_guard.py, gating.py, relations.py, defaults.py
 │   ├── economics.py, scoring.py, grouping.py, portfolio.py, overlay.py, mermaid.py
 ├── pipeline/
-│   ├── stages.py, runner.py
+│   ├── stages.py, runner.py, workers.py (пул процессов)
 ├── storage/
 │   ├── db.py, repositories.py, files.py
 ├── services/                     # общий для API и web сервисный слой
@@ -287,8 +294,9 @@ docker-compose.yml, Dockerfile (deploy-kit), .env.example, README.md, docs/deplo
 Не блокируют реализацию: у каждого вопроса есть решение по умолчанию.
 
 1. **LLM-провайдер и модель для eval и демо.** По умолчанию — OpenRouter (OpenAI-совместимый)
-   с моделью класса Sonnet и `LLM_DATA_POLICY=external_allowed` для публичных НПА. Нужен ключ
-   или выбор другого endpoint.
+   с моделью класса Sonnet и `LLM_DATA_POLICY=external_allowed` для публичных НПА. **Решение
+   отложено.** До него разработка идёт на FakeLLM; спайк T074 и eval (T036, T059) ждут решения
+   и ключа. Если выбран Anthropic напрямую — добавляется адаптер `AnthropicLLM` (R-08).
 2. **Экономические умолчания** (ставка 1 200 ₽/ч, накладные 30 %, фонд 1 970 ч/год, 1 000
    случаев/год) — плейсхолдеры. Если есть данные организации, они пойдут в профиль.
 3. **Состав dev-корпуса и отложенной выборки** (R-21). Подбираю сам по критериям R-21. Если у

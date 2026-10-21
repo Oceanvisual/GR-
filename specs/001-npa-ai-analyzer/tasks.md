@@ -40,8 +40,10 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Цель**: зафиксировать структуру из plan.md и запрет обратных зависимостей.
   - **Зависит**: T001
   - **Файлы**: `src/gr/**/__init__.py` (все пакеты плана), `tests/unit/test_layering.py`
+    и `tests/unit/test_spec_consistency.py` (уже добавлен)
   - **Результат**: пустые пакеты. Тест проверяет AST-импорты: `domain`, `grounding`, `analysis`,
     `structure` не импортируют `llm`, `storage`, `fastapi`, `openai`, `sqlalchemy`.
+    Плюс тест согласованности артефактов: зависимости задач существуют и без циклов, каждое FR/NFR/SC упомянуто вне spec.md.
   - **Готово, когда**: тест зелёный, а намеренное нарушение его роняет (проверено вручную).
   - **Тесты**: `test_layering.py`.
 
@@ -52,6 +54,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Результат**: `Settings(BaseSettings)` с валидацией. `AUTH_ENABLED=false` разрешён только
     при `APP_ENV=local`. При `LLM_DATA_POLICY≠disabled` обязательны `LLM_BASE_URL` и
     `LLM_MODEL_*`. Лимиты > 0.
+    При `APP_ENV=server` обязателен `APP_PUBLIC_URL`, иначе сервис не стартует (NFR-006: ключи только из env).
   - **Готово, когда**: каждое правило валидации покрыто тестом; `.env.example` перечисляет все
     переменные без значений секретов.
   - **Тесты**: `test_settings.py`.
@@ -117,6 +120,52 @@ description: "Task list for 001-npa-ai-analyzer"
 
 ---
 
+## Phase 1b: Спайки (снятие рисков до основного кода)
+
+**Purpose**: проверить на реальных данных допущения, от которых зависит работоспособность MVP
+(pre-mortem). Итоги записываются в `research.md`, а затем закрепляются тестами в задачах.
+
+- [ ] T072 [manual] Спайк: разбор реальных документов — `spikes/parsing/`
+  - **Цель**: снять риски разбора до основного кода: сборка абзацев PDF, повторы нумерации,
+    потери текста DOCX (FR-010, FR-011).
+  - **Зависит**: T001, T006
+  - **Файлы**: `spikes/parsing/` (одноразовые скрипты, не входят в пакет), `research.md`
+    (итоги в R-04…R-06)
+  - **Результат**: на reg261 (PDF и DOCX) и двух документах dev-корпуса другого типа выяснено:
+    как pypdfium2 отдаёт строки и переносы; сколько ложных «пунктов» даёт наивный разбор;
+    совпадает ли `paragraph.text` с обходом XML; встречаются ли повторы номеров.
+  - **Готово, когда**: по каждому риску в research.md записан вывод «подтвердился / нет» и
+    выбранное решение; при необходимости уточнены T016, T017, T020.
+  - **Тесты**: — (выводы закрепляются тестами в T016, T017, T020).
+
+- [ ] T073 Спайк: образ с tesseract и LibreOffice — `spikes/docker/Dockerfile`
+  - **Цель**: размер образа, скорость OCR и конвертации, права на том, healthcheck без curl
+    (FR-008, NFR-014).
+  - **Зависит**: T001
+  - **Файлы**: `spikes/docker/Dockerfile`, `research.md` (R-04, R-16)
+  - **Результат**: замеры — размер образа, секунд на страницу OCR (300 dpi, rus+eng), время
+    конвертации `.doc` → `.docx`; проверено, что non-root пользователь пишет в именованный том;
+    healthcheck через `python -c` работает.
+  - **Готово, когда**: цифры записаны в research.md; если OCR > 10 с/стр., скорректированы
+    SC-001 или параметры (`OCR_DPI`, `tessdata_fast`).
+  - **Тесты**: —.
+
+- [ ] T074 [manual] Спайк: структурированный вывод у выбранного провайдера — `spikes/llm/`
+  - **Цель**: подтвердить контракт LLM на реальном провайдере (NFR-003). **Заблокировано**: ждёт
+    выбора провайдера и ключа (plan.md → Open Questions, п. 1).
+  - **Зависит**: T001
+  - **Файлы**: `spikes/llm/`, `research.md` (R-08)
+  - **Результат**: на одном реальном процессе reg261 со схемой `DetailOut` выяснено:
+    поддерживается ли `json_schema` (strict) и с какими лимитами схемы; размер ответа в токенах;
+    частота обрезания; задержка; стоимость; приходит ли `usage`; насколько точно копируются
+    алиасы и цитаты. Если выбран Anthropic напрямую — решение об адаптере `AnthropicLLM`
+    (tool use) и отдельная задача на него.
+  - **Готово, когда**: значения по умолчанию `LLM_STRUCTURED_MODE` и `LLM_MAX_OUTPUT_TOKENS`
+    подтверждены цифрами в research.md.
+  - **Тесты**: —.
+
+---
+
 ## Phase 2: Foundational (блокирует все user stories)
 
 - [ ] T007 Доменные модели: enums, документ, запуск, ревью — `src/gr/domain/`
@@ -149,8 +198,10 @@ description: "Task list for 001-npa-ai-analyzer"
     по каждой таблице. Таблицы `review_events`, `assumption_sets`, `priority_configs` — только
     INSERT (в API репозитория нет update и delete). Файлы пишутся атомарно (tmp + rename) по
     sha256.
+    Запись идёт через одно соединение-писатель под `asyncio.Lock`, `PRAGMA busy_timeout` (`SQLITE_BUSY_TIMEOUT_MS`).
   - **Готово, когда**: CRUD по каждой таблице проходит на временной SQLite; повторное
     открытие БД сохраняет данные.
+    50 конкурентных записей runner, API и OCR проходят без `database is locked`.
   - **Тесты**: `test_storage.py`.
 
 - [ ] T010 [P] Ошибки, аутентификация, CLI — `src/gr/errors.py`, `src/gr/auth.py`
@@ -175,6 +226,7 @@ description: "Task list for 001-npa-ai-analyzer"
     `tests/integration/test_app.py`
   - **Результат**: `create_app()` с lifespan (БД, runner-заглушка), `/healthz` без
     аутентификации, `/api/v1/readyz` с ней. Базовый HTML с навигацией.
+    `gr serve` запускает uvicorn с `--proxy-headers` и `--forwarded-allow-ips` из настроек.
   - **Готово, когда**: `uv run gr serve` поднимает сервис; `/healthz` → 200 без аутентификации,
     `/` без аутентификации → 401.
   - **Тесты**: `test_app.py`.
@@ -200,6 +252,7 @@ description: "Task list for 001-npa-ai-analyzer"
     `llm.call`; сырой ответ в `llm_calls.response` при каждом вызове (FR-030); `CachedLLM` по
     `request_hash`. Перед реализацией сверить актуальный API
     structured outputs в `openai` через context7.
+    Если `usage` не пришёл, токены оцениваются по длине с флагом `estimated`; `max_tokens` берётся из `LLM_MAX_OUTPUT_TOKENS`.
   - **Готово, когда**: на `httpx.MockTransport` (без сети) проверены успех, переход 400 → откат
     на `json_object`, невалидный ответ → repair → успех и → `llm_invalid_output`, таймаут →
     `llm_timeout`, 401 → `llm_auth_failed`, обрезанный ответ. В логах нет текстов.
@@ -217,17 +270,30 @@ description: "Task list for 001-npa-ai-analyzer"
     этапы 3+; отмена работает; лимит параллелизма соблюдается.
   - **Тесты**: `test_runner.py`.
 
+- [ ] T076 Пул процессов для CPU-работы — `src/gr/pipeline/workers.py`
+  - **Цель**: NFR-014: разбор, рендер страниц и проверка цитат не блокируют веб-сервер, а сбой
+    на файле не роняет его.
+  - **Зависит**: T003
+  - **Файлы**: `pipeline/workers.py`, `settings.py` (`PARSE_WORKERS`, `PARSE_TIMEOUT_S`),
+    `tests/integration/test_workers.py`
+  - **Результат**: `run_cpu(fn, *args, timeout)` поверх `ProcessPoolExecutor` (spawn,
+    `max_tasks_per_child`). Падение воркера (`BrokenProcessPool`) → пересоздание пула и ошибка
+    задачи; таймаут → завершение воркера. PDFium используется только внутри воркеров.
+  - **Готово, когда**: функция с `os._exit(1)` и бесконечный цикл дают ошибку задачи, а сервер и
+    другие задачи продолжают работать; `/healthz` отвечает во время тяжёлой задачи.
+  - **Тесты**: `test_workers.py`.
+
 **Checkpoint**: каркас готов, user stories можно начинать.
 
 ---
 
 ## Phase 3: User Story 1 — Загрузка НПА и структура (P1) 🎯 MVP
 
-**Goal**: загрузка PDF (включая сканы через OCR), DOCX, TXT (HTML — SHOULD), очистка,
-диагностика, дерево фрагментов с метками, смещениями и страницами — для регламентов, законов и
-составных приказов; реквизиты.
+**Goal**: загрузка PDF с текстовым слоем, DOCX и TXT, диагностика, дерево фрагментов с
+метками, смещениями и страницами, реквизиты. Сканы, HTML, `.doc`/`.rtf`, очистка справочных
+систем и законы — в Phase 7a, после сквозного сценария.
 
-**Independent Test**: quickstart Q1–Q3, Q15–Q17; регрессия dev-корпуса.
+**Independent Test**: quickstart Q1–Q3.
 
 - [ ] T015 [P] [US1] Определение формата и TXT — `src/gr/ingestion/detect.py`
   - **Цель**: FR-001, FR-002, FR-004 для TXT; протокол `Extractor` (FR-007).
@@ -242,34 +308,31 @@ description: "Task list for 001-npa-ai-analyzer"
 
 - [ ] T016 [P] [US1] PDF — `src/gr/ingestion/pdf.py`
   - **Цель**: FR-001, FR-003, FR-004 для PDF (R-04).
-  - **Зависит**: T015
+  - **Зависит**: T015, T072, T076
   - **Файлы**: `ingestion/pdf.py`, `tests/unit/ingestion/test_pdf.py`
+    и `ingestion/pdf_layout.py`
   - **Результат**: постраничный текст через pypdfium2; `empty_pages`; статусы `ok`, `partial`,
     `needs_ocr`; `encrypted_file`, `corrupted_file`; лимит страниц.
+    Строки собираются в абзацы (`pdf_layout.py`): перенос внутри абзаца склеивается, дефис на конце строки обрабатывается, новый абзац — по отступу, пустой строке или маркеру нумерации после завершённого предложения. PDFium вызывается только в пуле процессов.
   - **Готово, когда**: на синтетике — текстовый PDF `ok`, скан `needs_ocr`, битый
     `corrupted_file`; на `reg261.pdf` (если есть) — `ok`.
+    Строка, начинающаяся с «10 дней» или «2020 г.», не становится отдельным абзацем.
   - **Тесты**: `test_pdf.py`.
 
 - [ ] T017 [P] [US1] DOCX с автонумерацией — `src/gr/ingestion/docx.py`
   - **Цель**: FR-001, ASU-8, R-05.
-  - **Зависит**: T015
+  - **Зависит**: T015, T072
   - **Файлы**: `ingestion/docx.py`, `docx_numbering.py`, `tests/unit/ingestion/test_docx.py`
   - **Результат**: абзацы и таблицы по порядку; восстановление номеров из `numbering.xml`
     (`decimal`, `lowerLetter`, `russianLower`, `upperRoman`, `bullet`); флаг
     `numbering_restored`. Лимиты ZIP проверяются до разбора; OLE-контейнер → `encrypted_file`
     (R-04).
+    Текст собирается обходом XML вместо `paragraph.text`: `w:t` с учётом `w:ins`, без `w:del`, включая гиперссылки и поля; надписи и сноски добавляются в конец с пометкой.
   - **Готово, когда**: текст DOCX с автонумерацией совпадает с текстом DOCX с ручной нумерацией
     той же синтетики; `reg261.docx` читается; синтетическая zip-бомба отклоняется с
     `corrupted_file` (`zip_limits`) без полной распаковки.
+    В DOCX с режимом рецензирования вставленный текст есть, а удалённого нет.
   - **Тесты**: `test_docx.py`.
-
-- [ ] T018 [P] [US1] HTML (SHOULD) — `src/gr/ingestion/html.py`
-  - **Цель**: BR-06, первый шаг расширения форматов.
-  - **Зависит**: T015
-  - **Файлы**: `ingestion/html.py`, `tests/unit/ingestion/test_html.py`
-  - **Результат**: удаление `script`, `style`, `nav`, `header`, `footer`; блочные элементы → абзацы.
-  - **Готово, когда**: HTML-синтетика даёт тот же нормализованный текст, что и TXT-синтетика.
-  - **Тесты**: `test_html.py`.
 
 - [ ] T019 [US1] Нормализация текста — `src/gr/grounding/normalize.py`
   - **Цель**: единая нормализация для смещений структуры и проверки цитат (R-11).
@@ -282,47 +345,23 @@ description: "Task list for 001-npa-ai-analyzer"
 
 - [ ] T020 [US1] Построение структуры — `src/gr/structure/builder.py`
   - **Цель**: FR-010…FR-012 (R-06).
-  - **Зависит**: T019, T015, T067
+    Трассировка: FR-013.
+  - **Зависит**: T019, T015, T072
   - **Файлы**: `structure/patterns.py`, `builder.py`, `config/structure_patterns.toml`,
     `tests/unit/structure/test_builder.py`, `tests/unit/structure/test_reg261_structure.py`
   - **Результат**: дерево `Fragment` (преамбула/приказ, разделы, главы, подразделы, пункты
     `N.N.N`, подпункты `N)`, `а)`, перечни, абзацы, приложения); стабильные id и метки;
     смещения и страницы; режим `paragraphs`.
+    Номер пункта принимается, только если правдоподобно продолжает нумерацию (за 3.5 — 3.5.1, 3.6 или 4.1, но не 10 и не 2020); иначе строка — продолжение текста. Повтор номера → id с суффиксом `~2` и предупреждение в диагностике.
   - **Готово, когда**:
     - инварианты вложенности соблюдены на всех фикстурах;
     - на синтетике точное дерево совпадает с golden;
     - на reg261 (если есть): разделы I–V, пункты 2.6, 2.16 (26 подпунктов), 3.2…3.8.3,
       приказ отделён от регламента;
     - `no_numbering.txt` → `paragraphs` с предупреждением.
+    - дерево `reg261.pdf` совпадает с деревом `reg261.docx` (метки и порядок пунктов);
+    - документ с повторяющейся нумерацией загружается без ошибки, все id уникальны.
   - **Тесты**: `test_builder.py`, `test_reg261_structure.py` (skip без фикстуры).
-
-- [ ] T067 [US1] Очистка текста: справочные системы, пометки, колонтитулы — `src/gr/structure/cleanup.py`
-  - **Цель**: FR-014, FR-015 (R-20).
-  - **Зависит**: T019, T015
-  - **Файлы**: `structure/cleanup.py`, `config/noise_patterns.toml`,
-    `tests/unit/structure/test_cleanup.py`
-  - **Результат**: удаление служебных строк справочных систем; «Список изменяющих документов» →
-    метаданные редакции; пометки «(в ред. …)», «(введён …)» → `notes` со смещениями; признак
-    `repealed`; удаление колонтитулов и номеров страниц PDF, склейка пунктов через границу
-    страницы; счётчики в `diagnostics.removed_noise`.
-  - **Готово, когда**: на `spps_export.docx` в тексте пунктов нет служебных строк и пометок, а
-    пометки есть в `notes`; утративший силу пункт помечен `repealed`; на `headers.pdf` колонтитулов
-    нет, разорванный пункт целый; синтетика без шума не меняется.
-  - **Тесты**: `test_cleanup.py`.
-
-- [ ] T068 [US1] Профили нумерации: законы, составные приказы, таблицы — `src/gr/structure/profiles.py`
-  - **Цель**: FR-010, FR-011, FR-016 для актов, отличных от регламентов (R-06).
-  - **Зависит**: T020, T071
-  - **Файлы**: `structure/profiles.py`, `structure/builder.py`, `config/structure_patterns.toml`,
-    `tests/unit/structure/test_profiles.py`, `tests/corpus/test_structure_regression.py`
-  - **Результат**: автоматический выбор профиля `regulation` / `law` / `generic`; статьи, части,
-    «§», «Раздел 1»; метки «ч. 2 ст. 5», «п. 1 ч. 2 ст. 5»; несколько утверждаемых документов как
-    отдельные корни с названием в метке; строки таблиц DOCX/HTML как абзацы с « | ».
-  - **Готово, когда**:
-    - на `law_like.txt`, `multi_approved.docx`, `table.docx` дерево совпадает с golden;
-    - параметризованная регрессия по dev-корпусу: разбор без ошибок, снимки `*.structure.json`
-      совпадают, снимки проверены человеком (SC-012).
-  - **Тесты**: `test_profiles.py`, `test_structure_regression.py`.
 
 - [ ] T021 [P] [US1] Реквизиты документа — `src/gr/structure/metadata.py`
   - **Цель**: FR-006 (R-07).
@@ -336,17 +375,21 @@ description: "Task list for 001-npa-ai-analyzer"
 
 - [ ] T022 [US1] Сервис и API документов — `src/gr/services/documents.py`, `src/gr/api/documents.py`
   - **Цель**: эндпоинты api.md § Документы.
-  - **Зависит**: T016, T017, T020, T021, T011
+    Трассировка: FR-005, NFR-008.
+  - **Зависит**: T016, T017, T020, T021, T011, T076
   - **Файлы**: `services/documents.py`, `api/documents.py`,
     `tests/integration/test_documents_api.py`
   - **Результат**: загрузка (лимиты, формат, извлечение, структура, реквизиты, дедупликация по
     sha256, сохранение); список, карточка, PATCH реквизитов, структура, фрагмент с контекстом.
+    Размер проверяется по `Content-Length` и при потоковом приёме: обрыв при превышении, файл целиком в память не читается. Разбор идёт в пуле процессов.
   - **Готово, когда**: Q1–Q3 автоматизированы. Коды `413`, `415`, `422` и `X-Duplicate-Of` по
     контракту. Загрузка 100-страничного PDF ≤ 30 с (SC-001, тест с маркером `slow`).
+    Файл 25 МБ отклоняется до полного приёма; во время разбора 100-страничного PDF `/healthz` отвечает ≤ 200 мс.
   - **Тесты**: `test_documents_api.py`.
 
 - [ ] T023 [US1] Экраны документов — `src/gr/web/templates/documents.html`, `document.html`
   - **Цель**: экраны 1, 2 из ui.md.
+    Трассировка: FR-013.
   - **Зависит**: T022
   - **Файлы**: `web/routes.py`, `templates/documents.html`, `document.html`,
     `partials/fragment.html`, `partials/tree.html`, `tests/integration/test_web_documents.py`
@@ -356,41 +399,7 @@ description: "Task list for 001-npa-ai-analyzer"
     неэкранированного текста документа (тест с `<script>` в фикстуре).
   - **Тесты**: `test_web_documents.py`.
 
-- [ ] T069 [P] [US1] OCR-движок — `src/gr/ingestion/ocr.py`
-  - **Цель**: FR-008 (R-04): распознавание страниц без текстового слоя.
-  - **Зависит**: T016
-  - **Файлы**: `ingestion/ocr.py`, `settings.py` (`OCR_*`), `tests/unit/ingestion/test_ocr.py`
-  - **Результат**: протокол `OcrEngine`; реализация на tesseract — рендер страницы pypdfium2 в
-    `OCR_DPI`, вызов через `create_subprocess_exec` (без shell) с `OCR_LANG`, разбор TSV,
-    уверенность страницы, таймаут на страницу; `ocr_available()` проверяет движок и язык `rus`.
-  - **Готово, когда**:
-    - на синтетическом `scan.pdf` CER ≤ 3 % (SC-013);
-    - зашумлённая страница даёт низкую уверенность;
-    - таймаут → ошибка страницы, а не зависание;
-    - без `tesseract` в PATH → `unavailable`, без исключения.
-
-    Тесты с реальным движком помечены маркером `ocr` и пропускаются, если движка нет; в
-    Docker-образе и CI они выполняются.
-  - **Тесты**: `test_ocr.py`.
-
-- [ ] T070 [US1] OCR в потоке загрузки: фон, статусы, UI — `src/gr/services/documents.py`
-  - **Цель**: FR-003, FR-008; api.md (`202`, `POST /documents/{id}/ocr`, `409 ocr_in_progress`,
-    `readyz.ocr`); ui.md, экран 2.
-  - **Зависит**: T069, T014, T022, T023, T067
-  - **Файлы**: `services/documents.py`, `api/documents.py`, `pipeline/runner.py` (вид задачи
-    `ocr`, `OCR_CONCURRENCY`), `api/health.py`, `templates/document.html`,
-    `tests/integration/test_ocr_flow.py`
-  - **Результат**: скан → `202` и фоновая задача; в смешанном PDF OCR только для пустых страниц;
-    после OCR — очистка и структура, фрагменты `text_source=ocr`; повтор OCR; прогресс и качество
-    по страницам в UI; бейдж «OCR».
-  - **Готово, когда**: с фейковым `OcrEngine` проверены сценарии:
-    - скан → `done` → документ анализируем;
-    - ошибка → `failed` → повтор;
-    - движок недоступен → `needs_ocr`;
-    - запуск анализа во время OCR → `409`.
-  - **Тесты**: `test_ocr_flow.py`.
-
-**Checkpoint US1**: Q1–Q3 и Q15–Q17 проходят; регрессия dev-корпуса (SC-012) зелёная.
+**Checkpoint US1**: Q1–Q3 проходят (PDF, DOCX, TXT).
 
 ---
 
@@ -408,9 +417,11 @@ UI карты процессов.
   - **Файлы**: `grounding/quotes.py`, `config/grounding.toml`, `tests/unit/grounding/test_quotes.py`
   - **Результат**: `verify_quote(quote, fragment_id, fragments) -> GroundingResult`, поиск по
     всему документу для `relocated`.
+    Цитата с «…» делится на части, каждая ищется по порядку в поддереве фрагмента. Перенесённая цитата ищется сначала точно по всему документу, затем нечётко — только среди кандидатов из n-граммного индекса.
   - **Готово, когда**: кейсы покрыты — точное совпадение, разница в «ё», кавычках и переносе,
     перефраз → `partial` или `unverified`, цитата из соседнего пункта → `relocated`, короткая
     или длинная → `invalid_quote`.
+    Проверка 500 цитат на документе в 130 тыс. знаков занимает ≤ 5 с.
   - **Тесты**: `test_quotes.py`.
 
 - [ ] T025 [P] [US2] Русские числительные и сроки — `src/gr/grounding/deadlines.py`
@@ -434,6 +445,7 @@ UI карты процессов.
 
 - [ ] T027 [P] [US2] LLM-схемы — `src/gr/extraction/schemas.py`
   - **Цель**: `DiscoveryOut`, `DetailOut`, `OpportunitiesOut` из llm.md.
+    Трассировка: FR-046.
   - **Зависит**: T008
   - **Файлы**: `extraction/schemas.py`, `tests/unit/extraction/test_schemas_strict.py`
   - **Результат**: плоские схемы, совместимые со strict-режимом.
@@ -443,11 +455,13 @@ UI карты процессов.
 
 - [ ] T028 [P] [US2] Рендер документа для LLM и оглавление — `src/gr/extraction/render.py`
   - **Цель**: блок `<document>`, экранирование (R-12), оглавление и разбиение (R-10).
+    Трассировка: NFR-004.
   - **Зависит**: T020
   - **Файлы**: `extraction/render.py`, `outline.py`, `config/chunking.toml`,
     `tests/unit/extraction/test_render.py`
   - **Результат**: `render_fragments(...)`, `build_outline(...) -> list[OutlineChunk]` с
     бюджетом символов и разбиением по разделам верхнего уровня.
+    В промпте id фрагментов заменяются короткими алиасами `F<n>` с обратным отображением; неизвестный алиас в ответе даёт issue, а не исключение.
   - **Готово, когда**: строки `</document>` и `[fragment` из текста экранируются; оглавление
     больше бюджета режется без потери фрагментов; результат детерминирован.
   - **Тесты**: `test_render.py`.
@@ -466,17 +480,21 @@ UI карты процессов.
 
 - [ ] T030 [US2] S4 Detail — `src/gr/extraction/detailing.py`
   - **Цель**: [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций).
+    Трассировка: FR-021, FR-023, NFR-004.
   - **Зависит**: T029
   - **Файлы**: `extraction/detailing.py`, `extraction/prompts/detail.md`,
     `tests/integration/extraction/test_detailing.py`, `tests/fixtures/llm/detail_*.json`
   - **Результат**: вызов на процесс с `LLM_CONCURRENCY`; окна при превышении
     `DETAIL_MAX_CHARS`; сохранение по процессам (для возобновления); порог частичных ошибок 30 %.
+    При `finish_reason=length` окно делится пополам и обрабатывается заново (глубина до 3). Цитаты в промпте ограничены 250 символами.
   - **Готово, когда**: на FakeLLM проверены сценарии «два окна склеены по порядку», «ошибка
     одного процесса из пяти → `completeness.complete=false` со списком необработанных», «три из пяти → `failed`».
+    Сценарий FakeLLM «обрезанный ответ» → деление окна → успех.
   - **Тесты**: `test_detailing.py`.
 
 - [ ] T031 [US2] S5 Validate — `src/gr/validation/`
   - **Цель**: FR-024…FR-028 (llm.md § S4 «Валидация»).
+    Трассировка: FR-023, FR-026.
   - **Зависит**: T024, T025, T026, T030
   - **Файлы**: `validation/process_validator.py`, `graph.py`, `dedupe.py`, `confidence.py`,
     `coverage.py`, `extraction/mapping.py`, `tests/unit/validation/test_*.py`
@@ -498,7 +516,7 @@ UI карты процессов.
 
 - [ ] T032 [US2] Запуск анализа и API процессов — `src/gr/services/analyses.py`, `src/gr/api/analyses.py`
   - **Цель**: api.md § Анализ (кроме перегенерации); подключение S3–S5 к runner.
-  - **Зависит**: T014, T031, T022, T013
+  - **Зависит**: T014, T031, T022, T013, T076
   - **Файлы**: `pipeline/stages.py`, `services/analyses.py`, `api/analyses.py`,
     `tests/integration/test_analysis_e2e.py`
   - **Результат**: POST запуска (проверки: анализируемость, политика, `run_in_progress`),
@@ -520,6 +538,7 @@ UI карты процессов.
 
 - [ ] T034 [US2] Экраны статуса и карты процессов — `src/gr/web/templates/run.html`, `processes.html`
   - **Цель**: экраны 2a и 3 из ui.md.
+    Трассировка: FR-071.
   - **Зависит**: T032, T033
   - **Файлы**: `web/routes.py`, `templates/run.html`, `processes.html`, `partials/*`,
     `tests/integration/test_web_processes.py`
@@ -542,7 +561,7 @@ UI карты процессов.
 
 - [ ] T036 [US2] [manual] Eval-харнесс и эталонная разметка — `evals/`
   - **Цель**: eval-гейт (принцип V, R-17). Используется skill `/eval`.
-  - **Зависит**: T032, T006, T071
+  - **Зависит**: T032, T006, T071, T074
   - **Файлы**: `evals/dataset.jsonl`, `target.py`, `config.toml`, `metrics.py`, `run.py`,
     `golden/*.json`, `markers.toml`, `tests/unit/evals/test_metrics.py`
   - **Результат**: метрики — полнота и точность процессов, полнота операций, доля `verified`,
@@ -597,6 +616,7 @@ UI карты процессов.
 
 - [ ] T040 [US3] S6 Opportunities — `src/gr/extraction/opportunities.py`
   - **Цель**: [llm.md § S6](./contracts/llm.md#s6--opportunities--проблемы-и-инициативы).
+    Трассировка: FR-042, FR-046.
   - **Зависит**: T027, T031, T037
   - **Файлы**: `extraction/opportunities.py`, `extraction/prompts/opportunities.md`,
     `tests/integration/extraction/test_opportunities.py`, `tests/fixtures/llm/opp_*.json`
@@ -608,6 +628,7 @@ UI карты процессов.
 
 - [ ] T041 [US3] S7 Postprocess и подключение к runner — `src/gr/analysis/postprocess.py`
   - **Цель**: llm.md § S6 «Валидация» (п. 1–6).
+    Трассировка: FR-042, FR-044.
   - **Зависит**: T038, T039, T040
   - **Файлы**: `analysis/postprocess.py`, `pipeline/stages.py`,
     `tests/unit/analysis/test_postprocess.py`, обновление `test_analysis_e2e.py`
@@ -633,6 +654,7 @@ UI карты процессов.
 
 - [ ] T042 [US3] API и экраны инициатив (без экономики) — `src/gr/api/results.py`, `initiatives.html`
   - **Цель**: api.md § Инициативы (без economics и priority), экраны 4 и 5 из ui.md.
+    Трассировка: FR-071.
   - **Зависит**: T041, T034
   - **Файлы**: `services/results.py`, `api/results.py`, `templates/initiatives.html`,
     `initiative.html`, `tests/integration/test_initiatives_api.py`
@@ -662,6 +684,7 @@ UI карты процессов.
   - **Результат**: `build_assumptions(model, initiatives, profile, existing?) -> AssumptionSet`;
     тройки по коэффициентам разброса; `requires_input` для объёмов; значения пользователя
     не перезаписываются.
+    Доля случаев по умолчанию — 1,0; для операций после точек решения — `requires_input=true`.
   - **Готово, когда**: для каждой операции, процесса и инициативы есть все ключи из
     data-model; источник `default_profile`; повторная генерация сохраняет `user`-значения.
   - **Тесты**: `test_defaults.py`.
@@ -769,6 +792,105 @@ UI карты процессов.
 
 ---
 
+## Phase 7a: Покрытие документов (US1, расширение)
+
+**Goal**: документы, которые принесут тестировщики: выгрузки справочных систем, законы и
+составные приказы, HTML, сканы, `.doc`/`.rtf`/`.odt`. Делается после того, как сквозной сценарий
+работает на PDF, DOCX и TXT.
+
+**Independent Test**: quickstart Q15–Q17; регрессия dev-корпуса (SC-012); `.doc`, `.rtf`, `.odt`.
+
+- [ ] T018 [P] [US1] HTML (SHOULD) — `src/gr/ingestion/html.py`
+  - **Цель**: BR-06, первый шаг расширения форматов.
+  - **Зависит**: T015
+  - **Файлы**: `ingestion/html.py`, `tests/unit/ingestion/test_html.py`
+  - **Результат**: удаление `script`, `style`, `nav`, `header`, `footer`; блочные элементы → абзацы.
+    Кодировка берётся из `<meta charset>` / `http-equiv`, затем из charset-normalizer.
+  - **Готово, когда**: HTML-синтетика даёт тот же нормализованный текст, что и TXT-синтетика.
+  - **Тесты**: `test_html.py`.
+
+- [ ] T067 [US1] Очистка текста: справочные системы, пометки, колонтитулы — `src/gr/structure/cleanup.py`
+  - **Цель**: FR-014, FR-015 (R-20).
+  - **Зависит**: T020, T022
+  - **Файлы**: `structure/cleanup.py`, `config/noise_patterns.toml`,
+    `tests/unit/structure/test_cleanup.py`
+  - **Результат**: удаление служебных строк справочных систем; «Список изменяющих документов» →
+    метаданные редакции; пометки «(в ред. …)», «(введён …)» → `notes`; признак
+    `repealed`; удаление колонтитулов и номеров страниц PDF, склейка пунктов через границу
+    страницы; счётчики в `diagnostics.removed_noise`.
+  - **Готово, когда**: на `spps_export.docx` в тексте пунктов нет служебных строк и пометок, а
+    пометки есть в `notes`; утративший силу пункт помечен `repealed`; на `headers.pdf` колонтитулов
+    нет, разорванный пункт целый; синтетика без шума не меняется.
+  - **Тесты**: `test_cleanup.py`.
+
+- [ ] T068 [US1] Профили нумерации: законы, составные приказы, таблицы — `src/gr/structure/profiles.py`
+  - **Цель**: FR-010, FR-011, FR-016 для актов, отличных от регламентов (R-06).
+  - **Зависит**: T020, T067, T071
+  - **Файлы**: `structure/profiles.py`, `structure/builder.py`, `config/structure_patterns.toml`,
+    `tests/unit/structure/test_profiles.py`, `tests/corpus/test_structure_regression.py`
+  - **Результат**: автоматический выбор профиля `regulation` / `law` / `generic`; статьи, части,
+    «§», «Раздел 1»; метки «ч. 2 ст. 5», «п. 1 ч. 2 ст. 5»; несколько утверждаемых документов как
+    отдельные корни с названием в метке; строки таблиц DOCX/HTML как абзацы с « | ».
+  - **Готово, когда**:
+    - на `law_like.txt`, `multi_approved.docx`, `table.docx` дерево совпадает с golden;
+    - параметризованная регрессия по dev-корпусу: разбор без ошибок, снимки `*.structure.json`
+      совпадают, снимки проверены человеком (SC-012).
+  - **Тесты**: `test_profiles.py`, `test_structure_regression.py`.
+
+- [ ] T069 [P] [US1] OCR-движок — `src/gr/ingestion/ocr.py`
+  - **Цель**: FR-008 (R-04): распознавание страниц без текстового слоя.
+  - **Зависит**: T016
+  - **Файлы**: `ingestion/ocr.py`, `settings.py` (`OCR_*`), `tests/unit/ingestion/test_ocr.py`
+  - **Результат**: протокол `OcrEngine`; реализация на tesseract — рендер страницы pypdfium2 в
+    `OCR_DPI`, вызов через `create_subprocess_exec` (без shell) с `OCR_LANG`, разбор TSV,
+    уверенность страницы, таймаут на страницу; `ocr_available()` проверяет движок и язык `rus`.
+  - **Готово, когда**:
+    - на синтетическом `scan.pdf` CER ≤ 3 % (SC-013);
+    - зашумлённая страница даёт низкую уверенность;
+    - таймаут → ошибка страницы, а не зависание;
+    - без `tesseract` в PATH → `unavailable`, без исключения.
+
+    Тесты с реальным движком помечены маркером `ocr` и пропускаются, если движка нет; в
+    Docker-образе и CI они выполняются.
+  - **Тесты**: `test_ocr.py`.
+
+- [ ] T070 [US1] OCR в потоке загрузки: фон, статусы, UI — `src/gr/services/documents.py`
+  - **Цель**: FR-003, FR-008; api.md (`202`, `POST /documents/{id}/ocr`, `409 ocr_in_progress`,
+    `readyz.ocr`); ui.md, экран 2.
+  - **Зависит**: T069, T014, T022, T023, T067, T076
+  - **Файлы**: `services/documents.py`, `api/documents.py`, `pipeline/runner.py` (вид задачи
+    `ocr`, `OCR_CONCURRENCY`), `api/health.py`, `templates/document.html`,
+    `tests/integration/test_ocr_flow.py`
+  - **Результат**: скан → `202` и фоновая задача; в смешанном PDF OCR только для пустых страниц;
+    после OCR — очистка и структура, фрагменты `text_source=ocr`; повтор OCR; прогресс и качество
+    по страницам в UI; бейдж «OCR».
+  - **Готово, когда**: с фейковым `OcrEngine` проверены сценарии:
+    - скан → `done` → документ анализируем;
+    - ошибка → `failed` → повтор;
+    - движок недоступен → `needs_ocr`;
+    - запуск анализа во время OCR → `409`.
+  - **Тесты**: `test_ocr_flow.py`.
+
+- [ ] T075 [US1] Конвертация `.doc`, `.rtf`, `.odt` — `src/gr/ingestion/convert.py`
+  - **Цель**: FR-001: старые и смежные форматы, которые часто публикуют госсайты (R-04).
+  - **Зависит**: T017, T073, T076
+  - **Файлы**: `ingestion/convert.py`, `ingestion/detect.py`,
+    `tests/fixtures/synthetic/sample.{doc,rtf,odt}`, `tests/unit/ingestion/test_convert.py`
+  - **Результат**: определение формата по сигнатуре — OLE CFB с потоком `WordDocument` → `.doc`,
+    с `EncryptionInfo` → `encrypted_file`; `{\rtf` → `.rtf`; ZIP с `content.xml` → `.odt`.
+    Конвертация `soffice --headless --convert-to docx` в отдельном процессе с таймаутом и
+    временным профилем, дальше — обычный путь DOCX. Без LibreOffice → понятная ошибка
+    «сохраните документ как DOCX».
+  - **Готово, когда**: синтетические `.doc`, `.rtf`, `.odt` дают тот же текст, что и исходный
+    DOCX; зависшая конвертация завершается по таймауту и не вешает сервис. Тесты с LibreOffice
+    помечены маркером `soffice` и пропускаются, если его нет; в Docker-образе и CI выполняются.
+  - **Тесты**: `test_convert.py`.
+
+**Checkpoint 7a**: Q15–Q17 проходят, регрессия dev-корпуса зелёная, старые форматы
+конвертируются.
+
+---
+
 ## Phase 8: User Story 6 — Экспертная проверка (P3)
 
 **Goal**: подтверждение, правка, отклонение, история, `stale`, перегенерация.
@@ -777,6 +899,7 @@ UI карты процессов.
 
 - [ ] T050 [US6] Наложение решений — `src/gr/analysis/overlay.py`
   - **Цель**: FR-080…FR-083 (data-model §8).
+    Трассировка: FR-081.
   - **Зависит**: T008, T041
   - **Файлы**: `analysis/overlay.py`, `tests/unit/analysis/test_overlay.py`
   - **Результат**: `apply_reviews(outputs, events) -> EffectiveState` (модель, инициативы,
@@ -788,6 +911,7 @@ UI карты процессов.
 
 - [ ] T051 [US6] API ревью и наложение во всех чтениях — `src/gr/api/reviews.py`
   - **Цель**: api.md § Экспертная проверка; все read-пути используют эффективное состояние.
+    Трассировка: SC-010.
   - **Зависит**: T050, T049
   - **Файлы**: `services/reviews.py`, `api/reviews.py`, `services/results.py`,
     `tests/integration/test_reviews_api.py`
@@ -860,11 +984,12 @@ UI карты процессов.
 
 - [ ] T056 [US8] Docker и доставка через `/deploy-kit` — `Dockerfile`, `docker-compose.yml`
   - **Цель**: R-16. Изменение CI и деплоя — согласовать до выполнения.
-  - **Зависит**: T055
+  - **Зависит**: T032, T073
   - **Файлы**: `Dockerfile`, `compose.prod.yml`, `.github/workflows/*`, runbook (генерирует
     deploy-kit); `docker-compose.yml` (AC-10, профиль `local-llm`); `.dockerignore`
   - **Результат**: образ на uv, non-root, `HEALTHCHECK /healthz`, том `/data`, один воркер;
     в образе `tesseract-ocr` и `tesseract-ocr-rus`.
+    Права на том `/data` выставляются для пользователя приложения; `HEALTHCHECK` через `python -c` (без curl); `OMP_THREAD_LIMIT=1`; `libreoffice-writer-nogui` для конвертации; размер образа и время OCR — в runbook.
   - **Готово, когда**: локально `docker compose up -d --build` → `/healthz` 200; при политике
     `disabled` загрузка работает, а анализ даёт `llm_not_configured`; с реальным endpoint анализ
     проходит.
@@ -889,6 +1014,7 @@ UI карты процессов.
     LLM API (политики, примеры OpenRouter, Ollama, vLLM), пользователи
     (`gr hash-password`), требования к серверу, TLS через реверс-прокси, обновление, бэкап тома,
     healthcheck, ограничения MVP.
+    Пример конфигурации реверс-прокси: `client_max_body_size 25m`, `proxy_read_timeout 120s`, заголовки `X-Forwarded-*`, `APP_PUBLIC_URL`.
   - **Готово, когда**: человек, не участвовавший в разработке, разворачивает сервис по
     инструкции на чистой VM (SC-009, [manual]).
   - **Тесты**: —
@@ -953,36 +1079,42 @@ UI карты процессов.
 
 ```text
 Setup (T001–T006, T060, T071)
-   └─▶ Foundational (T007–T014)
-          └─▶ US1 (T015–T023, T067–T070) ─▶ US2 (T024–T036) ═══ MVP ═══
-                                     └─▶ US3 (T037–T042, T066)
-                                            └─▶ US4 (T043–T046)
-                                                   └─▶ US5 (T047–T049, T065)
-                                                          ├─▶ US6 (T050–T053) ─▶ US7 (T054–T055)
-                                                          │                         └─▶ US8 (T056, T058)
-                                                          └─ T057 (после T032)
-                                                                 └─▶ Validation (T059, T061–T064)
+   └─▶ Спайки (T072, T073; T074 — после выбора провайдера)
+          └─▶ Foundational (T007–T014, T076)
+                 └─▶ US1 ядро (T015–T017, T019–T023) ─▶ US2 (T024–T036)
+                        └─▶ US3 (T037–T042, T066) ─▶ US4 (T043–T046) ─▶ US5 (T047–T049, T065)
+                               ═══ сквозной сценарий на PDF/DOCX/TXT ═══
+                               ├─▶ Phase 7a: покрытие документов (T018, T067–T070, T075)
+                               ├─▶ US6 (T050–T053) ─▶ US7 (T054–T055)
+                               └─▶ US8 (T056–T058; T056 можно начать после T032)
+                                      └─▶ Validation (T059, T061–T064)
 ```
 
 - US2 требует US1 (фрагменты). US3 — модель процессов US2. US4 — инициативы US3. US5 —
-  экономику US4. Экономика — вход критерия «эффект».
-- US6 можно начать сразу после US3 (T050 зависит от T041), но интеграция в чтения (T051) идёт
-  после US5, чтобы наложение покрыло экономику и рейтинг.
-- T006 (выбор отложенной выборки) — до T059: holdout фиксируется до настройки промптов.
-- Порядок экономики: T044 (solo) → T047, T048 (балл, группа) → T065 (портфель). Цикла нет:
-  балл считается по solo-эффекту, а состав портфеля зависит от балла.
-- T060 (тест универсальности) работает с Phase 1 и ловит код под конкретный документ сразу.
-- T067 (очистка) → T020 (структура) → T068 (законы, составные приказы). T071 (dev-корпус)
-  нужен для регрессии в T068 и для eval-набора в T036.
+  экономику US4.
+- Порядок экономики: T044 (solo) → T047, T048 (балл, группа) → T065 (портфель). Цикла нет: балл
+  считается по solo-эффекту, а состав портфеля зависит от балла.
+- Сквозной сценарий собирается до расширения форматов: Phase 7a идёт после US5, чтобы к этому
+  моменту весь путь «загрузка → рейтинг» уже работал на PDF, DOCX и TXT.
+- T067 (очистка) → T068 (законы, составные приказы). T071 (dev-корпус) нужен для регрессии в
+  T068 и для eval-набора в T036.
+- T076 (пул процессов) — до любого разбора на сервере: T022, T032, T070, T075.
+- T074 заблокирована выбором провайдера. До него вся разработка идёт на FakeLLM; T036 и T059
+  требуют T074 и ключ.
+- T060 и тест согласованности (`test_spec_consistency.py`) работают с Phase 1 и ловят код под
+  конкретный документ, неизвестные зависимости, циклы и нетрассированные требования.
+- T006 (отложенная выборка) — до T059: она фиксируется до настройки промптов.
 
 ### Parallel Opportunities
 
-- **Setup**: T002–T006 и T060 параллельно после T001 (T060 — после T002).
-- **Foundational**: T008 ∥ T010 ∥ T012 (после T007 и T003); T013 и T014 после T009.
-- **US1**: T015, затем T016 ∥ T017 ∥ T018; T019 параллельно с ними; T069 ∥ T020 (после T016).
+- **Setup**: T002–T006, T060, T071 параллельно после T001 (T060 — после T002).
+- **Спайки**: T072 ∥ T073.
+- **Foundational**: T008 ∥ T010 ∥ T012 ∥ T076 (после T007 и T003); T013 и T014 после T009.
+- **US1**: T015, затем T016 ∥ T017; T019 параллельно с ними.
 - **US2**: T024 ∥ T025 ∥ T026 ∥ T027 ∥ T028 ∥ T033, затем T029 → T030 → T031 → T032.
 - **US3**: T037 ∥ T038 ∥ T039, затем T040 → T041 → T042 ∥ T066.
 - **US5**: T047 → T048 → T065 (T047, T048 параллельно с T046).
+- **Phase 7a**: T018 ∥ T067 ∥ T069 ∥ T075; затем T068, T070.
 - **US7/US8**: T054 ∥ T057; T058 ∥ T062.
 
 ### Example: параллельный старт US2
@@ -994,35 +1126,39 @@ T027 extraction/schemas.py    T028 extraction/render.py      T033 analysis/merma
 
 ## Implementation Strategy
 
-1. **MVP-срез (US1+US2)**: загрузка → структура → карта процессов с проверенными цитатами.
-   Это уже отвечает на вопросы 1–2 и проверяет главный риск R-01 (галлюцинации). После
-   checkpoint — первый прогон eval на живой LLM и показ.
-2. **Ценностный срез (US3→US4→US5)**: инициативы → экономика → рейтинг. После US5 закрыты
-   AC-01…AC-07 и AC-11.
-3. **Доверие и передача (US6, US7)**: экспертная проверка и экспорт (BR-05, AC-09).
-4. **Эксплуатация (US8)**: Docker, README, деплой (AC-10).
-5. **Валидация**: eval на трёх документах, отложенная выборка, отчёт, пример (AC-08, Phase 5 постановки).
+0. **Спайки** (T072, T073 — около дня; T074 — после выбора провайдера): проверить на реальных
+   данных разбор PDF и DOCX, образ с OCR и LibreOffice, структурированный вывод.
+1. **Сквозной сценарий как можно раньше**: US1 ядро → US2 → US3 → US4 → US5 на PDF, DOCX и TXT с
+   FakeLLM. После US5 работает весь путь «загрузка → карта процессов → инициативы → экономика →
+   рейтинг», а главный риск R-01 (галлюцинации) проверен на проверке цитат.
+2. **Покрытие документов** (Phase 7a): очистка справочных систем, законы и составные приказы,
+   HTML, OCR, `.doc`/`.rtf`/`.odt`.
+3. **Доверие и передача** (US6, US7): экспертная проверка и экспорт (BR-05, AC-09).
+4. **Эксплуатация** (US8): Docker, README, деплой (AC-10). T056 можно начать сразу после T032.
+5. **Валидация**: eval на трёх документах, отложенная выборка, отчёт, пример (AC-08).
 
-Каждый checkpoint — точка демонстрации и коммита. Изменения промптов и моделей после первого
-baseline проходят только через eval.
+Каждый checkpoint — точка демонстрации и коммита. `check.sh` включает тест согласованности
+артефактов. Изменения промптов и моделей после первого baseline проходят только через eval.
 
 ## Summary
 
 | Фаза | Задачи | Кол-во |
 |---|---|---|
 | Setup | T001–T006, T060, T071 | 8 |
-| Foundational | T007–T014 | 8 |
-| US1 (P1) | T015–T023, T067–T070 | 13 |
+| Спайки | T072–T074 | 3 |
+| Foundational | T007–T014, T076 | 9 |
+| US1 ядро (P1) | T015–T017, T019–T023 | 8 |
 | US2 (P1) | T024–T036 | 13 |
 | US3 (P2) | T037–T042, T066 | 7 |
 | US4 (P2) | T043–T046 | 4 |
 | US5 (P2) | T047–T049, T065 | 4 |
+| Покрытие документов | T018, T067–T070, T075 | 6 |
 | US6 (P3) | T050–T053 | 4 |
 | US7 (P3) | T054–T055 | 2 |
 | US8 (P3) | T056–T058 | 3 |
 | Validation | T059, T061–T064 | 5 |
-| **Итого** | | **71** (из них [manual]: T006, T036, T059, T061, T062, T066, T071, частично T058) |
+| **Итого** | | **76** (из них [manual]: T006, T036, T059, T061, T062, T066, T071, T072, T074, частично T058) |
 
-T065 и T066 добавлены по итогам `/speckit-analyze`, T067–T071 — для тестирования на
-разнотипных НПА и OCR. Номера существующих задач сохранены,
-поэтому ID идут не по порядку фаз.
+T065 и T066 добавлены по итогам `/speckit-analyze`, T067–T071 — для тестирования на разнотипных
+НПА и OCR, T072–T076 — по итогам pre-mortem. Номера существующих задач сохранены, поэтому ID идут
+не по порядку фаз.
