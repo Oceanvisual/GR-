@@ -359,6 +359,37 @@ def make_tracked_changes_docx() -> None:
     save_docx(doc, "tracked_changes.docx")
 
 
+STYLED_HEADINGS = [
+    (1, "Общие положения"),
+    (0, "Настоящее положение определяет порядок допуска посетителей в административное здание."),
+    (0, "Положение обязательно для работников охраны и всех структурных подразделений."),
+    (1, "Допуск посетителей"),
+    (2, "Оформление разового пропуска"),
+    (0, "Посетитель предъявляет документ, удостоверяющий личность, на посту охраны."),
+    (0, "Дежурный вносит сведения о посетителе в журнал и выдаёт разовый пропуск."),
+    (2, "Сопровождение посетителя"),
+    (0, "Посетителя сопровождает работник принимающего подразделения."),
+    (1, "Ответственность"),
+    (0, "Работники охраны несут ответственность за соблюдение настоящего положения."),
+    (0, "Нарушения порядка допуска рассматриваются руководителем службы охраны."),
+]
+
+
+def make_styled_headings_docx() -> None:
+    """Headings by style and bold only, no numbering: the `layout` strategy must win (T078)."""
+    doc = new_docx()
+    title = doc.add_paragraph()
+    title.add_run("ПОЛОЖЕНИЕ О ДОПУСКЕ ПОСЕТИТЕЛЕЙ").bold = True
+    for level, text in STYLED_HEADINGS:
+        if level == 1:
+            doc.add_heading(text, level=1)
+        elif level == 2:
+            doc.add_paragraph().add_run(text).bold = True
+        else:
+            doc.add_paragraph(text)
+    save_docx(doc, "styled_headings.docx")
+
+
 # ---------------------------------------------------------------- PDF
 def font_path() -> Path:
     for candidate in FONT_CANDIDATES:
@@ -457,6 +488,7 @@ def main() -> None:
     make_spps_docx()
     make_table_docx()
     make_tracked_changes_docx()
+    make_styled_headings_docx()
 
     write_pdf("regulation.pdf", [*ORDER, *BODY, *APPENDIX])
     pages = write_pdf(

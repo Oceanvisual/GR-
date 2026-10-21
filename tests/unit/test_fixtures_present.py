@@ -24,6 +24,7 @@ DOCX_FILES = [
     "spps_export.docx",
     "table.docx",
     "tracked_changes.docx",
+    "styled_headings.docx",
 ]
 
 
