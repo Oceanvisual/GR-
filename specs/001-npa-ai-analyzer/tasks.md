@@ -232,7 +232,7 @@ description: "Task list for 001-npa-ai-analyzer"
     `/` без аутентификации → 401.
   - **Тесты**: `test_app.py`.
 
-- [ ] T012 [P] LLM: протокол, FakeLLM, политика данных — `src/gr/llm/`
+- [X] T012 [P] LLM: протокол, FakeLLM, политика данных — `src/gr/llm/`
   - **Цель**: контракт [llm.md § Общий протокол](./contracts/llm.md#общий-протокол) и NFR-009.
   - **Зависит**: T003
   - **Файлы**: `llm/base.py`, `fake.py`, `policy.py`, `tests/unit/llm/test_policy.py`,

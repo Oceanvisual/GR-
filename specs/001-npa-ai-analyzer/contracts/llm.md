@@ -32,6 +32,7 @@ class LLMResult(Generic[T]):
     latency_ms: int
     attempts: int
     cached: bool
+    tokens_estimated: bool = False  # провайдер не вернул usage
 ```
 
 **Гарантии реализации** (`OpenAICompatibleLLM`):
