@@ -419,7 +419,7 @@ description: "Task list for 001-npa-ai-analyzer"
     - стратегия, бросающая исключение, не ломает разбор.
   - **Тесты**: `test_strategies.py`.
 
-- [ ] T021 [P] [US1] Реквизиты документа — `src/gr/structure/metadata.py`
+- [X] T021 [P] [US1] Реквизиты документа — `src/gr/structure/metadata.py`
   - **Цель**: FR-006 (R-07).
   - **Зависит**: T020
   - **Файлы**: `structure/metadata.py`, `tests/unit/structure/test_metadata.py`

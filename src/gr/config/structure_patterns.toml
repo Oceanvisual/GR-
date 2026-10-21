@@ -45,3 +45,20 @@ pattern = '^[-–—•]\s*\S'
 [heading]
 # An unnumbered heading (subsection): short, no closing punctuation, starts with a capital.
 max_chars = 200
+
+[metadata]
+# Requisites (FR-006, R-07): searched in the first characters of the normalized text.
+head_chars = 6000
+# Kinds of acts, longest first; matched in capitals on their own line or at a line start.
+act_types = [
+  "ФЕДЕРАЛЬНЫЙ КОНСТИТУЦИОННЫЙ ЗАКОН", "ФЕДЕРАЛЬНЫЙ ЗАКОН", "ОБЛАСТНОЙ ЗАКОН", "КРАЕВОЙ ЗАКОН",
+  "ЗАКОН", "УКАЗ", "ПОСТАНОВЛЕНИЕ", "РАСПОРЯЖЕНИЕ", "ПРИКАЗ", "РЕШЕНИЕ",
+]
+# First words of an issuing body's name; a multi-line name starts at such a line.
+issuer_words = [
+  "МИНИСТЕРСТВО", "ФЕДЕРАЛЬНОЕ", "ФЕДЕРАЛЬНАЯ", "АГЕНТСТВО", "СЛУЖБА", "ПРАВИТЕЛЬСТВО",
+  "АДМИНИСТРАЦИЯ", "УПРАВЛЕНИЕ", "КОМИТЕТ", "ДЕПАРТАМЕНТ", "ГЛАВА", "ГУБЕРНАТОР", "СОВЕТ",
+  "ДУМА", "МЭРИЯ", "ПРЕЗИДЕНТ", "ЦЕНТРАЛЬНЫЙ", "ИНСПЕКЦИЯ", "КОМИССИЯ",
+]
+# Lines listing amending acts start with an act in the instrumental case: not the act's own date.
+amending_prefixes = ["Законом", "Федеральным законом", "Приказом", "Постановлением", "Распоряжением", "Указом", "Решением"]
