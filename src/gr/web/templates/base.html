@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AI-анализ НПА{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+  <script src="{{ url_for('static', path='vendor/htmx.min.js') }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">AI-анализ НПА</a>
+    <nav>
+      <a href="/">Документы</a>
+    </nav>
+    {% if llm_policy is defined %}
+    <span class="badge badge-{{ llm_policy }}" title="Политика передачи данных LLM_DATA_POLICY">
+      LLM: {{ {"disabled": "не настроена", "local_only": "только локальная", "external_allowed": "внешняя разрешена"}[llm_policy] }}
+    </span>
+    {% endif %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

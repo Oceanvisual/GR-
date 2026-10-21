@@ -218,7 +218,7 @@ description: "Task list for 001-npa-ai-analyzer"
     заголовков проходят.
   - **Тесты**: `test_errors.py`, `test_auth.py`, `test_csrf.py`.
 
-- [ ] T011 Приложение, health, базовый шаблон, vendored-статика — `src/gr/app.py`
+- [X] T011 Приложение, health, базовый шаблон, vendored-статика — `src/gr/app.py`
   - **Цель**: работающий каркас веб-сервиса.
   - **Зависит**: T009, T010, T004
   - **Файлы**: `app.py`, `api/health.py`, `api/deps.py`, `web/routes.py`, `web/templates/base.html`,

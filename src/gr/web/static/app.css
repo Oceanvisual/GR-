@@ -1,0 +1,24 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1d1f23;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --accent: #2b59c3;
+  --warn-bg: #fff4e5;
+  --ok-bg: #e8f5e9;
+  --bad-bg: #fdecea;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
+.topbar { display: flex; align-items: center; gap: 24px; padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 600; color: var(--fg); text-decoration: none; }
+nav a { color: var(--accent); text-decoration: none; margin-right: 16px; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.muted { color: var(--muted); }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 13px; background: var(--line); }
+.badge-disabled { background: var(--warn-bg); }
+.badge-local_only { background: var(--ok-bg); }
+.badge-external_allowed { background: var(--bad-bg); }
+.topbar .badge { margin-left: auto; }

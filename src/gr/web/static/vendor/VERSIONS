@@ -1,0 +1,4 @@
+# Vendored front-end libraries (no CDN at runtime). Update: download the exact version,
+# replace the file, update the line below and the sha256 (tests/integration/test_app.py checks it).
+htmx.min.js     htmx.org@2.0.4  https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js  sha256=e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447
+mermaid.min.js  mermaid@11.4.1  https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js  sha256=a43bc1afd446f9c4cc66ac5dd45d02e8d65e26fc5344ec0ef787f88d6ddb6f9e
