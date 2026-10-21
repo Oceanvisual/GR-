@@ -259,7 +259,7 @@ description: "Task list for 001-npa-ai-analyzer"
     `llm_timeout`, 401 → `llm_auth_failed`, обрезанный ответ. В логах нет текстов.
   - **Тесты**: `test_openai_compat.py`, `test_cache.py`.
 
-- [ ] T014 Фоновый runner — `src/gr/pipeline/runner.py`
+- [X] T014 Фоновый runner — `src/gr/pipeline/runner.py`
   - **Цель**: очередь, параллелизм, сохранение по этапам, возобновление (R-03).
   - **Зависит**: T009
   - **Файлы**: `pipeline/runner.py`, `pipeline/stages.py` (протокол `Stage`),
