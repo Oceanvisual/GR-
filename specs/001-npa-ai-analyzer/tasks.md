@@ -47,7 +47,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: тест зелёный, а намеренное нарушение его роняет (проверено вручную).
   - **Тесты**: `test_layering.py`.
 
-- [ ] T003 [P] Настройки и `.env.example` — `src/gr/settings.py`
+- [X] T003 [P] Настройки и `.env.example` — `src/gr/settings.py`
   - **Цель**: вся конфигурация через env (plan § Конфигурация).
   - **Зависит**: T001
   - **Файлы**: `src/gr/settings.py`, `.env.example`, `tests/unit/test_settings.py`
