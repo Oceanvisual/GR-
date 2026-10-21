@@ -1,5 +1,7 @@
 """Extractor protocol and ingestion errors shared by every format adapter (FR-007)."""
 
+import zipfile
+import zlib
 from typing import Any, Protocol
 
 from gr.domain.document import RawDocument
@@ -17,6 +19,26 @@ INGESTION_CODES = frozenset(
         "file_too_large",
     }
 )
+
+
+# What a damaged ZIP container raises while opening or reading a member: a broken central
+# directory (ValueError "negative seek"), a corrupt deflate stream (zlib.error), a truncated
+# member (EOFError), an encrypted or exotic member (RuntimeError, NotImplementedError).
+ARCHIVE_ERRORS: tuple[type[Exception], ...] = (
+    zipfile.BadZipFile,
+    zipfile.LargeZipFile,
+    zlib.error,
+    EOFError,
+    OSError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    NotImplementedError,
+)
+
+
+def archive_error() -> "IngestionError":
+    return IngestionError("corrupted_file", "Файл повреждён: архив не читается.")
 
 
 class IngestionError(Exception):

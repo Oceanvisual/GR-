@@ -13,6 +13,10 @@ from gr.structure.strategies import Strategy
 from gr.structure.tree import build_units, flatten, normalized_blocks, stats
 
 
+class EmptyTextError(ValueError):
+    """No text is left after normalisation (invisible characters alone are no text)."""
+
+
 @dataclass
 class StructureResult:
     fragments: list[Fragment]
@@ -30,7 +34,7 @@ def build_structure(
     blocks = normalized_blocks(raw)
     ir = full_text(blocks)
     if not ir.text:
-        raise ValueError("document has no text")
+        raise EmptyTextError("document has no text")
     units = build_units(blocks, ir)
     chosen: Choice = choose(units, strategies)
     outcome = chosen.outcome

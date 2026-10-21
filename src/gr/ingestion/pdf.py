@@ -14,6 +14,7 @@ from gr.ingestion.pdf_layout import Line, build_blocks
 
 _PASSWORD_ERROR = 4  # FPDF_ERR_PASSWORD
 MIN_PAGE_CHARS = 20  # fewer letters/digits than this: the page has no usable text layer
+DEFAULT_FONT_SIZE = 12.0
 
 
 def _page_lines(page: pdfium.PdfPage, number: int) -> tuple[list[Line], int]:
@@ -35,9 +36,11 @@ def _page_lines(page: pdfium.PdfPage, number: int) -> tuple[list[Line], int]:
             last = start + len(raw_line.rstrip()) - 1
             boxes = [textpage.get_charbox(i) for i in range(first, last + 1)]
             boxes = [b for b in boxes if b[2] > b[0] or b[3] > b[1]] or boxes
-            size = float(pdfium_raw.FPDFText_GetFontSize(textpage.raw, first)) or (
-                boxes[0][3] - boxes[0][1]
-            )
+            size = float(pdfium_raw.FPDFText_GetFontSize(textpage.raw, first))
+            if not size > 0:  # a damaged font dictionary: fall back to the glyph height
+                size = max(b[3] for b in boxes) - min(b[1] for b in boxes)
+            if not size > 0:
+                size = DEFAULT_FONT_SIZE
             lines.append(
                 Line(
                     text=stripped,
@@ -89,10 +92,20 @@ class PdfExtractor:
                 )
             pages: list[list[Line]] = []
             empty: list[int] = []
+            broken: list[int] = []
             for index in range(total):
-                page = document[index]
+                try:
+                    page = document[index]
+                except pdfium.PdfiumError:
+                    broken.append(index + 1)  # a damaged page object: keep the other pages
+                    pages.append([])
+                    continue
                 try:
                     lines, meaningful = _page_lines(page, index + 1)
+                except pdfium.PdfiumError:
+                    broken.append(index + 1)
+                    pages.append([])
+                    continue
                 finally:
                     page.close()
                 if meaningful < MIN_PAGE_CHARS:
@@ -102,11 +115,15 @@ class PdfExtractor:
         finally:
             document.close()
 
+        if total and len(broken) == total:
+            raise IngestionError("corrupted_file", "Файл повреждён: страницы PDF не читаются.")
         layout = build_blocks(pages)
         status = text_layer_status(len(empty), total)
         if status == TextLayerStatus.OK and not layout.blocks:
             status = TextLayerStatus.EMPTY
         warnings = []
+        if broken:
+            warnings.append("повреждённые страницы пропущены: " + ", ".join(map(str, broken)))
         if layout.columns_pages:
             warnings.append(
                 "многоколоночная вёрстка на страницах " + ", ".join(map(str, layout.columns_pages))

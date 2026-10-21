@@ -5,7 +5,7 @@ import re
 import zipfile
 
 from gr.domain.enums import DocFormat
-from gr.ingestion.base import IngestionError
+from gr.ingestion.base import ARCHIVE_ERRORS, IngestionError, archive_error
 
 _HTML_RE = re.compile(rb"^\s*(<!--.*?-->\s*)*<(!doctype\s+html|html|head|body)\b", re.I | re.S)
 OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
@@ -32,17 +32,24 @@ def unsupported(kind: str) -> IngestionError:
     )
 
 
+def _read_member(archive: zipfile.ZipFile, name: str) -> bytes:
+    try:
+        return archive.read(name)
+    except ARCHIVE_ERRORS:
+        raise archive_error() from None
+
+
 def _zip_format(data: bytes) -> DocFormat:
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             names = set(archive.namelist())
             if "mimetype" in names:
-                mimetype = archive.read("mimetype")[:100].strip()
+                mimetype = _read_member(archive, "mimetype")[:100].strip()
                 if mimetype == b"application/vnd.oasis.opendocument.text":
                     return DocFormat.ODT
                 raise unsupported(mimetype.decode("ascii", "replace") or "ODF")
-    except zipfile.BadZipFile:
-        raise IngestionError("corrupted_file", "Файл повреждён: архив не читается.") from None
+    except ARCHIVE_ERRORS:
+        raise archive_error() from None
     if "word/document.xml" in names:
         return DocFormat.DOCX
     if any(name.startswith("xl/") for name in names):

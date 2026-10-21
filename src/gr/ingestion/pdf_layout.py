@@ -56,6 +56,10 @@ class LayoutResult:
     columns_pages: list[int] = field(default_factory=list)
 
 
+def _positive(value: float) -> float | None:
+    return value if value > 0 else None
+
+
 def _mask(text: str) -> str:
     return _DIGITS_RE.sub("#", " ".join(text.split())).strip()
 
@@ -279,7 +283,7 @@ def build_blocks(pages: list[list[Line]]) -> LayoutResult:
                     max(line.top for line in same_page),
                 ),
                 indent=round(first.x0 - page_stats.margin, 1),
-                font_size=round(median(line.size for line in current), 1) or None,
+                font_size=_positive(round(median(line.size for line in current), 1)),
                 align="center" if _centered(first, page_stats) else None,
             )
         )

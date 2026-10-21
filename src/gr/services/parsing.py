@@ -11,6 +11,7 @@ from gr.domain.document import (
     Fragment,
     IngestionDiagnostics,
     OcrInfo,
+    RawDocument,
     StructureChoice,
 )
 from gr.domain.enums import DocFormat, OcrStatus, StructureMode, TextLayerStatus
@@ -20,7 +21,7 @@ from gr.ingestion.docx import DocxExtractor, ZipLimits
 from gr.ingestion.pdf import PdfExtractor
 from gr.ingestion.registry import ExtractorRegistry
 from gr.ingestion.txt import TxtExtractor
-from gr.structure.builder import build_structure
+from gr.structure.builder import EmptyTextError, build_structure
 from gr.structure.metadata import extract_metadata
 
 OCR_NOT_CONNECTED = (
@@ -85,11 +86,19 @@ def parse_file(path: str, doc_id: str, limits: ParseLimits) -> ParsedDocument | 
 
 def _parse(data: bytes, doc_id: str, limits: ParseLimits) -> ParsedDocument:
     fmt = detect_format(data)
-    raw = registry(limits).get(fmt).extract(data)
+    return parse_raw(registry(limits).get(fmt).extract(data), doc_id, limits)
+
+
+def parse_raw(raw: RawDocument, doc_id: str, limits: ParseLimits) -> ParsedDocument:
+    """Extracted blocks → structure and requisites. Raises `IngestionError` only."""
+    fmt = raw.format
     diagnostics = raw.diagnostics.model_copy(update={"ocr": _ocr_info(raw.diagnostics)})
-    if not any(block.text.strip() for block in raw.blocks):
+    try:
+        # Emptiness is judged after normalisation: invisible characters alone are no text.
+        structure = build_structure(raw, doc_id)
+    except EmptyTextError:
         if diagnostics.text_layer == TextLayerStatus.OK:
-            raise IngestionError("empty_document", "В документе нет текста.")
+            raise IngestionError("empty_document", "В документе нет текста.") from None
         # A scan: kept with its diagnostics so the user sees why it cannot be analysed.
         return ParsedDocument(
             format=fmt,
@@ -101,7 +110,6 @@ def _parse(data: bytes, doc_id: str, limits: ParseLimits) -> ParsedDocument:
             text="",
             page_starts=[],
         )
-    structure = build_structure(raw, doc_id)
     if len(structure.text.text) > limits.max_chars:
         raise IngestionError(
             "document_too_long",

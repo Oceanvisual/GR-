@@ -14,7 +14,7 @@ from xml.etree.ElementTree import Element
 
 from gr.domain.document import Block, IngestionDiagnostics, RawDocument, RemovedNoise, TableCell
 from gr.domain.enums import DocFormat, TextLayerStatus
-from gr.ingestion.base import IngestionError
+from gr.ingestion.base import ARCHIVE_ERRORS, IngestionError, archive_error
 from gr.ingestion.detect import ENCRYPTION_STREAM, OLE_SIGNATURE
 from gr.ingestion.docx_numbering import NumberingState, W, parse_numbering
 
@@ -56,6 +56,13 @@ def check_zip_limits(archive: zipfile.ZipFile, limits: ZipLimits) -> None:
             and entry.file_size > 1 << 20
         ):
             raise _zip_error(f"ratio of {entry.filename}")
+
+
+def _read(archive: zipfile.ZipFile, name: str) -> bytes:
+    try:
+        return archive.read(name)
+    except ARCHIVE_ERRORS:
+        raise archive_error() from None
 
 
 def _parse_xml(data: bytes) -> Element:
@@ -283,7 +290,7 @@ class _Walker:
 def _notes(archive: zipfile.ZipFile, name: str, label: str, walker: _Walker) -> list[Block]:
     if name not in archive.namelist():
         return []
-    root = _parse_xml(archive.read(name))
+    root = _parse_xml(_read(archive, name))
     blocks: list[Block] = []
     for note in root:
         if note.get(f"{W}type") in ("separator", "continuationSeparator", "continuationNotice"):
@@ -298,13 +305,13 @@ def _header_footer_lines(archive: zipfile.ZipFile, walker: _Walker) -> int:
     count = 0
     for name in archive.namelist():
         if name.startswith(("word/header", "word/footer")) and name.endswith(".xml"):
-            root = _parse_xml(archive.read(name))
+            root = _parse_xml(_read(archive, name))
             count += sum(1 for p in root.iter(f"{W}p") if walker.paragraph_text(p).strip())
     return count
 
 
 def _optional_part(archive: zipfile.ZipFile, names: set[str], name: str) -> Element | None:
-    return _parse_xml(archive.read(name)) if name in names else None
+    return _parse_xml(_read(archive, name)) if name in names else None
 
 
 class DocxExtractor:
@@ -320,23 +327,18 @@ class DocxExtractor:
             raise IngestionError("corrupted_file", "Файл повреждён: это не DOCX.")
         try:
             archive = zipfile.ZipFile(io.BytesIO(data))
-        except zipfile.BadZipFile:
-            raise IngestionError("corrupted_file", "Файл повреждён: архив не читается.") from None
+        except ARCHIVE_ERRORS:
+            raise archive_error() from None
         with archive:
             check_zip_limits(archive, self.limits)
             names = set(archive.namelist())
             if "word/document.xml" not in names:
                 raise IngestionError("corrupted_file", "Файл повреждён: нет текста документа.")
-            try:
-                document = _parse_xml(archive.read("word/document.xml"))
-                styles = _parse_styles(_optional_part(archive, names, "word/styles.xml"))
-                numbering = NumberingState(
-                    parse_numbering(_optional_part(archive, names, "word/numbering.xml"))
-                )
-            except (zipfile.BadZipFile, KeyError, OSError):
-                raise IngestionError(
-                    "corrupted_file", "Файл повреждён: архив не читается."
-                ) from None
+            document = _parse_xml(_read(archive, "word/document.xml"))
+            styles = _parse_styles(_optional_part(archive, names, "word/styles.xml"))
+            numbering = NumberingState(
+                parse_numbering(_optional_part(archive, names, "word/numbering.xml"))
+            )
 
             walker = _Walker(styles, numbering)
             body = document.find(f"{W}body")
