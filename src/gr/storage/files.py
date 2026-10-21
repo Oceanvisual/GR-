@@ -42,6 +42,18 @@ class FileStore:
             raise
         return digest
 
+    async def adopt(self, path: Path, sha256: str) -> None:
+        """Move an already written temporary file into the store under its digest."""
+        await asyncio.to_thread(self._adopt_sync, path, sha256)
+
+    def _adopt_sync(self, path: Path, sha256: str) -> None:
+        target = self.path_for(sha256)
+        self.root.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            path.unlink(missing_ok=True)
+            return
+        os.replace(path, target)  # same file system: the temp dir lives under the data dir
+
     async def read(self, sha256: str) -> bytes:
         return await asyncio.to_thread(self.path_for(sha256).read_bytes)
 

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 import gr
-from gr.api import health
+from gr.api import documents, health
 from gr.api.deps import AppState
 from gr.auth import BasicAuthenticator, SameOriginGuard
 from gr.errors import install_error_handlers
@@ -73,6 +73,7 @@ def create_app(settings: Settings | None = None, *, stages: Sequence[Stage] = ()
     app.add_middleware(SameOriginGuard, public_url=public_url)
     app.include_router(health.liveness)
     app.include_router(health.readiness)
+    app.include_router(documents.router)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")
     return app

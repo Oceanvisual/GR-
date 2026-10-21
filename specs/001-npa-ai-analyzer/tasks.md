@@ -429,7 +429,7 @@ description: "Task list for 001-npa-ai-analyzer"
     № 59820; на синтетике без реквизитов — `None` без ошибок.
   - **Тесты**: `test_metadata.py`.
 
-- [ ] T022 [US1] Сервис и API документов — `src/gr/services/documents.py`, `src/gr/api/documents.py`
+- [X] T022 [US1] Сервис и API документов — `src/gr/services/documents.py`, `src/gr/api/documents.py`
   - **Цель**: эндпоинты api.md § Документы.
     Трассировка: FR-005, NFR-008.
   - **Зависит**: T016, T017, T020, T021, T011, T076
