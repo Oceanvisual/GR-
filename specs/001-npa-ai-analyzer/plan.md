@@ -87,8 +87,8 @@ Upload → [S1 Ingest] → [S2 Structure] ──(sync, при загрузке)�
                                                                                       ▼
 Run → [S3 Discover*] → [S4 Detail*] → [S5 Validate] → [S6 Opportunities*] → [S7 Postprocess]
                                                                                       │
-Read → overlay(reviews) → [S8 Economics] → [S9 Risk gate + Priority] → Report/Export ◀┘
-* — LLM; остальные этапы детерминированы. S8–S9 — чистые функции при каждом чтении.
+Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [S10 Portfolio] → Report ◀┘
+* — LLM; остальные этапы детерминированы. S8–S10 — чистые функции при каждом чтении.
 ```
 
 | Этап постановки | Компонент | Модуль |
@@ -99,7 +99,7 @@ Read → overlay(reviews) → [S8 Economics] → [S9 Risk gate + Priority] → R
 | Process Validation | S5 Validate | `validation/`, `grounding/` |
 | Optimization Analysis + AI Opportunity Generation | S6 Opportunities | `extraction/opportunities.py` |
 | Risk Assessment | S7 Postprocess (gating, tech guard, связи) + S9 | `analysis/gating.py`, `tech_guard.py`, `relations.py` |
-| Economic Estimation | S8 | `analysis/economics.py` |
+| Economic Estimation | S8 (solo) + S10 (портфель, атрибуция) | `analysis/economics.py`, `portfolio.py` |
 | Priority Ranking | S9 | `analysis/scoring.py`, `grouping.py` |
 | Report | export, UI | `export/`, `web/` |
 
@@ -110,12 +110,13 @@ Read → overlay(reviews) → [S8 Economics] → [S9 Risk gate + Priority] → R
 | **S1 Ingest** | Определить формат, извлечь текст постранично, диагностика | bytes, filename | `RawDocument{format, pages[text], diagnostics}` | `Extractor` Protocol: `extract(data) -> RawDocument`; реестр по `DocFormat` | `unsupported_format`, `file_too_large`, `corrupted_file`, `encrypted_file`, `no_text_layer`, `empty_document`, `encoding_undetected` | 100 % фикстур корректно классифицированы; скан → `needs_ocr`; без исключений наружу, кроме `IngestionError` |
 | **S2 Structure** | Дерево фрагментов, метки, смещения, страницы, реквизиты | `RawDocument` | `list[Fragment]`, `DocumentMetadata`, `StructureMode` | `build_structure(raw, patterns) -> StructureResult`; чистая функция | не бросает исключений: деградирует в режим `paragraphs` с предупреждением | инварианты вложенности; на регламенте 261 разделы I–V и пункты 3.x.y распознаны (golden-тест) |
 | **S3 Discover** | Карта процессов по оглавлению | fragments → outline | `DiscoveryOut` → кандидаты | [llm.md § S3](./contracts/llm.md#s3--discover--карта-процессов) | LLM-коды; 0 валидных кандидатов → этап `succeeded` с «процессы не найдены» | полнота и точность процессов (eval) |
-| **S4 Detail** | Операции, решения, роли, сроки для каждого процесса | кандидат + фрагменты | `DetailOut` по каждому процессу | [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций) | ошибка одного процесса → процесс помечается `failed`, этап `succeeded` с предупреждением, если доля ошибок ≤ 30 %, иначе `failed` | полнота операций, доля `verified` (eval) |
+| **S4 Detail** | Операции, решения, роли, сроки для каждого процесса | кандидат + фрагменты | `DetailOut` по каждому процессу | [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций) | ошибка одного процесса → процесс помечается `failed`, этап `succeeded` с предупреждением и `completeness.complete=false`, если доля ошибок ≤ 30 %, иначе `failed` | полнота операций, доля `verified` (eval) |
 | **S5 Validate** | Grounding, граф, дедупликация, уверенность, покрытие | `DetailOut[]`, fragments | `ProcessModel{processes, unverified, coverage}` | `validate(detail, fragments, cfg) -> ProcessModel`; чистая | не бросает | 100 % «фактов» с verified/relocated-цитатой (SC-002) |
 | **S6 Opportunities** | Проблемы и инициативы с enum-оценками | эффективная модель процесса, каталог | `OpportunitiesOut` по каждому процессу | [llm.md § S6](./contracts/llm.md#s6--opportunities--проблемы-и-инициативы) | как S4 | метрики S6 (eval, judge) |
 | **S7 Postprocess** | Ссылочная целостность, tech guard, ограничение автономности, статус допустимости, связи, допущения по умолчанию | `OpportunitiesOut[]`, модель, профиль | `InitiativeSet`, `AssumptionSet v1` | чистые функции `analysis/*` | не бросает; issues в отчёт | инварианты data-model §4, §6 |
-| **S8 Economics** | Формулы спеки, сценарии, комбинирование, атрибуция | эффективные модель и инициативы, `AssumptionSet`, сценарий | `EconomicsResult` | `compute_economics(...) -> EconomicsResult`; чистая, `Decimal` | `AssumptionValidationError` → 400 | property-тесты (data-model §7); идентичность повторов |
+| **S8 Economics (solo)** | Формулы спеки для автономного эффекта, сценарии | эффективные модель и инициативы, `AssumptionSet`, сценарий | `EconomicsResult` (`layer=assumption`) | `compute_solo(...) -> EconomicsResult`; чистая, `Decimal` | `AssumptionValidationError` → 400 | ручные примеры; независимость от порядка; идентичность повторов |
 | **S9 Priority** | Нормирование, балл, группы, ранжирование | инициативы, `EconomicsResult(base)`, `PriorityConfig` | `list[PriorityResult]` | `rank(...)`; чистая | — | ручной пересчёт по разбивке совпадает; стабильность сортировки |
+| **S10 Portfolio** | Состав портфеля, мультипликативное комбинирование, атрибуция (FR-054, FR-055) | solo-экономика, `PriorityResult[]`, связи | `PortfolioEconomics` | `build_portfolio(...)`; чистая | — | property-тесты (data-model §7): `Σ attributed = portfolio`, `combined ≤ 1` |
 | **Overlay** | Наложение решений эксперта | вывод этапов, `ReviewEvent[]` | эффективная модель + `stale` | `apply_reviews(...)`; чистая | `400` на патч вне белого списка | идемпотентность, порядок по `created_at` |
 | **JobRunner** | Очередь, параллелизм, статусы, возобновление | `run_id` | обновления `AnalysisRun`, `stage_outputs` | `submit(run_id)`, `resume(run_id)`, `cancel(run_id)` | исключение этапа → `failed` + код; старт → `interrupted` | тест возобновления после «краха» |
 | **LLM client** | Структурированные вызовы, retries, кэш, учёт, политика | schema, prompts | `LLMResult[T]` | [llm.md § Общий протокол](./contracts/llm.md#общий-протокол) | коды [llm.md](./contracts/llm.md) | 0 сетевых вызовов в тестах; логи без текстов |
@@ -128,7 +129,11 @@ Read → overlay(reviews) → [S8 Economics] → [S9 Risk gate + Priority] → R
   после завершения. S4 и S6 пишут по каждому процессу в `payload.items[process_key]`, чтобы
   возобновление не повторяло готовые процессы.
 - Перегенерация инициатив процесса (FR-083) создаёт запись S6 с суффиксом версии
-  (`opportunities@2`). Эффективной считается последняя.
+  (`opportunities@2`). Эффективной считается последняя. Решения по прежним инициативам
+  остаются в журнале и показываются как «по предыдущей версии». Пользовательские допущения
+  переносятся по совпадению операций и категории (data-model §8).
+- Сырые ответы LLM хранятся в `llm_calls.response` для каждого вызова, независимо от кэша
+  (FR-030).
 - Экономика и приоритет не хранятся. Аудит обеспечивают версии допущений и конфигурации плюс
   чистые функции.
 
@@ -143,6 +148,8 @@ Read → overlay(reviews) → [S8 Economics] → [S9 Risk gate + Priority] → R
 | `AUTH_ENABLED` | `true` | `false` только при `APP_ENV=local` |
 | `AUTH_USERS` | — | `login:scrypt$salt$hash,…` |
 | `MAX_UPLOAD_MB` / `MAX_PAGES` / `MAX_CHARS` | 20 / 300 / 1 000 000 | FR-002 |
+| `MAX_UNZIPPED_MB` | 100 | лимит распаковки DOCX (R-04) |
+| `APP_PUBLIC_URL` | — | внешний адрес за реверс-прокси (проверка Origin, R-15) |
 | `LLM_DATA_POLICY` | `disabled` | `disabled` / `local_only` / `external_allowed` |
 | `LLM_BASE_URL`, `LLM_API_KEY` | — | OpenAI-совместимый endpoint |
 | `LLM_LOCAL_HOSTS` | `localhost,127.0.0.1,ollama,vllm` | для `local_only` |
@@ -217,7 +224,7 @@ src/gr/
 │   ├── process_validator.py, graph.py, dedupe.py, confidence.py, coverage.py
 ├── analysis/                     # S7–S9 + overlay
 │   ├── postprocess.py, tech_guard.py, gating.py, relations.py, defaults.py
-│   ├── economics.py, scoring.py, grouping.py, overlay.py, mermaid.py
+│   ├── economics.py, scoring.py, grouping.py, portfolio.py, overlay.py, mermaid.py
 ├── pipeline/
 │   ├── stages.py, runner.py
 ├── storage/

@@ -15,7 +15,7 @@
 |---|---|---|
 | `KnowledgeLayer` | `fact`, `interpretation`, `hypothesis`, `assumption` | Слой знаний (принцип III) |
 | `ReviewStatus` | `pending`, `confirmed`, `edited`, `rejected` | Статус проверки (FR-080) |
-| `GroundingStatus` | `verified`, `relocated`, `partial`, `unverified`, `invalid_quote` | Результат проверки цитаты (R-11) |
+| `GroundingStatus` | `verified`, `relocated`, `partial`, `unverified`, `invalid_quote` | Результат проверки цитаты (R-11). Проверку проходят только `verified` и `relocated` |
 | `Confidence` | `high`, `medium`, `low` | Детерминированная уверенность (FR-027) |
 | `DocFormat` | `pdf`, `docx`, `txt`, `html` | |
 | `TextLayerStatus` | `ok`, `partial`, `needs_ocr`, `empty` | Диагностика (FR-003) |
@@ -129,7 +129,7 @@ matched_end?: int, original_fragment_id?: str (если relocated), reason?: str
 | `conditions` | `list[Grounded[str]]` | fact |
 | `information_systems` | `list[Grounded[str]]` | fact |
 | `operation_type` | `OperationType` | interpretation |
-| `legally_significant` | `bool` | interpretation; для `decision`/`signing` по умолчанию `true` |
+| `legally_significant` | `bool` | interpretation; детерминированно `llm_flag OR operation_type ∈ {decision, signing}`; эксперт может снять признак только с комментарием |
 | `handles_personal_data` | `bool` | interpretation |
 | `is_loop_back` | `bool` | возврат на доработку (разрешённый цикл) |
 | `confidence`, `review` | | |
@@ -278,7 +278,8 @@ effect_threshold: 0.4
 ### `PriorityResult` (вычисляемый)
 `initiative_id`, `criteria: dict[str, {raw, normalized, weight, contribution}]`, `score`,
 `ease`, `group: PriorityGroup`, `group_rule: int`, `group_reason: str`, `gate: LegalGate`,
-`rank?: int` (`None` для `blocked`).
+`rank?: int` (`None` для `blocked`), `layer = hypothesis` (производное от качественных
+оценок, принцип III), `assumptions_version: int`, `priority_config_version: int`.
 
 ### Правила статуса допустимости (`analysis/gating.py`)
 По порядку, причины накапливаются:
@@ -305,6 +306,8 @@ effect_threshold: 0.4
 ```text
 EconomicsResult
   scenario: Scenario
+  layer: assumption            # производные от допущений (принцип III)
+  assumptions_version: int
   per_initiative: list[InitiativeEconomics]
   portfolio: {hours_per_year[y], fte[y], money[y], opex[y], capex, cum_net, roi, payback_months?}
   overlaps: list[{operation_id, initiative_ids, combined_reduction[y]}]
@@ -318,6 +321,14 @@ InitiativeEconomics
   excluded_reason?: str
 Effect = {hours[y], fte[y], money[y], opex[y], capex, net[y], cum_net, roi?, payback_months?}
 ```
+
+**Порядок вычислений** (без циклов):
+1. `compute_solo` (`analysis/economics.py`) — автономный эффект всех неотклонённых инициатив;
+2. скоринг и группы по solo-эффекту (`scoring.py`, `grouping.py`);
+3. `build_portfolio` (`analysis/portfolio.py`) — состав портфеля, комбинирование, атрибуция.
+
+**Портфель** = не отклонены экспертом, `gate ≠ blocked`, не `excluded_as_alternative`,
+группа ≠ `not_recommended`.
 
 Формулы — в [spec.md → Экономические формулы](./spec.md#экономические-формулы). Свойства,
 которые проверяются тестами (property-based на случайных портфелях):
@@ -345,6 +356,10 @@ Effect = {hours[y], fte[y], money[y], opex[y], capex, net[y], cum_net, roi?, pay
   `interpretation` в остальных случаях.
 - `reject` исключает элемент из расчётов.
 - Правка процесса или операции ставит `stale = true` у инициатив, которые на них ссылаются.
+- Перегенерация (FR-083): события по инициативам предыдущей версии остаются в журнале и
+  показываются блоком «Решения по предыдущей версии». Допущения с источником `user`
+  переносятся на новую инициативу при совпадении множества `operation_ids` и
+  `solution_category`. Непереносимые перечисляются в отчёте перегенерации.
 
 ### Переходы статуса
 ```text
@@ -360,7 +375,10 @@ rejected/confirmed/edited ──reopen──▶ pending
 ### `AnalysisRun`
 `id` (`run_<ulid>`), `doc_id`, `parent_run_id?`, `status: RunStatus`, `created_by`,
 `created_at`, `stages: list[StageState]`, `config_snapshot: RunConfig`, `usage: UsageTotals`,
-`error?: {code, message}`.
+`error?: {code, message}`,
+`completeness: {complete: bool, failed_items: list[{stage, process_key, error_code}]}`.
+`complete=false`, если этап завершился с частичными ошибками (≤ 30 % процессов). UI показывает
+баннер «Анализ неполный» на экранах результата (NFR-003).
 
 `StageState = {name: StageName, status: StageStatus, started_at?, finished_at?, attempts,
 error?, progress?: {done, total}}`.
@@ -386,7 +404,7 @@ queued|running → cancelled
 | `document_texts` | `doc_id` PK, `full_text`, `page_offsets` JSON | |
 | `analysis_runs` | `id` PK, `doc_id`, `status`, `created_at`, `payload` JSON | |
 | `stage_outputs` | `run_id`, `stage`, `payload` JSON, `created_at`; PK(`run_id`, `stage`) | неизменяемы после `succeeded` |
-| `llm_calls` | `id`, `run_id`, `stage`, `model`, `attempt`, `status`, `in_tokens`, `out_tokens`, `latency_ms`, `request_hash`, `created_at` | NFR-002/011 |
+| `llm_calls` | `id`, `run_id`, `stage`, `model`, `attempt`, `status`, `in_tokens`, `out_tokens`, `latency_ms`, `request_hash`, `response` JSON (сырой ответ модели; хранится всегда, в логи не пишется), `created_at` | NFR-002/011, FR-030 |
 | `llm_cache` | `request_hash` PK, `response` JSON, `model`, `created_at` | NFR-012; хэш = sha256(model, prompt_version, schema_hash, messages) |
 | `review_events` | `id` PK, `run_id`, `entity_type`, `entity_id`, `created_at`, `payload` JSON | только INSERT |
 | `assumption_sets` | `run_id`, `version`, `payload` JSON, `created_by`, `created_at`; PK(`run_id`, `version`) | только INSERT |

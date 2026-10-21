@@ -90,6 +90,15 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: sha256 в `SOURCES.md` совпадают с файлами; holdout выбран и записан.
   - **Тесты**: —
 
+- [ ] T060 [P] Проверка универсальности кода (с первого дня) — `tests/unit/test_no_document_specific_code.py`
+  - **Цель**: NFR-001, принцип VII.
+  - **Зависит**: T002
+  - **Файлы**: `tests/unit/test_no_document_specific_code.py`
+  - **Результат**: тест ищет в `src/` и `config/` маркеры тестового документа («Росимущ»,
+    «земельн», «59820»; список — в самом тесте).
+  - **Готово, когда**: тест зелёный.
+  - **Тесты**: сам тест.
+
 ---
 
 ## Phase 2: Foundational (блокирует все user stories)
@@ -135,10 +144,12 @@ description: "Task list for 001-npa-ai-analyzer"
     `tests/unit/test_auth.py`
   - **Результат**: `AppError(code, status, message_ru, details)`, таблица кодов из api.md,
     обработчики FastAPI. Basic-зависимость со scrypt и `compare_digest`. CLI
-    `gr hash-password`, `gr serve`.
+    `gr hash-password`, `gr serve`. Middleware `same_origin_guard` (R-15).
   - **Готово, когда**: каждый код из таблицы api.md сериализуется в нужный HTTP-статус; неверный
-    пароль → 401; хэш из CLI проходит проверку.
-  - **Тесты**: `test_errors.py`, `test_auth.py`.
+    пароль → 401; хэш из CLI проходит проверку; POST с чужим `Origin` или
+    `Sec-Fetch-Site: cross-site` → 403 `csrf_rejected`; тот же источник и запрос без этих
+    заголовков проходят.
+  - **Тесты**: `test_errors.py`, `test_auth.py`, `test_csrf.py`.
 
 - [ ] T011 Приложение, health, базовый шаблон, vendored-статика — `src/gr/app.py`
   - **Цель**: работающий каркас веб-сервиса.
@@ -170,7 +181,8 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Файлы**: `llm/openai_compat.py`, `llm/cache.py`, `tests/unit/llm/test_openai_compat.py`
   - **Результат**: режимы `json_schema`, `json_object`, `auto`; один repair-повтор при
     `ValidationError`; распознавание `finish_reason=length`; запись в `llm_calls`; событие лога
-    `llm.call`; `CachedLLM` по `request_hash`. Перед реализацией сверить актуальный API
+    `llm.call`; сырой ответ в `llm_calls.response` при каждом вызове (FR-030); `CachedLLM` по
+    `request_hash`. Перед реализацией сверить актуальный API
     structured outputs в `openai` через context7.
   - **Готово, когда**: на `httpx.MockTransport` (без сети) проверены успех, переход 400 → откат
     на `json_object`, невалидный ответ → repair → успех и → `llm_invalid_output`, таймаут →
@@ -227,9 +239,11 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Файлы**: `ingestion/docx.py`, `docx_numbering.py`, `tests/unit/ingestion/test_docx.py`
   - **Результат**: абзацы и таблицы по порядку; восстановление номеров из `numbering.xml`
     (`decimal`, `lowerLetter`, `russianLower`, `upperRoman`, `bullet`); флаг
-    `numbering_restored`.
+    `numbering_restored`. Лимиты ZIP проверяются до разбора; OLE-контейнер → `encrypted_file`
+    (R-04).
   - **Готово, когда**: текст DOCX с автонумерацией совпадает с текстом DOCX с ручной нумерацией
-    той же синтетики; `reg261.docx` читается.
+    той же синтетики; `reg261.docx` читается; синтетическая zip-бомба отклоняется с
+    `corrupted_file` (`zip_limits`) без полной распаковки.
   - **Тесты**: `test_docx.py`.
 
 - [ ] T018 [P] [US1] HTML (SHOULD) — `src/gr/ingestion/html.py`
@@ -378,7 +392,7 @@ UI карты процессов.
   - **Результат**: вызов на процесс с `LLM_CONCURRENCY`; окна при превышении
     `DETAIL_MAX_CHARS`; сохранение по процессам (для возобновления); порог частичных ошибок 30 %.
   - **Готово, когда**: на FakeLLM проверены сценарии «два окна склеены по порядку», «ошибка
-    одного процесса из пяти → предупреждение», «три из пяти → `failed`».
+    одного процесса из пяти → `completeness.complete=false` со списком необработанных», «три из пяти → `failed`».
   - **Тесты**: `test_detailing.py`.
 
 - [ ] T031 [US2] S5 Validate — `src/gr/validation/`
@@ -393,7 +407,10 @@ UI карты процессов.
     - срок «30 дней» при цитате «20 дней» → `deadline_not_in_quote`;
     - цикл без `is_loop_back` → issue;
     - дубли слиты;
-    - покрытие считает непривязанные фрагменты с действиями.
+    - покрытие считает непривязанные фрагменты с действиями;
+    - близкое совпадение (`partial`) основной цитаты → элемент в `unverified`, не в фактах;
+    - операция типа `decision`, для которой модель вернула `legally_significant=false`,
+      получает `true`.
   - **Тесты**: `test_process_validator.py`, `test_graph.py`, `test_confidence.py`,
     `test_coverage.py`.
 
@@ -426,7 +443,8 @@ UI карты процессов.
     `tests/integration/test_web_processes.py`
   - **Результат**: опрос статуса через HTMX, ошибки этапов, токены; список процессов,
     Mermaid (`securityLevel: "strict"`), таблица операций с бейджами слоя и цитатами, точки
-    решения, блок «Не подтверждено», покрытие.
+    решения, блок «Не подтверждено», покрытие, баннер «Анализ неполный» при
+    `completeness.complete=false`.
   - **Готово, когда**: на результате FakeLLM страница содержит все разделы ui.md № 3, а
     элементы `unverified` не выводятся в таблице фактов.
   - **Тесты**: `test_web_processes.py`.
@@ -514,6 +532,21 @@ UI карты процессов.
     доходит до `postprocess=succeeded`.
   - **Тесты**: `test_postprocess.py`, `test_analysis_e2e.py`.
 
+- [ ] T066 [US3] [manual] Eval этапа S6 — `evals/metrics_opportunities.py`
+  - **Цель**: критерии качества из [llm.md § S6](./contracts/llm.md#s6--opportunities--проблемы-и-инициативы);
+    eval-гейт для промпта S6 (принцип V).
+  - **Зависит**: T036, T041
+  - **Файлы**: `evals/metrics_opportunities.py`, `evals/judge.py`,
+    `evals/prompts/judge_initiative.md`, `evals/config.toml`,
+    `tests/unit/evals/test_metrics_opportunities.py`
+  - **Результат**: детерминированные метрики (ссылочная целостность, доля LLM/agent-решений для
+    паттернов с минимальной категорией `classic_automation`, наличие более простой
+    альтернативы, доля `no_change`) и LLM-as-judge (обоснованность выбора технологии,
+    конкретность) с кэшем вердиктов. Метрики S6 входят в `baseline.json`.
+  - **Готово, когда**: метрики покрыты unit-тестами на игрушечных данных; регрессия S6
+    относительно baseline даёт exit 1.
+  - **Тесты**: `test_metrics_opportunities.py`.
+
 - [ ] T042 [US3] API и экраны инициатив (без экономики) — `src/gr/api/results.py`, `initiatives.html`
   - **Цель**: api.md § Инициативы (без economics и priority), экраны 4 и 5 из ui.md.
   - **Зависит**: T041, T034
@@ -521,6 +554,7 @@ UI карты процессов.
     `initiative.html`, `tests/integration/test_initiatives_api.py`
   - **Результат**: таблица и карточка: процесс, проблема, решение, архитектура, альтернативы,
     регулирование, положения к пересмотру, статус допустимости, цитаты операций. Фильтры.
+    Баннер «Анализ неполный» при неполном результате.
   - **Готово, когда**: Q5 на FakeLLM. Карточка содержит все поля FR-070, кроме экономики и
     приоритета (они помечены «будет рассчитано»).
   - **Тесты**: `test_initiatives_api.py`, `test_web_initiatives.py`.
@@ -548,26 +582,25 @@ UI карты процессов.
     data-model; источник `default_profile`; повторная генерация сохраняет `user`-значения.
   - **Тесты**: `test_defaults.py`.
 
-- [ ] T044 [US4] Экономический расчёт — `src/gr/analysis/economics.py`
-  - **Цель**: FR-053…FR-055, формулы spec.md.
-  - **Зависит**: T043, T039
+- [ ] T044 [US4] Экономика: автономный эффект — `src/gr/analysis/economics.py`
+  - **Цель**: FR-053, формулы spec.md для автономного (solo) эффекта; шаг 1 порядка вычислений
+    (data-model §7).
+  - **Зависит**: T043
   - **Файлы**: `analysis/economics.py`, `tests/unit/analysis/test_economics.py`,
     `tests/unit/analysis/test_economics_properties.py`
-  - **Результат**: `compute_economics(model, initiatives, assumptions, scenario) ->
-    EconomicsResult` на `Decimal`: solo и attributed, портфель, payback по месяцам, ROI,
-    предупреждения.
+  - **Результат**: `compute_solo(model, initiatives, assumptions, scenario) -> EconomicsResult`
+    на `Decimal` (`layer=assumption`, версия допущений): часы, FTE, деньги, opex, net,
+    payback по месяцам, ROI, предупреждения. Портфель — в T065.
   - **Готово, когда**:
     - 3 вручную посчитанных примера совпадают до копейки;
-    - 50 % + 40 % → 70 % (US4 сц. 3);
-    - альтернативы → в портфеле одна (сц. 4);
     - отрицательный эффект считается честно;
-    - property-тесты на 200 случайных портфелях (seed фиксирован): `Σ attributed = portfolio`,
-      `combined ≤ 1`, независимость от порядка, идентичность повторов.
+    - property-тесты на 200 случайных наборах (seed фиксирован): независимость от порядка,
+      идентичность повторов.
   - **Тесты**: `test_economics.py`, `test_economics_properties.py`.
 
 - [ ] T045 [US4] API допущений и экономики — `src/gr/services/results.py`
-  - **Цель**: api.md: `GET`/`PATCH /assumptions`, `GET /economics`, экономика в
-    `/initiatives`; FR-056, FR-057.
+  - **Цель**: api.md: `GET`/`PATCH /assumptions`, `GET /economics`, solo-экономика в
+    `/initiatives`; FR-056, FR-057. Портфель добавляется в T065 и T049.
   - **Зависит**: T044, T042
   - **Файлы**: `services/results.py`, `api/results.py`, `pipeline/stages.py` (создание
     `AssumptionSet v1` в S7), `tests/integration/test_assumptions_api.py`
@@ -584,12 +617,12 @@ UI карты процессов.
   - **Файлы**: `templates/settings.html`, `initiatives.html`, `initiative.html`,
     `tests/integration/test_web_settings.py`
   - **Результат**: редактирование троек с источником и комментарием; пересчёт через HTMX;
-    переключатель сценария; итог портфеля; баннеры.
+    переключатель сценария; баннеры (итог портфеля — в T049).
   - **Готово, когда**: Q6 проходит вручную; формулировки денежных показателей соответствуют
     FR-058 (проверка тестом на наличие текста баннера).
   - **Тесты**: `test_web_settings.py`.
 
-**Checkpoint US4**: AC-05, AC-06.
+**Checkpoint US4**: AC-05, AC-06 (автономный эффект). Сценарии 3–4 US4 закрываются в T065.
 
 ---
 
@@ -620,13 +653,30 @@ UI карты процессов.
     каждая инициатива получает ровно одну группу.
   - **Тесты**: `test_grouping.py`.
 
+- [ ] T065 [US5] Портфель и атрибуция — `src/gr/analysis/portfolio.py`
+  - **Цель**: FR-054, FR-055, определение портфеля; шаг 3 порядка вычислений (data-model §7).
+  - **Зависит**: T047, T048, T039
+  - **Файлы**: `analysis/portfolio.py`, `tests/unit/analysis/test_portfolio.py`,
+    `tests/unit/analysis/test_portfolio_properties.py`
+  - **Результат**: `build_portfolio(solo, priorities, initiatives) -> PortfolioEconomics`: состав
+    (без отклонённых, `blocked`, альтернатив с меньшим баллом и Not Recommended),
+    мультипликативное комбинирование, атрибуция, итоги, `overlaps`.
+  - **Готово, когда**:
+    - 50 % + 40 % → 70 % (US4 сц. 3);
+    - из группы альтернатив в портфеле одна — с лучшим баллом (US4 сц. 4);
+    - инициатива из Not Recommended в портфель не входит;
+    - property-тесты на 200 случайных портфелях (seed фиксирован): `Σ attributed = portfolio`,
+      `combined ≤ 1`, независимость от порядка, идентичность повторов.
+  - **Тесты**: `test_portfolio.py`, `test_portfolio_properties.py`.
+
 - [ ] T049 [US5] API конфигурации приоритета и интеграция — `src/gr/api/results.py`
   - **Цель**: `GET`/`PUT /priority-config`; приоритет в `/initiatives` и карточке; экран 6
     (веса).
-  - **Зависит**: T047, T048, T046
+  - **Зависит**: T047, T048, T046, T065
   - **Файлы**: `services/results.py`, `api/results.py`, `templates/settings.html`,
     `initiatives.html`, `initiative.html`, `tests/integration/test_priority_api.py`
   - **Результат**: версии конфигурации, пересчёт, разбивка балла и правило группы в карточке.
+    Итог портфеля и атрибутированный эффект — в таблице и карточке.
   - **Готово, когда**: Q7 автоматизирован: два одинаковых GET побайтно равны; смена весов и
     возврат восстанавливает порядок; `blocked` в конце с причиной.
   - **Тесты**: `test_priority_api.py`.
@@ -671,7 +721,8 @@ UI карты процессов.
   - **Результат**: S6 и S7 для одного процесса, версия `opportunities@N`, старая сохранена;
     `stale` снят.
   - **Готово, когда**: на FakeLLM новая версия эффективна, старая доступна, остальные процессы
-    не тронуты.
+    не тронуты; решения по старым инициативам видны как «по предыдущей версии»;
+    пользовательские допущения перенесены на инициативу с теми же операциями и категорией.
   - **Тесты**: `test_regenerate.py`.
 
 - [ ] T053 [US6] UI проверки и история — `src/gr/web/templates/history.html`
@@ -762,23 +813,15 @@ UI карты процессов.
 
 - [ ] T059 [manual] Eval и настройка промптов на reg261 — `evals/baseline.json`
   - **Цель**: SC-002…SC-004 на тестовом документе.
-  - **Зависит**: T036, T041
+  - **Зависит**: T036, T041, T066
   - **Файлы**: `extraction/prompts/*.md` (только общие правки, без упоминаний конкретного
     документа), `evals/baseline.json`, `README.md` (токены и стоимость)
-  - **Результат**: метрики ≥ порогов SC-003; доля `verified` ≥ 95 %; сроки не из текста = 0.
+  - **Результат**: метрики ≥ порогов SC-003; доля `verified` ≥ 95 %; сроки не из текста = 0;
+    метрики S6 (T066) не хуже baseline.
     Выбрана самая дешёвая модель, прошедшая eval.
   - **Готово, когда**: `baseline.json` закоммичен; grep по промптам не находит «Росимущ»,
     «земельн», «59820».
   - **Тесты**: eval.
-
-- [ ] T060 Проверка универсальности кода — `tests/unit/test_no_document_specific_code.py`
-  - **Цель**: NFR-001, принцип VII.
-  - **Зависит**: T059
-  - **Файлы**: `tests/unit/test_no_document_specific_code.py`
-  - **Результат**: тест ищет в `src/` и `config/` маркеры тестового документа («Росимущ»,
-    «земельн», «59820»; список — в самом тесте).
-  - **Готово, когда**: тест зелёный.
-  - **Тесты**: сам тест.
 
 - [ ] T061 [manual] Валидация на отложенном НПА — `docs/validation-report.md`
   - **Цель**: AC-08, SC-004, SC-007.
@@ -821,16 +864,16 @@ UI карты процессов.
 ## Dependencies & Execution Order
 
 ```text
-Setup (T001–T006)
+Setup (T001–T006, T060)
    └─▶ Foundational (T007–T014)
           └─▶ US1 (T015–T023) ─▶ US2 (T024–T036) ═══ MVP ═══
-                                     └─▶ US3 (T037–T042)
+                                     └─▶ US3 (T037–T042, T066)
                                             └─▶ US4 (T043–T046)
-                                                   └─▶ US5 (T047–T049)
+                                                   └─▶ US5 (T047–T049, T065)
                                                           ├─▶ US6 (T050–T053) ─▶ US7 (T054–T055)
                                                           │                         └─▶ US8 (T056, T058)
                                                           └─ T057 (после T032)
-                                                                 └─▶ Validation (T059–T064)
+                                                                 └─▶ Validation (T059, T061–T064)
 ```
 
 - US2 требует US1 (фрагменты). US3 — модель процессов US2. US4 — инициативы US3. US5 —
@@ -838,15 +881,18 @@ Setup (T001–T006)
 - US6 можно начать сразу после US3 (T050 зависит от T041), но интеграция в чтения (T051) идёт
   после US5, чтобы наложение покрыло экономику и рейтинг.
 - T006 (выбор отложенного НПА) — до T059: holdout фиксируется до настройки промптов.
+- Порядок экономики: T044 (solo) → T047, T048 (балл, группа) → T065 (портфель). Цикла нет:
+  балл считается по solo-эффекту, а состав портфеля зависит от балла.
+- T060 (тест универсальности) работает с Phase 1 и ловит код под конкретный документ сразу.
 
 ### Parallel Opportunities
 
-- **Setup**: T002–T006 параллельно после T001.
+- **Setup**: T002–T006 и T060 параллельно после T001 (T060 — после T002).
 - **Foundational**: T008 ∥ T010 ∥ T012 (после T007 и T003); T013 и T014 после T009.
 - **US1**: T015, затем T016 ∥ T017 ∥ T018; T019 параллельно с ними.
 - **US2**: T024 ∥ T025 ∥ T026 ∥ T027 ∥ T028 ∥ T033, затем T029 → T030 → T031 → T032.
-- **US3**: T037 ∥ T038 ∥ T039, затем T040 → T041 → T042.
-- **US5**: T047 → T048 (параллельно с T046).
+- **US3**: T037 ∥ T038 ∥ T039, затем T040 → T041 → T042 ∥ T066.
+- **US5**: T047 → T048 → T065 (T047, T048 параллельно с T046).
 - **US7/US8**: T054 ∥ T057; T058 ∥ T062.
 
 ### Example: параллельный старт US2
@@ -874,15 +920,18 @@ baseline проходят только через eval.
 
 | Фаза | Задачи | Кол-во |
 |---|---|---|
-| Setup | T001–T006 | 6 |
+| Setup | T001–T006, T060 | 7 |
 | Foundational | T007–T014 | 8 |
 | US1 (P1) | T015–T023 | 9 |
 | US2 (P1) | T024–T036 | 13 |
-| US3 (P2) | T037–T042 | 6 |
+| US3 (P2) | T037–T042, T066 | 7 |
 | US4 (P2) | T043–T046 | 4 |
-| US5 (P2) | T047–T049 | 3 |
+| US5 (P2) | T047–T049, T065 | 4 |
 | US6 (P3) | T050–T053 | 4 |
 | US7 (P3) | T054–T055 | 2 |
 | US8 (P3) | T056–T058 | 3 |
-| Validation | T059–T064 | 6 |
-| **Итого** | | **64** (из них [manual]: T006, T036, T059, T061, T062, частично T058) |
+| Validation | T059, T061–T064 | 5 |
+| **Итого** | | **66** (из них [manual]: T006, T036, T059, T061, T062, T066, частично T058) |
+
+T065 и T066 добавлены по итогам `/speckit-analyze`. Номера существующих задач сохранены,
+поэтому ID идут не по порядку фаз.

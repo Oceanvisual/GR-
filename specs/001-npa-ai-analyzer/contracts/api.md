@@ -25,6 +25,7 @@ REST JSON, префикс `/api/v1`. Все маршруты, кроме `/healt
 |---|---|---|
 | 400 | `validation_error` | невалидное тело или параметры |
 | 401 | `unauthorized` | нет или неверная аутентификация |
+| 403 | `csrf_rejected` | изменяющий запрос браузера с чужого источника (R-15) |
 | 404 | `not_found` | |
 | 409 | `version_conflict`, `run_in_progress` | |
 | 413 | `file_too_large`, `document_too_long` | превышены лимиты (FR-002) |
