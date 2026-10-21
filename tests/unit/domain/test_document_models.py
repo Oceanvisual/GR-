@@ -98,6 +98,11 @@ def test_ulid_is_sortable_and_unique() -> None:
     assert new_id("doc").startswith("doc_")
 
 
+def test_ulids_in_one_millisecond_keep_creation_order() -> None:
+    ids = [new_ulid(5_000) for _ in range(1000)]
+    assert ids == sorted(ids) and len(set(ids)) == 1000
+
+
 def test_category_order_for_tech_guard() -> None:
     ordered = sorted(SolutionCategory, key=lambda c: c.rank)
     assert [c.value for c in ordered] == [
