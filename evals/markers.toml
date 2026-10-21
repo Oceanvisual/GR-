@@ -5,3 +5,22 @@
 #
 # [documents.<slug>]
 # markers = ["...", "..."]
+
+# Dev-корпус (tests/fixtures/corpus/): разбор не должен знать о конкретных документах.
+[documents.fz_59_2006]
+markers = ["59-ФЗ"]
+
+[documents.government_725_2005]
+markers = ["N 725", "№ 725"]
+
+[documents.lenoblast_93oz_2003]
+markers = ["Ленинградск", "93-оз"]
+
+[documents.maginsky_37_2026]
+markers = ["Магинск", "Караидельск"]
+
+[documents.mintrud_572n_2020]
+markers = ["572н", "ионно-плазменн"]
+
+[documents.minzdrav_572n_2023_scan]
+markers = ["Паркинсон", "76270"]

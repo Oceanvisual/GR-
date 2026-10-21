@@ -85,7 +85,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: повторный запуск даёт тот же текстовый контент; файлы открываются.
   - **Тесты**: `tests/unit/test_fixtures_present.py` (наличие и базовые свойства).
 
-- [ ] T006 [P] [manual] Реальные фикстуры и отложенная выборка — `tests/fixtures/npa/SOURCES.md`
+- [X] T006 [P] [manual] Реальные фикстуры и отложенная выборка — `tests/fixtures/npa/SOURCES.md`
   - **Цель**: зафиксировать тестовый регламент и отложенную выборку до начала настройки промптов (R-17, R-21).
   - **Зависит**: —
   - **Файлы**: `tests/fixtures/npa/reg261.docx`, `reg261.pdf`, `SOURCES.md`;
