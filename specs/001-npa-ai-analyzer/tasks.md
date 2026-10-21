@@ -68,10 +68,10 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: JSON-формат валиден; в событиях нет полей длиннее 200 символов (тест).
   - **Тесты**: `test_logging.py`.
 
-- [ ] T005 [P] Генератор синтетических фикстур — `tests/fixtures/make_fixtures.py`
+- [X] T005 [P] Генератор синтетических фикстур — `tests/fixtures/make_fixtures.py`
   - **Цель**: воспроизводимые тестовые документы без привязки к реальному НПА.
   - **Зависит**: T001
-  - **Файлы**: `tests/fixtures/make_fixtures.py`, `tests/fixtures/fonts/DejaVuSans.ttf` (+LICENSE),
+  - **Файлы**: `tests/fixtures/make_fixtures.py`, системный TTF с кириллицей (DejaVu или Arial; в репо не кладётся),
     `tests/fixtures/synthetic/*`
   - **Результат**: вымышленный «Регламент выдачи пропусков» (3 раздела, 2 процесса, сроки,
     перечень оснований отказа) в форматах: `txt` (UTF-8 и cp1251), `docx` с ручной нумерацией,
@@ -108,7 +108,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: матрица R-21 покрыта; sha256 совпадают с файлами.
   - **Тесты**: регрессия в T068.
 
-- [ ] T060 [P] Проверка универсальности кода (с первого дня) — `tests/unit/test_no_document_specific_code.py`
+- [X] T060 [P] Проверка универсальности кода (с первого дня) — `tests/unit/test_no_document_specific_code.py`
   - **Цель**: NFR-001, принцип VII.
   - **Зависит**: T002
   - **Файлы**: `tests/unit/test_no_document_specific_code.py`
