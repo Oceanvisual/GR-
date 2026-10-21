@@ -17,6 +17,7 @@ from gr.services.documents import (
     FragmentWithContext,
     MetadataPatch,
     StructureTree,
+    Upload,
     receive_upload,
 )
 
@@ -53,10 +54,8 @@ async def _file_chunks(file: UploadFile) -> AsyncIterator[bytes]:
         yield data
 
 
-@router.post("", status_code=201, response_model=Document)
-async def upload_document(
-    request: Request, response: Response, service: ServiceDep, user: UserDep
-) -> Document:
+async def read_upload(request: Request, service: DocumentService) -> tuple[Upload, str | None]:
+    """The uploaded file (in a temporary file) and the optional source note of the form."""
     max_bytes = service.state.settings.max_upload_bytes
     limit = max_bytes + FORM_OVERHEAD
     declared = request.headers.get("content-length", "")
@@ -79,7 +78,15 @@ async def upload_document(
         upload = await receive_upload(_file_chunks(file), file.filename, service.tmp_dir, max_bytes)
     finally:
         await form.close()
-    result = await service.ingest(upload, user, note if isinstance(note, str) else None)
+    return upload, note.strip() if isinstance(note, str) else None
+
+
+@router.post("", status_code=201, response_model=Document)
+async def upload_document(
+    request: Request, response: Response, service: ServiceDep, user: UserDep
+) -> Document:
+    upload, note = await read_upload(request, service)
+    result = await service.ingest(upload, user, note)
     if result.duplicate:
         response.status_code = 200
         response.headers["X-Duplicate-Of"] = result.document.id

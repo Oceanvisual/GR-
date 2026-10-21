@@ -1,0 +1,27 @@
+{% from "partials/macros.html" import fragment_link, fragment_badges, pages %}
+{% set fragment = selected.fragment %}
+<article class="fragment-view">
+  {% if selected.path %}
+  <nav class="crumbs">
+    {% for ref in selected.path %}{{ fragment_link(doc_id, ref.id, ref.label) }}{% if not loop.last %} › {% endif %}{% endfor %}
+  </nav>
+  {% endif %}
+  <header>
+    <h3>{{ fragment.heading or fragment.label }}</h3>
+    <div class="muted small">{% if fragment.heading %}{{ fragment.label }} · {% endif %}{{ pages(fragment.pages) }}</div>
+    {{ fragment_badges(fragment) }}
+  </header>
+  {% if fragment.notes %}
+  <ul class="notes">{% for note in fragment.notes %}<li>{{ note }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if fragment.text %}
+  <div class="fragment-text">{{ highlight.before }}{% if highlight.quote %}<mark>{{ highlight.quote }}</mark>{% endif %}{{ highlight.after }}</div>
+  {% else %}
+  <p class="muted">Свой текст у фрагмента пустой: текст — во вложенных пунктах.</p>
+  {% endif %}
+  <footer class="fragment-nav">
+    {% if selected.previous %}<span>← {{ fragment_link(doc_id, selected.previous.id, selected.previous.label) }}</span>{% endif %}
+    {% if selected.parent and selected.parent.parent_id %}<span>↑ {{ fragment_link(doc_id, selected.parent.id, selected.parent.label) }}</span>{% endif %}
+    {% if selected.next %}<span>{{ fragment_link(doc_id, selected.next.id, selected.next.label) }} →</span>{% endif %}
+  </footer>
+</article>

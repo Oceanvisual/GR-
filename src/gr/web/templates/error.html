@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Ошибка — AI-анализ НПА{% endblock %}
+{% block content %}
+<div class="alert alert-error" role="alert"><strong>{{ error.message_ru }}</strong></div>
+<p><a href="/">← К списку документов</a></p>
+{% endblock %}

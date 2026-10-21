@@ -82,8 +82,15 @@ class StructureTree(BaseModel):
     nodes: list[FragmentNode]
 
 
+class FragmentRef(BaseModel):
+    id: str
+    label: str
+    heading: str | None
+
+
 class FragmentWithContext(BaseModel):
     fragment: Fragment
+    path: list[FragmentRef] = []  # ancestors below the root, outermost first
     parent: Fragment | None = None
     previous: Fragment | None = None
     next: Fragment | None = None
@@ -328,8 +335,15 @@ class DocumentService:
         by_id = {f.id: f for f in fragments}
         siblings = [f for f in fragments if f.parent_id == fragment.parent_id]
         index = next(i for i, f in enumerate(siblings) if f.id == fragment.id)
+        path: list[FragmentRef] = []
+        ancestor = by_id.get(fragment.parent_id or "")
+        while ancestor is not None and ancestor.parent_id is not None:
+            ref = FragmentRef(id=ancestor.id, label=ancestor.label, heading=ancestor.heading)
+            path.insert(0, ref)
+            ancestor = by_id.get(ancestor.parent_id)
         return FragmentWithContext(
             fragment=fragment,
+            path=path,
             parent=by_id.get(fragment.parent_id or ""),
             previous=siblings[index - 1] if index > 0 else None,
             next=siblings[index + 1] if index + 1 < len(siblings) else None,

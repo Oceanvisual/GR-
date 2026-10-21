@@ -75,8 +75,8 @@ last_run?: {id, status}}`.
 где `FragmentNode = Fragment − text + {children: list[str], text_preview: str}`.
 
 ### `GET /api/v1/documents/{doc_id}/fragments/{fragment_id}` → `FragmentWithContext`
-`{fragment: Fragment, parent?, previous?, next?}`. Id фрагмента — путь со слешами
-(`body/III/3.5/3.5.1`). Query `?with_context=true` заполняет родителя и соседние фрагменты
+`{fragment: Fragment, path: [{id, label, heading}], parent?, previous?, next?}`. Id фрагмента — путь со слешами
+(`body/III/3.5/3.5.1`). Query `?with_context=true` заполняет путь заголовков (предки ниже корня), родителя и соседние фрагменты
 (FR-072).
 
 ## Анализ

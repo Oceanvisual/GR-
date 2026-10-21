@@ -1,0 +1,23 @@
+{# Shared bits of the document screens. Everything from the document is printed escaped. #}
+
+{# `reveal`: scroll to the fragment pane, for links outside the structure section. #}
+{% macro fragment_link(doc_id, fragment_id, text, start=None, end=None, reveal=False) -%}
+{%- set query = "" if start is none or end is none else "?start=" ~ start ~ "&end=" ~ end -%}
+{%- set page_query = "&start=" ~ start ~ "&end=" ~ end if query else "" -%}
+<a href="/documents/{{ doc_id }}?fragment={{ fragment_id | path_quote }}{{ page_query }}#fragment"
+   hx-get="/fragments/{{ doc_id }}/{{ fragment_id | path_quote }}{{ query }}"
+   hx-target="#fragment" hx-swap="innerHTML{% if reveal %} show:#structure:top{% endif %}"
+   hx-push-url="/documents/{{ doc_id }}?fragment={{ fragment_id | path_quote }}{{ page_query }}">{{ text }}</a>
+{%- endmacro %}
+
+{% macro pages(numbers) -%}
+{%- if numbers -%}
+стр. {{ numbers[0] }}{% if numbers | length > 1 %}–{{ numbers[-1] }}{% endif %}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro fragment_badges(fragment) -%}
+{% if fragment.text_source == "ocr" %}<span class="badge badge-ocr" title="Текст распознан OCR">OCR</span>{% endif %}
+{% if fragment.repealed %}<span class="badge badge-repealed">утратил силу</span>{% endif %}
+{% if fragment.notes %}<span class="badge badge-note" title="{{ fragment.notes | join('; ') }}">ред.</span>{% endif %}
+{%- endmacro %}

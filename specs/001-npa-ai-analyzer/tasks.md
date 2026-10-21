@@ -443,7 +443,7 @@ description: "Task list for 001-npa-ai-analyzer"
     Файл 25 МБ отклоняется до полного приёма; во время разбора 100-страничного PDF `/healthz` отвечает ≤ 200 мс.
   - **Тесты**: `test_documents_api.py`.
 
-- [ ] T023 [US1] Экраны документов — `src/gr/web/templates/documents.html`, `document.html`
+- [X] T023 [US1] Экраны документов — `src/gr/web/templates/documents.html`, `document.html`
   - **Цель**: экраны 1, 2 из ui.md.
     Трассировка: FR-013.
   - **Зависит**: T022
