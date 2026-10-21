@@ -168,7 +168,7 @@ description: "Task list for 001-npa-ai-analyzer"
 
 ## Phase 2: Foundational (блокирует все user stories)
 
-- [ ] T007 Доменные модели: enums, документ, запуск, ревью — `src/gr/domain/`
+- [X] T007 Доменные модели: enums, документ, запуск, ревью — `src/gr/domain/`
   - **Цель**: модели data-model §1, §2, §8, §9.
   - **Зависит**: T002
   - **Файлы**: `domain/enums.py`, `document.py`, `run.py`, `review.py`,
@@ -178,7 +178,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: каждое правило валидации из data-model для этих сущностей покрыто тестом.
   - **Тесты**: `test_document_models.py`.
 
-- [ ] T008 [P] Доменные модели: процессы, инициативы, допущения, приоритет — `src/gr/domain/`
+- [X] T008 [P] Доменные модели: процессы, инициативы, допущения, приоритет — `src/gr/domain/`
   - **Цель**: модели data-model §3–§6.
   - **Зависит**: T007
   - **Файлы**: `domain/process.py`, `initiative.py`, `assumptions.py`, `priority.py`,
