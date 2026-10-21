@@ -312,7 +312,7 @@ description: "Task list for 001-npa-ai-analyzer"
     детерминирован, по любому смещению находится блок.
   - **Тесты**: `test_ir.py`.
 
-- [ ] T015 [P] [US1] Определение формата и TXT — `src/gr/ingestion/detect.py`
+- [X] T015 [P] [US1] Определение формата и TXT — `src/gr/ingestion/detect.py`
   - **Цель**: FR-001, FR-002, FR-004 для TXT; протокол `Extractor` (FR-007).
   - **Зависит**: T007, T077
   - **Файлы**: `ingestion/base.py`, `detect.py`, `registry.py`, `txt.py`,
