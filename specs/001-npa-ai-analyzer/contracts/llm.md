@@ -12,13 +12,20 @@
 ```python
 class StructuredLLM(Protocol):
     async def generate(
-        self, *, schema: type[T], system: str, user: str, stage: StageName,
-        max_tokens: int, run_id: str,
+        self,
+        *,
+        schema: type[T],
+        system: str,
+        user: str,
+        stage: StageName,
+        max_tokens: int,
+        run_id: str,
     ) -> LLMResult[T]: ...
+
 
 @dataclass(frozen=True)
 class LLMResult(Generic[T]):
-    value: T                 # провалидированный Pydantic-объект
+    value: T  # провалидированный Pydantic-объект
     model: str
     input_tokens: int
     output_tokens: int
