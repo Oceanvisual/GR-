@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from gr!")
+"""AI-анализ НПА."""
+
+__version__ = "0.1.0"

@@ -204,7 +204,7 @@ description: "Task list for 001-npa-ai-analyzer"
     50 конкурентных записей runner, API и OCR проходят без `database is locked`.
   - **Тесты**: `test_storage.py`.
 
-- [ ] T010 [P] Ошибки, аутентификация, CLI — `src/gr/errors.py`, `src/gr/auth.py`
+- [X] T010 [P] Ошибки, аутентификация, CLI — `src/gr/errors.py`, `src/gr/auth.py`
   - **Цель**: единый формат ошибок api.md и HTTP Basic (R-15).
   - **Зависит**: T003
   - **Файлы**: `errors.py`, `auth.py`, `__main__.py`, `tests/unit/test_errors.py`,
@@ -226,7 +226,8 @@ description: "Task list for 001-npa-ai-analyzer"
     `tests/integration/test_app.py`
   - **Результат**: `create_app()` с lifespan (БД, runner-заглушка), `/healthz` без
     аутентификации, `/api/v1/readyz` с ней. Базовый HTML с навигацией.
-    `gr serve` запускает uvicorn с `--proxy-headers` и `--forwarded-allow-ips` из настроек.
+    `gr serve` запускает uvicorn с `--proxy-headers`; `FORWARDED_ALLOW_IPS` uvicorn читает из
+    окружения, адрес привязки — флаг `gr serve --host` (в контейнере `0.0.0.0`).
   - **Готово, когда**: `uv run gr serve` поднимает сервис; `/healthz` → 200 без аутентификации,
     `/` без аутентификации → 401.
   - **Тесты**: `test_app.py`.
