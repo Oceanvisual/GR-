@@ -244,7 +244,7 @@ description: "Task list for 001-npa-ai-analyzer"
     `external_llm_not_allowed`, `external_allowed`) покрыта тестами.
   - **Тесты**: `test_policy.py`, `test_fake.py`.
 
-- [ ] T013 LLM: OpenAI-совместимый клиент и кэш — `src/gr/llm/openai_compat.py`
+- [X] T013 LLM: OpenAI-совместимый клиент и кэш — `src/gr/llm/openai_compat.py`
   - **Цель**: структурированные вызовы с retries, repair, учётом токенов (R-08).
   - **Зависит**: T012, T009
   - **Файлы**: `llm/openai_compat.py`, `llm/cache.py`, `tests/unit/llm/test_openai_compat.py`
