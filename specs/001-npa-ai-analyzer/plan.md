@@ -155,7 +155,7 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 | `PARSE_WORKERS` / `PARSE_TIMEOUT_S` | 2 / 120 | пул процессов (NFR-014) |
 | `STRUCTURE_MIN_CONFIDENCE` | 0.5 | ниже — предупреждение о структуре (R-22) |
 | `SQLITE_BUSY_TIMEOUT_MS` | 5000 | |
-| `LLM_MAX_OUTPUT_TOKENS` | 8000 | подбирается под модель (T074) |
+| `LLM_MAX_OUTPUT_TOKENS` | 16000 | по T074: 8 операций ≈ 7,5–8 тыс. выходных токенов |
 | `OCR_ENABLED` | `true` | OCR сканов (FR-008) |
 | `OCR_LANG` / `OCR_DPI` | `rus+eng` / 300 | |
 | `OCR_MAX_PAGES` / `OCR_PAGE_TIMEOUT_S` / `OCR_MIN_CONFIDENCE` / `OCR_CONCURRENCY` | 150 / 60 / 60 / 1 | |

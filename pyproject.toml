@@ -55,6 +55,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 # Pydantic copies field defaults per instance; ruff only knows direct BaseModel subclasses.
 "src/gr/domain/*.py" = ["RUF012"]
 "src/gr/extraction/schemas.py" = ["RUF012"]
+# Spikes are one-off probes that print diagnostics; not part of the package.
+"spikes/**/*.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

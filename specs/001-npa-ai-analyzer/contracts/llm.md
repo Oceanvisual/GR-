@@ -177,7 +177,7 @@ DeadlineOut = {raw: GroundedStr, value: int | null, unit: DeadlineUnit, anchor: 
 **Критерии качества** (eval): полнота операций ≥ 75 %; доля `verified` ≥ 95 %; сроки, не
 найденные в тексте, = 0.
 
-**Лимиты**: `max_tokens` из `LLM_MAX_OUTPUT_TOKENS` (по умолчанию 8000) на окно. При
+**Лимиты**: `max_tokens` из `LLM_MAX_OUTPUT_TOKENS` (по умолчанию 16000, T074) на окно. При
 `finish_reason=length` окно делится пополам и обрабатывается заново (глубина до 3), только
 потом — `llm_output_truncated`. Параллельно не больше `LLM_CONCURRENCY` процессов.
 
@@ -226,7 +226,7 @@ no_change: {applies: bool, justification: str | null}   # «оптимизаци
 обоснованная более простая альтернатива; доля LLM/agent-инициатив для паттернов с минимальной
 категорией `classic_automation` ≤ 20 %; ни одна инициатива не ссылается на несуществующие операции.
 
-**Лимиты**: `max_tokens=8000`.
+**Лимиты**: `max_tokens` из `LLM_MAX_OUTPUT_TOKENS` (16000, T074).
 
 ## Кэш и воспроизводимость
 

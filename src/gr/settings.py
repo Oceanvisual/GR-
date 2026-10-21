@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     llm_max_retries: int = Field(default=2, ge=0, le=10)
     llm_concurrency: int = Field(default=4, ge=1)
     llm_cache_enabled: bool = True
-    llm_max_output_tokens: int = Field(default=8000, gt=0)
+    llm_max_output_tokens: int = Field(default=16000, gt=0)
     llm_price_input_per_mtok: Decimal | None = Field(default=None, ge=0)
     llm_price_output_per_mtok: Decimal | None = Field(default=None, ge=0)
 
