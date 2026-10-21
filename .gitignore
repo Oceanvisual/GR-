@@ -10,3 +10,15 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+.env.*
+!.env.example
+*.log
+.idea/
+.vscode/
+
+# local runtime data (DATA_DIR=./data)
+data/
+
+# holdout set: only SELECTED.md is tracked (R-21)
+evals/holdout/*
+!evals/holdout/SELECTED.md

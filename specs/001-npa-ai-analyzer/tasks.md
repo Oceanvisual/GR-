@@ -25,7 +25,7 @@ description: "Task list for 001-npa-ai-analyzer"
 
 ## Phase 1: Setup
 
-- [ ] T001 Зависимости и конфигурация инструментов — `pyproject.toml`
+- [X] T001 Зависимости и конфигурация инструментов — `pyproject.toml`
   - **Цель**: подключить стек из research R-18.
   - **Зависит**: —
   - **Файлы**: `pyproject.toml`, `uv.lock`
