@@ -45,7 +45,7 @@ class JobRunner:
         runs are picked up again."""
         interrupted: list[str] = []
         for run in await self.repos.runs.list_by_status([RunStatus.RUNNING]):
-            await self.repos.runs.update(run.transition(RunStatus.INTERRUPTED))
+            await self.repos.runs.update(_reset_running(run).transition(RunStatus.INTERRUPTED))
             interrupted.append(run.id)
         for run in await self.repos.runs.list_by_status([RunStatus.QUEUED]):
             self._spawn(run.id)
@@ -102,7 +102,13 @@ class JobRunner:
             return
         task = asyncio.create_task(self._execute(run_id), name=f"run:{run_id}")
         self._tasks[run_id] = task
-        task.add_done_callback(lambda _t: self._tasks.pop(run_id, None))
+        task.add_done_callback(self._forget)
+
+    def _forget(self, task: asyncio.Task[None]) -> None:
+        # Only this task's own entry: a resumed run may already track a newer task.
+        run_id = task.get_name().removeprefix("run:")
+        if self._tasks.get(run_id) is task:
+            del self._tasks[run_id]
 
     async def _execute(self, run_id: str) -> None:
         run: AnalysisRun | None = None
@@ -123,13 +129,8 @@ class JobRunner:
             raise
         except Exception as exc:
             log.error("runner.crashed", exc_type=type(exc).__name__, exc_info=exc)
-            if run is not None and run.status == RunStatus.RUNNING:
-                await self.repos.runs.update(
-                    run.transition(
-                        RunStatus.FAILED,
-                        error=ErrorInfo(code="stage_failed", message="Внутренняя ошибка анализа."),
-                    )
-                )
+            if run is not None:
+                await self._crash(run_id)
         finally:
             clear_context()
 
@@ -237,6 +238,26 @@ class JobRunner:
         log.warning("stage.failed", error_code=error.code)
         return failed
 
+    async def _crash(self, run_id: str) -> None:
+        """Mark a run failed after an unexpected error, from its stored state: the stages
+        saved before the error stay as they are, the one in progress fails."""
+        error = ErrorInfo(code="stage_failed", message="Внутренняя ошибка анализа.")
+        try:
+            current = await self.repos.runs.get(run_id)
+            if current.status != RunStatus.RUNNING:
+                return
+            now = self.clock()
+            failed_stage = {"status": StageStatus.FAILED, "finished_at": now, "error": error}
+            stages = [
+                s.model_copy(update=failed_stage) if s.status == StageStatus.RUNNING else s
+                for s in current.stages
+            ]
+            failed = current.model_copy(update={"stages": stages})
+            await self.repos.runs.update(failed.transition(RunStatus.FAILED, error=error))
+        except Exception as exc:
+            # The store itself is failing: recover() marks the run interrupted on restart.
+            log.error("runner.crash_not_saved", exc_type=type(exc).__name__)
+
     async def _stop(self, run_id: str, *, user_cancel: bool) -> None:
         current = await self.repos.runs.get(run_id)
         if not current.is_active:
@@ -244,15 +265,16 @@ class JobRunner:
         target = RunStatus.CANCELLED if user_cancel else RunStatus.INTERRUPTED
         if current.status == RunStatus.QUEUED and target == RunStatus.INTERRUPTED:
             return  # never started: stays queued and is picked up by recover()
-        stages = [
-            s.model_copy(
-                update={"status": StageStatus.PENDING, "started_at": None, "progress": None}
-            )
-            if s.status == StageStatus.RUNNING
-            else s
-            for s in current.stages
-        ]
-        await self.repos.runs.update(
-            current.model_copy(update={"stages": stages}).transition(target)
-        )
+        await self.repos.runs.update(_reset_running(current).transition(target))
         log.info("run.stopped", status=target.value)
+
+
+def _reset_running(run: AnalysisRun) -> AnalysisRun:
+    """A stage cut off mid-way is not done: it goes back to pending and reruns on resume."""
+    stages = [
+        s.model_copy(update={"status": StageStatus.PENDING, "started_at": None, "progress": None})
+        if s.status == StageStatus.RUNNING
+        else s
+        for s in run.stages
+    ]
+    return run.model_copy(update={"stages": stages})

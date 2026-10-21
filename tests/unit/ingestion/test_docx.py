@@ -325,3 +325,33 @@ def test_unknown_lists_and_unsupported_formats() -> None:
     assert state.next_marker("1", 3) is None
     assert state.next_marker("1", 0) == "1."
     assert state.warnings
+
+
+DECIMAL_NUMBERING = (
+    f'<w:numbering xmlns:w="{W_NS}">'
+    '<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/>'
+    '<w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>'
+    '<w:num w:numId="7"><w:abstractNumId w:val="1"/></w:num></w:numbering>'
+)
+NUMBERED = '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr>'
+DELETED_MARK = '<w:rPr><w:del w:id="1" w:author="a" w:date="2024-01-01T00:00:00Z"/></w:rPr>'
+
+
+def test_paragraph_with_deleted_mark_does_not_take_a_number() -> None:
+    deleted_run = '<w:del w:id="2" w:author="a"><w:r><w:delText>удалено</w:delText></w:r></w:del>'
+    body = (
+        p("первый", NUMBERED)
+        + f"<w:p><w:pPr>{NUMBERED}{DELETED_MARK}</w:pPr>{deleted_run}</w:p>"
+        + p("второй", NUMBERED)
+        + p("начало", NUMBERED + DELETED_MARK)
+        + p("конец", NUMBERED)
+    )
+    raw = DocxExtractor().extract(make_docx(body, numbering=DECIMAL_NUMBERING))
+    assert [b.text for b in raw.blocks] == ["1. первый", "2. второй", "3. начало конец"]
+
+
+def test_numbering_counts_through_table_cells() -> None:
+    cell = "<w:tc>" + p("в таблице", NUMBERED) + "</w:tc>"
+    body = p("до таблицы", NUMBERED) + f"<w:tbl><w:tr>{cell}</w:tr></w:tbl>" + p("после", NUMBERED)
+    raw = DocxExtractor().extract(make_docx(body, numbering=DECIMAL_NUMBERING))
+    assert [b.text for b in raw.blocks] == ["1. до таблицы", "2. в таблице", "3. после"]

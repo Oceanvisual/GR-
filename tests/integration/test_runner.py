@@ -267,3 +267,49 @@ def test_stages_must_be_ordered(repos: Repositories) -> None:
     stages = list(make_stages().values())
     with pytest.raises(ValueError, match="order"):
         JobRunner(repos, list(reversed(stages)), max_concurrent=1)
+
+
+async def test_crash_outside_a_stage_keeps_finished_stages(
+    repos: Repositories, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stages = make_stages()
+    original_put = repos.stage_outputs.put
+
+    async def put(run_id: str, stage: StageName, output: object) -> None:
+        if stage == StageName.DETAIL:
+            raise OSError("disk full")
+        await original_put(run_id, stage, output)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(repos.stage_outputs, "put", put)
+    runner = make_runner(repos, stages)
+    run = await runner.submit(new_run())
+    await runner.wait(run.id)
+
+    failed = await repos.runs.get(run.id)
+    assert failed.status == RunStatus.FAILED and failed.error is not None
+    assert statuses(failed)[:3] == [StageStatus.SUCCEEDED, StageStatus.FAILED, StageStatus.PENDING]
+    assert failed.stage(StageName.DETAIL).error == failed.error
+
+
+async def test_recover_resets_stage_cut_off_mid_way(repos: Repositories) -> None:
+    dead = new_run().transition(RunStatus.RUNNING)
+    discover = dead.stage(StageName.DISCOVER).model_copy(
+        update={"status": StageStatus.RUNNING, "started_at": NOW, "attempts": 1}
+    )
+    await repos.runs.add(dead.with_stage(discover))
+    await make_runner(repos, make_stages()).recover()
+    stored = await repos.runs.get(dead.id)
+    assert stored.status == RunStatus.INTERRUPTED
+    assert stored.stage(StageName.DISCOVER).status == StageStatus.PENDING
+
+
+async def test_finished_task_does_not_untrack_a_newer_one(repos: Repositories) -> None:
+    runner = make_runner(repos, make_stages())
+    old = asyncio.create_task(asyncio.sleep(0), name="run:run_X")
+    await old
+    newer = asyncio.create_task(asyncio.sleep(10), name="run:run_X")
+    runner._tasks["run_X"] = newer
+    runner._forget(old)  # the late callback of the finished task
+    assert runner.is_tracking("run_X")
+    newer.cancel()
+    await asyncio.gather(newer, return_exceptions=True)

@@ -76,7 +76,9 @@ def test_signature_wins_over_extension() -> None:
         (b"<!-- saved --> <html lang=ru>", DocFormat.HTML),
         ("Текст про <html> в середине".encode(), DocFormat.TXT),
         ("Текст".encode("utf-16"), DocFormat.TXT),
-        (b"garbage before %PDF-1.7 within the first kilobyte", DocFormat.PDF),
+        (b"HTTP/1.1 200 OK\r\n\r\n%PDF-1.7\n1 0 obj\n<< >>\nendobj\n", DocFormat.PDF),
+        (b"\x00\x01junk%PDF-1.4\n", DocFormat.PDF),
+        ("Исходный файл: %PDF-1.7, 12 страниц.\nТекст.".encode(), DocFormat.TXT),
     ],
 )
 def test_signatures(data: bytes, expected: DocFormat) -> None:

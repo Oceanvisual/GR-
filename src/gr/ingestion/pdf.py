@@ -13,7 +13,9 @@ from gr.ingestion.base import IngestionError
 from gr.ingestion.pdf_layout import Line, build_blocks
 
 _PASSWORD_ERROR = 4  # FPDF_ERR_PASSWORD
-MIN_PAGE_CHARS = 20  # fewer letters/digits than this: the page has no usable text layer
+# Fewer letters/digits than this on a page with an image: a scan (perhaps with a stamp or a
+# page number in its text layer) that needs OCR. Without an image a short page is just short.
+MIN_PAGE_CHARS = 20
 DEFAULT_FONT_SIZE = 12.0
 
 
@@ -57,6 +59,18 @@ def _page_lines(page: pdfium.PdfPage, number: int) -> tuple[list[Line], int]:
         return lines, meaningful
     finally:
         textpage.close()
+
+
+def _has_image(document: pdfium.PdfDocument, index: int) -> bool:
+    try:
+        page = document[index]
+    except pdfium.PdfiumError:
+        return False
+    try:
+        images = page.get_objects(filter=(pdfium_raw.FPDF_PAGEOBJ_IMAGE,))
+        return next(iter(images), None) is not None
+    finally:
+        page.close()
 
 
 def text_layer_status(empty_pages: int, total: int) -> TextLayerStatus:
@@ -108,9 +122,8 @@ class PdfExtractor:
                     continue
                 finally:
                     page.close()
-                if meaningful < MIN_PAGE_CHARS:
-                    empty.append(index + 1)
-                    lines = []
+                if meaningful < MIN_PAGE_CHARS and _has_image(document, index):
+                    empty.append(index + 1)  # its few native lines are kept all the same
                 pages.append(lines)
         finally:
             document.close()

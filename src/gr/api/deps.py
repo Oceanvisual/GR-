@@ -1,6 +1,6 @@
 """Application state shared by API and web routes, and the dependencies that expose it."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -9,6 +9,7 @@ from gr.auth import BasicAuthenticator
 from gr.ingestion.ocr_probe import OcrAvailability
 from gr.pipeline.runner import JobRunner
 from gr.pipeline.workers import CpuWorkers
+from gr.services.locks import KeyedLocks
 from gr.settings import Settings
 from gr.storage.db import Database
 from gr.storage.files import FileStore
@@ -24,6 +25,7 @@ class AppState:
     workers: CpuWorkers
     runner: JobRunner
     ocr: OcrAvailability
+    upload_locks: KeyedLocks = field(default_factory=KeyedLocks)
 
 
 def get_state(request: Request) -> AppState:

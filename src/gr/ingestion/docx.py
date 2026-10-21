@@ -76,6 +76,16 @@ def _parse_xml(data: bytes) -> Element:
         raise IngestionError("corrupted_file", "Файл повреждён: XML не читается.") from None
 
 
+def _style_id(ppr: Element | None) -> str | None:
+    pstyle = ppr.find(f"{W}pStyle") if ppr is not None else None
+    return pstyle.get(f"{W}val") if pstyle is not None else None
+
+
+def _mark_deleted(ppr: Element | None) -> bool:
+    """The paragraph mark itself is a tracked deletion: the paragraph merges into the next."""
+    return ppr is not None and ppr.find(f"{W}rPr/{W}del") is not None
+
+
 def _flag(element: Element | None) -> bool:
     if element is None:
         return False
@@ -147,6 +157,9 @@ class _Walker:
         self.sidebars: list[str] = []
         self.table_index = 0
         self.restored = False
+        # Text of paragraphs whose mark is deleted in tracked changes: once the change is
+        # accepted it joins the next paragraph, which alone keeps the number.
+        self._carry: list[str] = []
 
     # --- inline text ---------------------------------------------------------------------
 
@@ -211,41 +224,59 @@ class _Walker:
                 if content is not None:
                     self.body(content)
 
-    def paragraph(self, p: Element) -> None:
-        ppr = p.find(f"{W}pPr")
-        style_id = None
+    def _numbering(self, ppr: Element | None, style_id: str | None) -> tuple[str | None, int]:
         num_id: str | None = None
         ilvl: int | None = None
+        num_pr = ppr.find(f"{W}numPr") if ppr is not None else None
+        if num_pr is not None:
+            num_el, ilvl_el = num_pr.find(f"{W}numId"), num_pr.find(f"{W}ilvl")
+            num_id = num_el.get(f"{W}val") if num_el is not None else None
+            ilvl = int(ilvl_el.get(f"{W}val") or 0) if ilvl_el is not None else None
+        num_id = num_id or _inherited(self.styles, style_id, "num_id")
+        if ilvl is None:
+            ilvl = _inherited(self.styles, style_id, "ilvl") or 0
+        return num_id, ilvl
+
+    def _marker(self, ppr: Element | None, style_id: str | None) -> str | None:
+        """The paragraph's list number. A numbered paragraph consumes its number even when
+        empty, as in Word, but not when its mark is deleted: it no longer exists."""
+        if _mark_deleted(ppr):
+            return None
+        num_id, ilvl = self._numbering(ppr, style_id)
+        marker = self.numbering.next_marker(num_id, ilvl) if num_id else None
+        if marker:
+            self.restored = True
+        return marker
+
+    def paragraph(self, p: Element) -> None:
+        ppr = p.find(f"{W}pPr")
+        style_id = _style_id(ppr)
         jc = None
         indent = None
         if ppr is not None:
-            pstyle = ppr.find(f"{W}pStyle")
-            style_id = pstyle.get(f"{W}val") if pstyle is not None else None
-            num_pr = ppr.find(f"{W}numPr")
-            if num_pr is not None:
-                num_el, ilvl_el = num_pr.find(f"{W}numId"), num_pr.find(f"{W}ilvl")
-                num_id = num_el.get(f"{W}val") if num_el is not None else None
-                ilvl = int(ilvl_el.get(f"{W}val") or 0) if ilvl_el is not None else None
             jc_el = ppr.find(f"{W}jc")
             jc = jc_el.get(f"{W}val") if jc_el is not None else None
             ind = ppr.find(f"{W}ind")
             if ind is not None and ind.get(f"{W}firstLine"):
                 indent = float(ind.get(f"{W}firstLine") or 0) / 20  # twips → points
-        num_id = num_id or _inherited(self.styles, style_id, "num_id")
-        if ilvl is None:
-            ilvl = _inherited(self.styles, style_id, "ilvl") or 0
+        _, ilvl = self._numbering(ppr, style_id)
 
         style_bold = bool(_inherited(self.styles, style_id, "bold"))
         out = _Paragraph()
         self._inline(p, out, style_bold)
         text = "".join(out.parts).strip()
 
-        # A numbered paragraph consumes its number even when empty, as in Word.
-        marker = self.numbering.next_marker(num_id, ilvl) if num_id else None
+        marker = self._marker(ppr, style_id)
+        if _mark_deleted(ppr):
+            if text:
+                self._carry.append(text)
+            return
+        if self._carry:
+            text = " ".join([*self._carry, text]).strip()
+            self._carry.clear()
         if not text:
             return
         if marker:
-            self.restored = True
             text = f"{marker} {text}"
         align = jc or _inherited(self.styles, style_id, "align")
         self.blocks.append(
@@ -261,11 +292,21 @@ class _Walker:
             )
         )
 
+    def flush(self) -> None:
+        """Text left over from a deleted paragraph mark at the very end of the body."""
+        if self._carry:
+            self.blocks.append(Block(text=" ".join(self._carry)))
+            self._carry.clear()
+
     def _cell_text(self, cell: Element) -> str:
         texts: list[str] = []
         for child in cell:
             if child.tag == f"{W}p":
-                texts.append(self.paragraph_text(child).strip())
+                ppr = child.find(f"{W}pPr")
+                text = self.paragraph_text(child).strip()
+                # Lists numbered inside cells, or continuing through a table, keep counting.
+                marker = self._marker(ppr, _style_id(ppr))
+                texts.append(f"{marker} {text}" if marker and text else text)
             elif child.tag == f"{W}tbl":
                 rows = [
                     " | ".join(t for tc in tr.findall(f"{W}tc") if (t := self._cell_text(tc)))
@@ -344,6 +385,7 @@ class DocxExtractor:
             body = document.find(f"{W}body")
             if body is not None:
                 walker.body(body)
+                walker.flush()
             blocks = list(walker.blocks)
             blocks += [Block(text=f"[Надпись] {text}") for text in walker.sidebars]
             blocks += _notes(archive, "word/footnotes.xml", "Сноска", walker)

@@ -25,6 +25,7 @@ from gr.llm.base import (
 )
 from gr.llm.cache import request_hash, strict_json_schema
 from gr.llm.policy import check_data_policy
+from gr.llm.prompts import JSON_OBJECT_INSTRUCTION, REPAIR_INSTRUCTION
 from gr.logging import get_logger
 from gr.settings import Settings
 from gr.storage.repositories import LlmCall, LlmCallRepository
@@ -35,12 +36,6 @@ Mode = Literal["json_schema", "json_object"]
 EXTRACTION_STAGES = frozenset({StageName.DISCOVER, StageName.DETAIL, StageName.VALIDATE})
 _CHARS_PER_TOKEN = 3  # rough for Russian text; used only when the provider omits `usage`
 _ERROR_DETAIL_LIMIT = 20
-
-REPAIR_INSTRUCTION = (
-    "Предыдущий ответ не прошёл проверку по JSON-схеме. Ошибки:\n{errors}\n"
-    "Верни только исправленный JSON строго по схеме, без пояснений."
-)
-JSON_OBJECT_INSTRUCTION = "\n\nОтвет — один JSON-объект строго по этой JSON-схеме:\n{schema}"
 
 
 class _Response(BaseModel):
@@ -164,13 +159,16 @@ class OpenAICompatibleLLM:
         except openai.BadRequestError:
             if not (self._may_fall_back and self._mode == "json_schema"):
                 raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
-            # `auto`: the endpoint does not take json_schema; remember and retry once.
+            # `auto`: perhaps the endpoint does not take json_schema. Retry once in json_object.
+            try:
+                response = await self._request(model, schema, messages, max_tokens, "json_object")
+            except openai.BadRequestError:
+                # Rejected either way: the request itself is at fault (context length, model
+                # id, max_tokens), not the structured mode, which therefore stays as it was.
+                raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
             log.warning("llm.structured_mode_fallback", stage=stage.value, to="json_object")
             self._mode = "json_object"
-            try:
-                return await self._request(model, schema, messages, max_tokens, self._mode)
-            except openai.BadRequestError:
-                raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
+            return response
 
     async def _request(
         self,

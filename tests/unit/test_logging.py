@@ -3,6 +3,7 @@ import json
 from collections.abc import Iterator
 
 import pytest
+from pydantic import BaseModel, ValidationError
 
 from gr.logging import (
     MAX_FIELD_CHARS,
@@ -56,3 +57,25 @@ def test_level_filtering() -> None:
 def test_fingerprint_is_stable() -> None:
     assert text_fingerprint("абв") == {"len": 3, "sha256_8": text_fingerprint("абв")["sha256_8"]}
     assert text_fingerprint("абв") != text_fingerprint("абг")
+
+
+class _Point(BaseModel):
+    number: int
+
+
+def test_exception_messages_never_reach_the_log(json_stream: io.StringIO) -> None:
+    secret = "Заявитель Иванов И.И. паспорт 4510 123456"
+    try:
+        try:
+            _Point.model_validate({"number": secret})
+        except ValidationError as exc:
+            raise RuntimeError(f"stage failed on {secret}") from exc
+    except RuntimeError as exc:
+        get_logger("t").error("stage.crashed", exc_info=exc)
+    get_logger("t").error("http.unhandled", exc_info=ValueError(secret))
+    crashed, unhandled = _events(json_stream)
+    assert "Иванов" not in json_stream.getvalue()
+    trace = str(crashed["exception"])
+    assert "pydantic_core._pydantic_core.ValidationError (message withheld)" in trace
+    assert "RuntimeError (message withheld)" in trace and "test_logging.py" in trace
+    assert str(unhandled["exception"]).endswith("ValueError (message withheld)\n")

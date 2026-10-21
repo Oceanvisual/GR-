@@ -17,7 +17,11 @@ log = get_logger(__name__)
 
 def strict_json_schema(schema: type[BaseModel]) -> dict[str, Any]:
     """Pydantic JSON schema adjusted for strict structured outputs: every object closed and
-    every property required (optional ones are nullable in the LLM schemas, R-08)."""
+    every property required (optional ones are nullable in the LLM schemas, R-08).
+
+    Maps (`dict[...]` fields) have no fixed properties and cannot be strict: such a schema is
+    refused here instead of silently becoming an object that only admits `{}`.
+    """
 
     def visit(node: dict[str, Any]) -> dict[str, Any]:
         node = {key: value for key, value in node.items() if key not in ("default", "title")}
@@ -30,6 +34,11 @@ def strict_json_schema(schema: type[BaseModel]) -> dict[str, Any]:
         if isinstance(node.get("items"), dict):
             node["items"] = visit(node["items"])
         if node.get("type") == "object":
+            if "properties" not in node and node.get("additionalProperties", True) is not False:
+                raise ValueError(
+                    f"{schema.__name__}: dict fields are not allowed in LLM schemas; "
+                    "use a list of objects with a key field"
+                )
             node["additionalProperties"] = False
             node["required"] = list(node.get("properties", {}))
         return node

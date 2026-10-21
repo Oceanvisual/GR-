@@ -183,55 +183,58 @@ class DocumentService:
 
     async def ingest(self, upload: Upload, user: str, source_note: str | None) -> IngestResult:
         try:
-            existing = await self.repos.documents.find_by_sha256(upload.sha256)
-            if existing is not None:
-                return IngestResult(existing, duplicate=True)
-            doc_id = new_id("doc")
-            parsed = await self._parse(upload, doc_id)
-            document = Document(
-                id=doc_id,
-                filename=upload.filename,
-                format=parsed.format,
-                size_bytes=upload.size,
-                sha256=upload.sha256,
-                uploaded_at=datetime.now(UTC),
-                uploaded_by=user,
-                page_count=parsed.page_count,
-                char_count=len(parsed.text),
-                diagnostics=parsed.diagnostics,
-                metadata=parsed.metadata,
-                structure_mode=parsed.structure_mode,
-                user_source=source_note or None,
-            )
-            await self.repos.texts.put(
-                DocumentText(doc_id=doc_id, full_text=parsed.text, page_offsets=parsed.page_starts)
-            )
-            await self.repos.fragments.replace_for_document(doc_id, parsed.fragments)
-            try:
-                await self.repos.documents.add(document)
-            except ConflictError:
-                # The same file finished uploading in parallel: keep that one.
-                await self.repos.fragments.replace_for_document(doc_id, [])
-                existing = await self.repos.documents.find_by_sha256(upload.sha256)
-                if existing is None:
-                    raise
-                return IngestResult(existing, duplicate=True)
-            await self.state.files.adopt(upload.path, upload.sha256)
-            log.info(
-                "document.uploaded",
-                doc_id=doc_id,
-                format=parsed.format.value,
-                pages=parsed.page_count,
-                chars=len(parsed.text),
-                fragments=len(parsed.fragments),
-                text_layer=parsed.diagnostics.text_layer.value,
-                strategy=parsed.diagnostics.structure.strategy
-                if parsed.diagnostics.structure
-                else None,
-            )
-            return IngestResult(document, duplicate=False)
+            # The same file uploaded twice at once is parsed once; the second gets the first.
+            async with self.state.upload_locks.hold(upload.sha256):
+                return await self._ingest(upload, user, source_note)
         finally:
             await discard(upload.path)
+
+    async def _ingest(self, upload: Upload, user: str, source_note: str | None) -> IngestResult:
+        existing = await self.repos.documents.find_by_sha256(upload.sha256)
+        if existing is not None:
+            return IngestResult(existing, duplicate=True)
+        doc_id = new_id("doc")
+        parsed = await self._parse(upload, doc_id)
+        document = Document(
+            id=doc_id,
+            filename=upload.filename,
+            format=parsed.format,
+            size_bytes=upload.size,
+            sha256=upload.sha256,
+            uploaded_at=datetime.now(UTC),
+            uploaded_by=user,
+            page_count=parsed.page_count,
+            char_count=len(parsed.text),
+            diagnostics=parsed.diagnostics,
+            metadata=parsed.metadata,
+            structure_mode=parsed.structure_mode,
+            user_source=source_note or None,
+        )
+        # The original goes into the content-addressed store first: a stored file without a
+        # row is harmless and reused, a row without its file could never be repaired.
+        await self.state.files.adopt(upload.path, upload.sha256)
+        text = DocumentText(doc_id=doc_id, full_text=parsed.text, page_offsets=parsed.page_starts)
+        try:
+            await self.repos.documents.add_parsed(document, text, parsed.fragments)
+        except ConflictError:
+            # Stored by another process meanwhile: nothing of ours was written.
+            existing = await self.repos.documents.find_by_sha256(upload.sha256)
+            if existing is None:
+                raise
+            return IngestResult(existing, duplicate=True)
+        log.info(
+            "document.uploaded",
+            doc_id=doc_id,
+            format=parsed.format.value,
+            pages=parsed.page_count,
+            chars=len(parsed.text),
+            fragments=len(parsed.fragments),
+            text_layer=parsed.diagnostics.text_layer.value,
+            strategy=parsed.diagnostics.structure.strategy
+            if parsed.diagnostics.structure
+            else None,
+        )
+        return IngestResult(document, duplicate=False)
 
     async def _parse(self, upload: Upload, doc_id: str) -> Any:
         try:

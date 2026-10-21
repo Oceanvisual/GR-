@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fpdf import FPDF
 from fpdf.enums import EncryptionMethod
+from PIL import Image
 
 from gr.domain.enums import TextLayerStatus
 from gr.grounding.normalize import normalize_for_match
@@ -305,3 +306,28 @@ def test_columns_detected() -> None:
         ]
     assert detect_columns(rows)
     assert not detect_columns([line("обычный текст", 700 - 14 * i) for i in range(6)])
+
+
+def _two_pages(second: str, *, image_on_second: bool = False) -> bytes:
+    document = FPDF()
+    document.set_font("helvetica", size=12)
+    document.add_page()
+    document.multi_cell(w=0, text="The first page of the act holds the main body of the text. " * 8)
+    document.add_page()
+    if image_on_second:
+        document.image(Image.new("L", (200, 280), color=200), x=10, y=10, w=190)
+    document.cell(text=second)
+    return bytes(document.output())
+
+
+def test_short_last_page_keeps_its_text() -> None:
+    raw = PdfExtractor().extract(_two_pages("In force from 1 May."))
+    assert full_text(raw).text.endswith("text. In force from 1 May.")  # continues the paragraph
+    assert raw.diagnostics.text_layer == TextLayerStatus.OK and raw.diagnostics.empty_pages == []
+
+
+def test_scanned_page_with_a_stamp_still_needs_ocr() -> None:
+    raw = PdfExtractor().extract(_two_pages("Signed", image_on_second=True))
+    assert raw.diagnostics.empty_pages == [2]
+    assert raw.diagnostics.text_layer == TextLayerStatus.PARTIAL
+    assert full_text(raw).text.endswith(" Signed")  # the native line is kept, OCR adds the rest

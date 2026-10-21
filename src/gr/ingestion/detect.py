@@ -15,6 +15,7 @@ ENCRYPTION_STREAM = "EncryptionInfo".encode("utf-16-le")
 _TEXT_PROBE = 64 * 1024
 
 # Recognised but never accepted: images are out of MVP scope, spreadsheets are not acts.
+_PDF_OBJECT_RE = re.compile(rb"\d+\s+\d+\s+obj\b")
 _KNOWN_UNSUPPORTED = {
     b"\x89PNG": "PNG",
     b"\xff\xd8\xff": "JPEG",
@@ -74,7 +75,16 @@ def detect_format(data: bytes) -> DocFormat:
     if not data.strip():
         raise IngestionError("empty_document", "Файл пустой.")
     head = data[:1024]
-    if b"%PDF-" in head:
+    pdf_at = head.find(b"%PDF-")
+    # Readers accept a header anywhere in the first KB. After binary junk it is a PDF; after
+    # readable text (saved HTTP headers, say) only with PDF objects following it, otherwise a
+    # text file merely mentions it.
+    prefix = head[:pdf_at]
+    if pdf_at != -1 and (
+        not prefix.strip()
+        or not _looks_like_text(prefix)
+        or _PDF_OBJECT_RE.search(data, pdf_at, pdf_at + (64 << 10))
+    ):
         return DocFormat.PDF
     if data.startswith(b"PK\x03\x04"):
         return _zip_format(data)

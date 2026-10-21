@@ -59,6 +59,38 @@ class DocumentRepository(_Repository):
         except IntegrityError as exc:
             raise ConflictError(f"document {document.id} or its sha256 already exists") from exc
 
+    async def add_parsed(
+        self, document: Document, text: "DocumentText", fragments: Sequence[Fragment]
+    ) -> None:
+        """The document with its text and structure in one transaction: all or nothing."""
+        if text.doc_id != document.id or any(f.doc_id != document.id for f in fragments):
+            raise ValueError("text and fragments must belong to the document")
+        try:
+            async with self.db.write() as conn:
+                await conn.execute(
+                    t.documents.insert().values(
+                        id=document.id,
+                        sha256=document.sha256,
+                        uploaded_at=_utc(document.uploaded_at),
+                        payload=_json(document),
+                    )
+                )
+                await conn.execute(
+                    t.document_texts.insert().values(
+                        doc_id=text.doc_id, full_text=text.full_text, page_offsets=text.page_offsets
+                    )
+                )
+                if fragments:
+                    await conn.execute(
+                        t.fragments.insert(),
+                        [
+                            {"doc_id": f.doc_id, "id": f.id, "order": f.order, "payload": _json(f)}
+                            for f in fragments
+                        ],
+                    )
+        except IntegrityError as exc:
+            raise ConflictError(f"document {document.id} or its sha256 already exists") from exc
+
     async def update(self, document: Document) -> None:
         async with self.db.write() as conn:
             result = await conn.execute(

@@ -274,3 +274,27 @@ def test_strict_schema_closes_objects() -> None:
     assert step["required"] == ["name", "default"]
     assert "default" in step["properties"]
     assert "title" not in step
+
+
+async def test_bad_request_unrelated_to_mode_keeps_json_schema(
+    llm_settings: Callable[..., Settings],
+) -> None:
+    recorder = Recorder(
+        error(400, "maximum context length exceeded"),
+        error(400, "maximum context length exceeded"),
+        completion(json.dumps(VALID)),
+    )
+    llm = make_llm(llm_settings(), recorder)
+    with pytest.raises(LLMUnavailableError, match="400"):
+        await ask(llm)
+    assert (await ask(llm)).value.title == "ok"
+    formats = [r["response_format"]["type"] for r in recorder.requests]
+    assert formats == ["json_schema", "json_object", "json_schema"]
+
+
+def test_strict_schema_refuses_dict_fields() -> None:
+    class Scores(BaseModel):
+        by_criterion: dict[str, int]
+
+    with pytest.raises(ValueError, match="dict fields"):
+        strict_json_schema(Scores)
