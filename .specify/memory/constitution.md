@@ -1,50 +1,111 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# GR Constitution
+
+GR — веб-сервис анализа нормативно-правовых актов (НПА): извлечение административных процессов,
+поиск возможностей автоматизации/AI, детерминированная экономическая оценка и приоритизация.
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Evidence-Grounded Extraction (NON-NEGOTIABLE)
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+- Любой факт, извлечённый из НПА (процесс, операция, роль, срок, документ, информационная
+  система, условие), MUST ссылаться на фрагмент исходного документа (идентификатор пункта/
+  раздела и страницы, если она есть) и содержать дословную цитату.
+- Наличие цитаты в указанном фрагменте MUST проверяться детерминированно (нормализованное
+  сравнение текста). Элемент, не прошедший проверку, MUST NOT отображаться как факт: он
+  помечается как «неподтверждённый» и исключается из расчётов до решения эксперта.
+- Система MUST NOT достраивать сроки, роли, обязанности или процессы, отсутствующие в тексте.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+Обоснование: ценность продукта — в проверяемости; галлюцинация в нормативной сфере хуже
+пропуска.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Deterministic Numbers
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+- Все экономические расчёты, сценарии, Priority Score и группировка инициатив MUST выполняться
+  детерминированным кодом по документированным формулам.
+- Выход LLM MUST NOT служить источником чисел, участвующих в расчётах. LLM может предлагать
+  только категориальные/порядковые оценки (enum) с обоснованием; их перевод в числа задаётся
+  конфигурируемыми таблицами допущений.
+- Одинаковые входные данные и допущения MUST давать побайтно одинаковый результат расчёта.
+- Пересчёт после изменения допущений или весов MUST выполняться без обращения к LLM.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### III. Layered Knowledge
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+Каждый элемент результата MUST быть отнесён ровно к одному слою и помечен им в UI и экспорте:
+1. **Факт** — непосредственно извлечён из НПА (с цитатой).
+2. **Интерпретация** — структурирование фактов в модель процесса (порядок, зависимости).
+3. **Гипотеза** — предлагаемая оптимизация и её качественные оценки.
+4. **Допущение** — параметр финансовой модели (объём, время, ставка, затраты).
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Модельная экономия MUST NOT подаваться как подтверждённый финансовый результат;
+высвобождение рабочего времени MUST NOT отождествляться с сокращением бюджетных расходов.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### IV. Documents Are Data, Not Instructions
+
+- Текст загружаемых документов MUST передаваться LLM только как данные в разграниченном блоке;
+  инструкции внутри документа MUST NOT влиять на поведение системы (проверяется тестом с
+  инъекцией).
+- Документы MUST NOT отправляться внешнему LLM-провайдеру без явно включённого режима в
+  конфигурации. По умолчанию анализ без настроенного LLM завершается понятной ошибкой.
+- Ключи и секреты — только через переменные окружения; в репозитории — `.env.example`.
+
+### V. Test-First, LLM-Free Tests, Eval Gate
+
+- Новая логика MUST сопровождаться тестами. Детерминированные модули (парсинг, валидация
+  цитат, экономика, скоринг) покрываются unit-тестами; pipeline — integration-тестами на
+  фейковом LLM (записанные/заданные structured-ответы), без сети.
+- Изменение промпта, модели, параметров чанкинга или схем извлечения MUST сопровождаться
+  прогоном eval на golden-разметке; регрессия метрик извлечения блокирует мерж.
+- Golden-разметка используется только для оценки и MUST NOT попадать в runtime-контекст системы.
+
+### VI. Human Oversight
+
+- Эксперт MUST иметь возможность подтвердить, исправить или отклонить процесс, операцию и
+  инициативу; решения сохраняются в неизменяемой истории (кто, когда, что, комментарий).
+- Решения эксперта имеют приоритет над выводом LLM и MUST NOT молча перезаписываться
+  повторным анализом.
+- Инициативы, затрагивающие принятие решений с юридическими последствиями для заявителя,
+  MUST помечаться и MUST NOT предлагаться к полностью автономному исполнению.
+
+### VII. Simplicity & Universality
+
+- Один деплоймент-юнит (монолит + встроенная очередь задач), без микросервисов, пока MVP не
+  докажет необходимость. Каждое усложнение фиксируется в Complexity Tracking плана.
+- Никакой логики, промптов или справочников, привязанных к конкретному НПА: поддержка нового
+  документа MUST NOT требовать изменения кода. Тестовый регламент — только фикстура и eval-кейс.
+- Функциональность вне согласованной спецификации не добавляется.
+
+## Technical Constraints
+
+- Python 3.12, окружение и зависимости только через `uv`; type hints везде, mypy strict.
+- Pydantic v2 для всех внешних данных и всех structured-ответов LLM; конфигурация через
+  pydantic-settings/env.
+- LLM — через OpenAI-совместимый API с конфигурируемыми endpoint и моделью; явные timeout,
+  ограниченные retries с backoff, max_tokens; structured output с валидацией по схеме.
+- Логи — structlog: этапы, длительность, ошибки, вызовы LLM (модель, токены, latency); без
+  сырых текстов документов, промптов и ответов на уровне info.
+- Развёртывание — Docker + Docker Compose; healthcheck; ограничения на размер и тип файлов;
+  базовая авторизация для серверного режима.
+- Новые зависимости добавляются только при наличии обоснования в `research.md` фичи.
+
+## Development Workflow & Quality Gates
+
+- Spec-Driven Development: spec → (clarify) → plan → tasks → implement. Код пишется только по
+  задачам из согласованного `tasks.md`.
+- Ветки `<type>/<slug>` (фичи Spec Kit — `feat/NNN-slug`), conventional commits, в `main`
+  напрямую не коммитим.
+- `scripts/check.sh` — единственный источник правды о гейтах (ruff, ruff format, mypy, pytest);
+  CI повторяет его. «Готово» = check зелёный.
+- Задача считается завершённой, когда выполнен её проверяемый критерий и пройдены указанные
+  в ней тесты.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- Конституция имеет приоритет над остальными практиками проекта; при конфликте план/задачи
+  приводятся в соответствие с ней, либо конституция явно изменяется.
+- Изменение — отдельным коммитом `docs: amend constitution to vX.Y.Z` с Sync Impact Report.
+- Версионирование SemVer: MAJOR — удаление/переопределение принципа; MINOR — новый принцип
+  или существенное расширение; PATCH — уточнения формулировок.
+- Каждый `plan.md` содержит Constitution Check; нарушения допустимы только с обоснованием
+  в Complexity Tracking.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-10-21 | **Last Amended**: 2026-10-21
