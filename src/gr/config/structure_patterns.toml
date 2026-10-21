@@ -1,0 +1,47 @@
+# Numbering patterns of Russian legal drafting (R-06). General rules only: nothing here may
+# refer to a particular document (NFR-001, tests/unit/test_no_document_specific_code.py).
+# Python `re` syntax; matched against the start of a normalized paragraph.
+
+[approved]
+# Opens an approved document: «УТВЕРЖДЕН(А, О, Ы) приказом …».
+pattern = '(?i)^утвержд[её]н[аоы]?\b'
+max_chars = 400
+
+# «Приложение N 1 к приказу …» opens an approved document of a composite act, like «УТВЕРЖДЕН».
+act_appendix = '(?i)^приложение\b.{0,40}?\bк\s+(?:приказу|постановлению|распоряжению|решению|указу)\b'
+
+[appendix]
+# «Приложение N 1 …», «Приложение № 2», «Приложение 3», «Приложение к Порядку». Not «Приложение:».
+pattern = '(?i)^приложение(?:\s*(?:n|№)?\s*(?P<number>\d{1,3}(?:\.\d{1,2})?)\b|\s+к\s)'
+max_chars = 300
+
+[section]
+# «I. Общие положения», «Раздел II. …», «Раздел 2 …».
+pattern = '^(?:(?:[Рр]аздел|РАЗДЕЛ)\s+(?P<word>[IVXLC]+|\d{1,2})\.?|(?P<roman>[IVXLC]+)\.)\s*(?P<title>.*)$'
+max_chars = 400
+
+[chapter]
+pattern = '^(?:[Гг]лава|ГЛАВА)\s+(?P<number>\d{1,3}(?:\.\d{1,2})?|[IVXLC]+)\.?\s*(?P<title>.*)$'
+max_chars = 400
+
+[article]
+# «Статья 5. Название», «Статья 15.1» («Статья 15_1» on some portals): parts restart at 1.
+pattern = '^(?:[Сс]татья|СТАТЬЯ)\s+(?P<number>\d{1,3}(?:[._]\d{1,2})?)\.?\s*(?P<title>.*)$'
+max_chars = 400
+
+[point]
+# «3.5.1. Текст», «3.1.1 Текст» (several components may drop the final dot), «12. Текст».
+# A single component needs the dot: «10 дней» and «2020 г.» are not points.
+pattern = '^(?P<number>\d{1,3}(?:\.\d{1,3}){0,4})(?:(?P<dot>\.)\s*|\s+)(?P<rest>[^\d\s].*)$'
+
+[subpoint]
+# «1) …», «14.1) …» (inserted by amendments), «а) …».
+numeric = '^(?P<number>\d{1,3}(?:\.\d{1,2})?)\)\s*(?P<rest>\S.*)$'
+letter = '^(?P<number>[а-яa-z])\)\s*(?P<rest>\S.*)$'
+
+[list_item]
+pattern = '^[-–—•]\s*\S'
+
+[heading]
+# An unnumbered heading (subsection): short, no closing punctuation, starts with a capital.
+max_chars = 200
