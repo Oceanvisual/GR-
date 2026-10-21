@@ -271,15 +271,17 @@ description: "Task list for 001-npa-ai-analyzer"
     этапы 3+; отмена работает; лимит параллелизма соблюдается.
   - **Тесты**: `test_runner.py`.
 
-- [ ] T076 Пул процессов для CPU-работы — `src/gr/pipeline/workers.py`
+- [X] T076 Пул процессов для CPU-работы — `src/gr/pipeline/workers.py`
   - **Цель**: NFR-014: разбор, рендер страниц и проверка цитат не блокируют веб-сервер, а сбой
     на файле не роняет его.
   - **Зависит**: T003
   - **Файлы**: `pipeline/workers.py`, `settings.py` (`PARSE_WORKERS`, `PARSE_TIMEOUT_S`),
     `tests/integration/test_workers.py`
-  - **Результат**: `run_cpu(fn, *args, timeout)` поверх `ProcessPoolExecutor` (spawn,
-    `max_tasks_per_child`). Падение воркера (`BrokenProcessPool`) → пересоздание пула и ошибка
-    задачи; таймаут → завершение воркера. PDFium используется только внутри воркеров.
+  - **Результат**: `CpuWorkers.run(fn, *args, timeout_s)`: отдельный spawn-процесс на задачу,
+    не больше `PARSE_WORKERS` одновременно. Не `ProcessPoolExecutor`: там смерть одного воркера
+    ломает весь пул и роняет параллельные задачи. Падение процесса → `WorkerCrashedError`
+    только у этой задачи; таймаут → kill только своего процесса. PDFium используется только
+    внутри воркеров.
   - **Готово, когда**: функция с `os._exit(1)` и бесконечный цикл дают ошибку задачи, а сервер и
     другие задачи продолжают работать; `/healthz` отвечает во время тяжёлой задачи.
   - **Тесты**: `test_workers.py`.
