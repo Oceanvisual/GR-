@@ -138,7 +138,7 @@ description: "Task list for 001-npa-ai-analyzer"
     выбранное решение; при необходимости уточнены T016, T017, T020.
   - **Тесты**: — (выводы закрепляются тестами в T016, T017, T020).
 
-- [ ] T073 Спайк: образ с tesseract и LibreOffice — `spikes/docker/Dockerfile`
+- [X] T073 Спайк: образ с tesseract и LibreOffice — `spikes/docker/Dockerfile`
   - **Цель**: размер образа, скорость OCR и конвертации, права на том, healthcheck без curl
     (FR-008, NFR-014).
   - **Зависит**: T001
