@@ -6,7 +6,7 @@ from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
-from gr.domain.base import DomainModel
+from gr.domain.base import DomainModel, VersionedRecord
 from gr.domain.document import Citation
 from gr.domain.enums import AssumptionSource, Scenario
 
@@ -89,12 +89,8 @@ class Assumption(DomainModel):
         return self
 
 
-class AssumptionSet(DomainModel):
-    run_id: str
-    version: int = Field(ge=1)
+class AssumptionSet(VersionedRecord):
     items: list[Assumption]
-    created_by: str
-    created_at: datetime
 
     @model_validator(mode="after")
     def _unique_keys(self) -> Self:

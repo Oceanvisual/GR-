@@ -1,12 +1,11 @@
 """Priority Score configuration and result (data-model.md §6)."""
 
-from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
-from gr.domain.base import DomainModel
+from gr.domain.base import DomainModel, VersionedRecord
 from gr.domain.enums import DurationBucket, KnowledgeLayer, LegalGate, Level5, PriorityGroup
 
 Criterion = Literal["effect", "feasibility", "data_availability", "integration", "risk", "duration"]
@@ -79,14 +78,8 @@ class PriorityConfig(DomainModel):
         return self
 
 
-class PriorityConfigVersion(DomainModel):
-    """Stored like AssumptionSet: every save is a new version (append-only)."""
-
-    run_id: str
-    version: int = Field(ge=1)
+class PriorityConfigVersion(VersionedRecord):
     config: PriorityConfig
-    created_by: str
-    created_at: datetime
 
 
 class CriterionScore(DomainModel):

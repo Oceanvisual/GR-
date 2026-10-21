@@ -190,7 +190,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Готово, когда**: инварианты покрыты тестами.
   - **Тесты**: `test_analysis_models.py`.
 
-- [ ] T009 Хранилище — `src/gr/storage/`
+- [X] T009 Хранилище — `src/gr/storage/`
   - **Цель**: таблицы data-model §10, репозитории, файловое хранилище.
   - **Зависит**: T007, T003
   - **Файлы**: `storage/db.py`, `repositories.py`, `files.py`, `tests/integration/test_storage.py`
