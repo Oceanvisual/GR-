@@ -364,7 +364,7 @@ description: "Task list for 001-npa-ai-analyzer"
     В DOCX с режимом рецензирования вставленный текст есть, а удалённого нет.
   - **Тесты**: `test_docx.py`.
 
-- [ ] T019 [US1] Нормализация текста — `src/gr/grounding/normalize.py`
+- [X] T019 [US1] Нормализация текста — `src/gr/grounding/normalize.py`
   - **Цель**: единая нормализация для смещений структуры и проверки цитат (R-11).
   - **Зависит**: T002
   - **Файлы**: `grounding/normalize.py`, `tests/unit/grounding/test_normalize.py`
