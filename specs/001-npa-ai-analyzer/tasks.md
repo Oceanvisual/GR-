@@ -300,7 +300,7 @@ description: "Task list for 001-npa-ai-analyzer"
 
 **Independent Test**: quickstart Q1–Q3.
 
-- [ ] T077 [US1] Промежуточное представление документа (IR) — `src/gr/ingestion/ir.py`
+- [X] T077 [US1] Промежуточное представление документа (IR) — `src/gr/ingestion/ir.py`
   - **Цель**: FR-017 (R-22): все форматы отдают одинаковые блоки с признаками оформления, а
     структура строится по IR.
   - **Зависит**: T007
