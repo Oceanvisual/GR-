@@ -27,7 +27,7 @@ REST JSON, префикс `/api/v1`. Все маршруты, кроме `/healt
 | 401 | `unauthorized` | нет или неверная аутентификация |
 | 403 | `csrf_rejected` | изменяющий запрос браузера с чужого источника (R-15) |
 | 404 | `not_found` | |
-| 409 | `version_conflict`, `run_in_progress` | |
+| 409 | `version_conflict`, `run_in_progress`, `ocr_in_progress` | |
 | 413 | `file_too_large`, `document_too_long` | превышены лимиты (FR-002) |
 | 415 | `unsupported_format` | `details.supported` — список форматов |
 | 422 | `corrupted_file`, `encrypted_file`, `no_text_layer`, `empty_document`, `encoding_undetected`, `document_not_analyzable` | FR-003, FR-004 |
@@ -42,17 +42,23 @@ REST JSON, префикс `/api/v1`. Все маршруты, кроме `/healt
 | Метод | Путь | Ответ |
 |---|---|---|
 | GET | `/healthz` | `200 {"status": "ok"}` — процесс жив (без аутентификации, для Docker) |
-| GET | `/api/v1/readyz` | `200 {"db": "ok", "llm": {"policy": "local_only", "configured": true}, "version": "0.1.0"}` |
+| GET | `/api/v1/readyz` | `200 {"db": "ok", "llm": {"policy": "local_only", "configured": true}, "ocr": {"available": true, "langs": ["rus", "eng"]}, "version": "0.1.0"}` |
 
 ## Документы
 
 ### `POST /api/v1/documents` — загрузка (FR-001…FR-006)
 `multipart/form-data`: `file` (обязательно), `source_note?`.
 - `201 Document`: разбор и построение структуры выполнены синхронно (SC-001: ≤ 30 с).
+- `202 Document`: в PDF есть страницы без текста и OCR доступен. Распознавание поставлено в
+  фоновую очередь (`diagnostics.ocr.status=queued`), клиент опрашивает `GET /documents/{id}`.
 - `200 Document` + заголовок `X-Duplicate-Of: doc_…`: такой файл уже загружен.
-- Ошибки: `413`, `415`, `422` (см. таблицу). Для `needs_ocr` документ **сохраняется**
-  (`201`, `diagnostics.analyzable=false`), чтобы пользователь видел диагностику. Запуск анализа
-  для него вернёт `422 document_not_analyzable`.
+- Ошибки: `413`, `415`, `422` (см. таблицу). Если OCR недоступен или завершился ошибкой,
+  документ со статусом `needs_ocr` **сохраняется** (`201`, `diagnostics.analyzable=false`),
+  чтобы пользователь видел диагностику. Запуск анализа для него вернёт
+  `422 document_not_analyzable`, а во время OCR — `409 ocr_in_progress`.
+
+### `POST /api/v1/documents/{doc_id}/ocr` — повторить OCR
+Только при `diagnostics.ocr.status = failed`. Ответ — `202 Document`.
 
 ### `GET /api/v1/documents` → `list[DocumentSummary]`
 `DocumentSummary = {id, filename, format, uploaded_at, metadata.title, diagnostics.text_layer,

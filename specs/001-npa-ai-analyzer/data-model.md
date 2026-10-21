@@ -18,8 +18,11 @@
 | `GroundingStatus` | `verified`, `relocated`, `partial`, `unverified`, `invalid_quote` | Результат проверки цитаты (R-11). Проверку проходят только `verified` и `relocated` |
 | `Confidence` | `high`, `medium`, `low` | Детерминированная уверенность (FR-027) |
 | `DocFormat` | `pdf`, `docx`, `txt`, `html` | |
-| `TextLayerStatus` | `ok`, `partial`, `needs_ocr`, `empty` | Диагностика (FR-003) |
-| `FragmentKind` | `root`, `preamble`, `section`, `chapter`, `subsection`, `point`, `subpoint`, `list_item`, `paragraph`, `appendix` | FR-010 |
+| `TextLayerStatus` | `ok`, `partial`, `needs_ocr`, `empty` | Диагностика текстового слоя до OCR (FR-003) |
+| `OcrStatus` | `not_needed`, `queued`, `running`, `done`, `failed`, `unavailable` | FR-008 |
+| `TextSource` | `native`, `ocr` | Происхождение текста фрагмента |
+| `NumberingProfile` | `regulation`, `law`, `generic` | Профиль нумерации (R-06) |
+| `FragmentKind` | `root`, `preamble`, `approved_document`, `section`, `chapter`, `paragraph_section` (§), `subsection`, `article`, `part`, `point`, `subpoint`, `list_item`, `paragraph`, `appendix` | FR-010 |
 | `StructureMode` | `numbered`, `paragraphs` | FR-012 |
 | `OperationType` | `intake`, `registration`, `completeness_check`, `data_verification`, `interagency_request`, `document_preparation`, `approval`, `decision`, `signing`, `notification`, `issuance`, `record_keeping`, `control`, `other` | Справочник типов операций (FR-022) |
 | `DeadlineUnit` | `minutes`, `hours`, `working_days`, `calendar_days`, `days`, `months`, `next_working_day`, `other` | `days` — если тип дней не указан |
@@ -58,7 +61,11 @@
 
 ### `IngestionDiagnostics`
 `text_layer: TextLayerStatus`, `empty_pages: list[int]`, `encoding?: str`, `warnings: list[str]`,
-`numbering_restored: bool` (DOCX, R-05), `analyzable: bool` (ложно при `needs_ocr`/`empty`).
+`numbering_restored: bool` (DOCX, R-05), `numbering_profile: NumberingProfile`,
+`ocr: {status: OcrStatus, pages: list[int], mean_confidence?: float,
+low_confidence_pages: list[int], engine_version?: str, error?: str}`,
+`removed_noise: {spps_lines: int, header_footer_lines: int, editorial_notes: int}`,
+`analyzable: bool` — ложно при `needs_ocr` или `empty` без успешного OCR и пока OCR не завершён.
 
 ### `DocumentMetadata`
 Поля `act_type`, `issuer`, `date`, `number`, `title`, `edition_date`, `minjust_registration`.
@@ -78,6 +85,10 @@
 | `pages` | `list[int]` | для PDF; пусто для прочих |
 | `parent_id?` | `str` | |
 | `order` | `int` | порядок в документе (обход в глубину) |
+| `text_source` | `TextSource` | `ocr` — текст получен распознаванием (FR-008) |
+| `repealed` | `bool` | «утратил силу» / «исключён»: в анализ не идёт (FR-014) |
+| `notes` | `list[str]` | редакционные пометки, вырезанные из текста (FR-014) |
+| `approved_doc?` | `str` | короткое название утверждаемого документа, если их несколько |
 
 Инвариант: интервалы потомков вложены в интервал родителя, `order` монотонен по `start`.
 
@@ -91,7 +102,8 @@ matched_end?: int, original_fragment_id?: str (если relocated), reason?: str
 
 ### `Grounded[T]` — значение с основанием
 `value: T`, `citations: list[Citation]` (≥ 1 для слоя `fact`), `layer: KnowledgeLayer`,
-`confidence: Confidence`.
+`confidence: Confidence`. Если хотя бы одна цитата ссылается на фрагмент с
+`text_source=ocr`, `confidence` не выше `medium` (FR-008).
 
 ### `Process`
 | Поле | Тип | Слой |

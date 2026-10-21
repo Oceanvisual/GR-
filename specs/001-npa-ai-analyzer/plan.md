@@ -26,7 +26,8 @@
 
 **Primary Dependencies**: FastAPI, Pydantic v2, pydantic-settings, structlog, SQLAlchemy 2.0
 Core + aiosqlite, Jinja2 + HTMX + Mermaid (vendored), openai SDK (OpenAI-совместимый endpoint),
-pypdfium2, python-docx, charset-normalizer, selectolax, rapidfuzz (обоснование — research R-01…R-18)
+pypdfium2, python-docx, charset-normalizer, selectolax, rapidfuzz; системный `tesseract-ocr` + `rus`
+для OCR (обоснование — research R-01…R-21)
 
 **Storage**: SQLite (WAL) на томе `/data`; файлы — `/data/files/<sha256>`; PostgreSQL — через `DATABASE_URL`
 
@@ -37,7 +38,7 @@ pypdfium2, python-docx, charset-normalizer, selectolax, rapidfuzz (обосно�
 
 **Project Type**: web-service (монолит: API + серверный UI)
 
-**Performance Goals**: разбор документа до 100 стр. ≤ 30 с; пересчёт экономики и рейтинга ≤ 2 с
+**Performance Goals**: разбор документа до 100 стр. ≤ 30 с (без OCR), OCR ≤ 10 с/стр.; пересчёт экономики и рейтинга ≤ 2 с
 (цель ≤ 200 мс на 100 инициатив); полный анализ документа на ~130 тыс. знаков ≤ 15 мин [Прогноз]
 
 **Constraints**: 1 воркер uvicorn (встроенный runner); ≤ 2 одновременных анализа; лимиты загрузки
@@ -58,7 +59,7 @@ pypdfium2, python-docx, charset-normalizer, selectolax, rapidfuzz (обосно�
 | IV. Documents Are Data | разграниченный блок, экранирование, без инструкций; `LLM_DATA_POLICY` по умолчанию `disabled` (R-09, R-12) | ✅ |
 | V. Test-First, LLM-Free, Eval Gate | `FakeLLM` и сценарии; eval-харнесс `evals/`; golden-разметка вне runtime | ✅ |
 | VI. Human Oversight | `review_events` только на добавление; наложение; `stale`; ограничение автономности; `allowed_with_hitl` | ✅ |
-| VII. Simplicity & Universality | 1 сервис, без брокера; структура и промпты без привязки к документу; второй НПА в отложенной выборке | ✅ |
+| VII. Simplicity & Universality | 1 сервис, без брокера; структура и промпты без привязки к документу; dev-корпус (R-21), отложенная выборка ≥ 3 НПА, T060 | ✅ |
 | Technical Constraints | uv, mypy strict, pydantic-settings, structlog, timeouts и retries, Docker | ✅ |
 | Workflow | задачи из `tasks.md`; `scripts/check.sh`; feature-ветка | ✅ |
 
@@ -93,7 +94,7 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 
 | Этап постановки | Компонент | Модуль |
 |---|---|---|
-| Document Parsing | S1 Ingest | `ingestion/` |
+| Document Parsing | S1 Ingest (+ OCR в фоне), очистка | `ingestion/`, `structure/cleanup.py` |
 | Structure Extraction | S2 Structure | `structure/` |
 | Process Extraction | S3 Discover + S4 Detail | `extraction/discovery.py`, `detailing.py` |
 | Process Validation | S5 Validate | `validation/`, `grounding/` |
@@ -107,8 +108,8 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 
 | Компонент | Ответственность | Вход | Выход | Контракт | Ошибки | Критерии качества |
 |---|---|---|---|---|---|---|
-| **S1 Ingest** | Определить формат, извлечь текст постранично, диагностика | bytes, filename | `RawDocument{format, pages[text], diagnostics}` | `Extractor` Protocol: `extract(data) -> RawDocument`; реестр по `DocFormat` | `unsupported_format`, `file_too_large`, `corrupted_file`, `encrypted_file`, `no_text_layer`, `empty_document`, `encoding_undetected` | 100 % фикстур корректно классифицированы; скан → `needs_ocr`; без исключений наружу, кроме `IngestionError` |
-| **S2 Structure** | Дерево фрагментов, метки, смещения, страницы, реквизиты | `RawDocument` | `list[Fragment]`, `DocumentMetadata`, `StructureMode` | `build_structure(raw, patterns) -> StructureResult`; чистая функция | не бросает исключений: деградирует в режим `paragraphs` с предупреждением | инварианты вложенности; на регламенте 261 разделы I–V и пункты 3.x.y распознаны (golden-тест) |
+| **S1 Ingest** | Определить формат, извлечь текст постранично, диагностика; страницы без текста распознаются OCR фоновой задачей | bytes, filename | `RawDocument{format, pages[text], diagnostics}` | `Extractor` Protocol: `extract(data) -> RawDocument`; реестр по `DocFormat` | `unsupported_format`, `file_too_large`, `corrupted_file`, `encrypted_file`, `no_text_layer`, `empty_document`, `encoding_undetected` | 100 % фикстур корректно классифицированы; скан → `needs_ocr`; без исключений наружу, кроме `IngestionError` |
+| **S2 Structure** | Очистка (служебные строки, пометки, колонтитулы), профиль нумерации, дерево фрагментов, метки, смещения, страницы, реквизиты | `RawDocument` | `list[Fragment]`, `DocumentMetadata`, `StructureMode` | `build_structure(raw, patterns) -> StructureResult`; чистая функция | не бросает исключений: деградирует в режим `paragraphs` с предупреждением | инварианты вложенности; снимки структуры dev-корпуса совпадают (SC-012); на регламенте 261 разделы I–V и пункты 3.x.y распознаны |
 | **S3 Discover** | Карта процессов по оглавлению | fragments → outline | `DiscoveryOut` → кандидаты | [llm.md § S3](./contracts/llm.md#s3--discover--карта-процессов) | LLM-коды; 0 валидных кандидатов → этап `succeeded` с «процессы не найдены» | полнота и точность процессов (eval) |
 | **S4 Detail** | Операции, решения, роли, сроки для каждого процесса | кандидат + фрагменты | `DetailOut` по каждому процессу | [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций) | ошибка одного процесса → процесс помечается `failed`, этап `succeeded` с предупреждением и `completeness.complete=false`, если доля ошибок ≤ 30 %, иначе `failed` | полнота операций, доля `verified` (eval) |
 | **S5 Validate** | Grounding, граф, дедупликация, уверенность, покрытие | `DetailOut[]`, fragments | `ProcessModel{processes, unverified, coverage}` | `validate(detail, fragments, cfg) -> ProcessModel`; чистая | не бросает | 100 % «фактов» с verified/relocated-цитатой (SC-002) |
@@ -150,6 +151,9 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 | `MAX_UPLOAD_MB` / `MAX_PAGES` / `MAX_CHARS` | 20 / 300 / 1 000 000 | FR-002 |
 | `MAX_UNZIPPED_MB` | 100 | лимит распаковки DOCX (R-04) |
 | `APP_PUBLIC_URL` | — | внешний адрес за реверс-прокси (проверка Origin, R-15) |
+| `OCR_ENABLED` | `true` | OCR сканов (FR-008) |
+| `OCR_LANG` / `OCR_DPI` | `rus+eng` / 300 | |
+| `OCR_MAX_PAGES` / `OCR_PAGE_TIMEOUT_S` / `OCR_MIN_CONFIDENCE` / `OCR_CONCURRENCY` | 150 / 60 / 60 / 1 | |
 | `LLM_DATA_POLICY` | `disabled` | `disabled` / `local_only` / `external_allowed` |
 | `LLM_BASE_URL`, `LLM_API_KEY` | — | OpenAI-совместимый endpoint |
 | `LLM_LOCAL_HOSTS` | `localhost,127.0.0.1,ollama,vllm` | для `local_only` |
@@ -168,11 +172,12 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 ### Docker
 
 - Dockerfile, `compose.prod.yml`, CI доставки и runbook генерируются skill'ом `/deploy-kit` (R-16):
-  uv-образ, non-root, `HEALTHCHECK` по `/healthz`.
+  uv-образ, non-root, `HEALTHCHECK` по `/healthz`. В образ ставятся `tesseract-ocr` и
+  `tesseract-ocr-rus`.
 - `docker-compose.yml` для AC-10: сервис `app` (build `.`, порт `${APP_PORT}`, том `gr-data:/data`,
   `env_file: .env`, `restart: unless-stopped`) и опциональный профиль `local-llm` (`ollama`) для
   `local_only`.
-- Требования к серверу `[Прогноз]`: 2 vCPU, 4 ГБ RAM, 20 ГБ диска для приложения без локальной
+- Требования к серверу `[Прогноз]`: 4 vCPU (OCR), 4 ГБ RAM, 20 ГБ диска для приложения без локальной
   LLM. С локальной LLM — GPU или значительно больше RAM, зависит от модели.
 
 ## Project Structure
@@ -208,9 +213,9 @@ src/gr/
 │   ├── assumptions.py, priority.py, review.py, run.py
 ├── ingestion/                    # S1
 │   ├── base.py, detect.py, registry.py
-│   ├── pdf.py, docx.py, docx_numbering.py, txt.py, html.py
+│   ├── pdf.py, docx.py, docx_numbering.py, txt.py, html.py, ocr.py
 ├── structure/                    # S2
-│   ├── patterns.py, builder.py, metadata.py
+│   ├── cleanup.py, patterns.py, profiles.py, builder.py, metadata.py
 ├── grounding/                    # R-11
 │   ├── normalize.py, quotes.py, numerals_ru.py, deadlines.py, roles.py
 ├── llm/
@@ -241,7 +246,7 @@ src/gr/
 ├── export/
 │   ├── json_export.py, csv_export.py
 └── config/
-    ├── structure_patterns.toml, grounding.toml, chunking.toml
+    ├── structure_patterns.toml, noise_patterns.toml, grounding.toml, chunking.toml
     ├── assumption_profile.toml, problem_catalog.toml, priority_default.toml
 
 tests/
@@ -252,10 +257,11 @@ tests/
     ├── make_fixtures.py, fonts/DejaVuSans.ttf
     ├── synthetic/  # мини-регламент (txt/docx/pdf), скан, битый файл, инъекция, без нумерации
     ├── npa/        # регламент 261 (docx/pdf) + SOURCES.md
+    ├── corpus/     # dev-корпус НПА разных типов + снимки структуры (R-21)
     └── llm/        # сценарии FakeLLM (JSON)
 
 evals/             # формат /eval: dataset.jsonl, target.py, config.toml, baseline.json,
-                   # golden/reg261.json, holdout/SELECTED.md
+                   # golden/*.json (3 документа), markers.toml, holdout/SELECTED.md
 docker-compose.yml, Dockerfile (deploy-kit), .env.example, README.md, docs/deploy.md
 ```
 
@@ -267,8 +273,9 @@ docker-compose.yml, Dockerfile (deploy-kit), .env.example, README.md, docs/deplo
 ## Validation Plan (Phase 5)
 
 1. Eval на регламенте 261 по golden-разметке, метрики SC-002…SC-004 и R-17.
-2. Отложенный второй НПА: полный сквозной сценарий без изменения кода (SC-007). Ручной аудит
-   фактов (SC-004). Метрики фиксируются в отчёте.
+2. Отложенная выборка (≥ 3 НПА ≥ 2 типов, включая скан): полный сквозной сценарий без
+   изменения кода (SC-007). Ручной аудит фактов (SC-004). Метрики по каждому документу — в
+   отчёте.
 3. Проверка воспроизводимости экономики и рейтинга (SC-006) и пересчёта без LLM (SC-005).
 4. Сценарии отказа (SC-008) и инъекция (SC-011).
 5. Итог — `docs/validation-report.md`: найденные ошибки, ограничения MVP, предложения.
@@ -284,9 +291,9 @@ docker-compose.yml, Dockerfile (deploy-kit), .env.example, README.md, docs/deplo
    или выбор другого endpoint.
 2. **Экономические умолчания** (ставка 1 200 ₽/ч, накладные 30 %, фонд 1 970 ч/год, 1 000
    случаев/год) — плейсхолдеры. Если есть данные организации, они пойдут в профиль.
-3. **Второй НПА для отложенной выборки.** Предлагаю административный регламент другого
-   ведомства (не Росимущества) плюс одно положение. Выбираю сам и фиксирую реквизиты до этапа
-   валидации, если нет предпочтений.
+3. **Состав dev-корпуса и отложенной выборки** (R-21). Подбираю сам по критериям R-21. Если у
+   тестировщиков есть свои типичные документы или источники, лучше добавить их в dev-корпус
+   (не в отложенную выборку).
 4. **Сервер**: ОС, домен, TLS (Caddy или nginx), доступ — нужны к Phase 6.
 
 ## Complexity Tracking
