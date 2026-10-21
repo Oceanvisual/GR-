@@ -146,20 +146,27 @@ MULTI_APPROVED = [
     "2. Решение комиссии оформляется протоколом.",
 ]
 
-SPPS_EXPORT = [
-    "Документ предоставлен КонсультантПлюс",
-    "www.consultant.ru",
-    "Дата сохранения: 01.06.2024",
-    "Список изменяющих документов",
-    "(в ред. Приказа Управления охраны объектов Северной области от 10.05.2024 N 44)",
-    "I. Общие положения",
-    "1.1. Настоящий Административный регламент устанавливает порядок выдачи пропусков.",
-    "1.2. Срок выдачи пропуска не должен превышать семи рабочих дней.",
-    "(п. 1.2 в ред. Приказа Управления охраны объектов Северной области от 10.05.2024 N 44)",
-    "1.3. Утратил силу. - Приказ Управления охраны объектов Северной области от 10.05.2024 N 44.",
-    "1.4. Пропуск выдаётся специалистом отдела пропусков.",
-    "Документ предоставлен КонсультантПлюс",
-    "Дата сохранения: 01.06.2024",
+SPPS_ACT = "Приказ Управления охраны объектов Северной области от 15.01.2024 N 15"
+SPPS_EDIT = "(в ред. Приказа Управления охраны объектов Северной области от 10.05.2024 N 44)"
+# Layout of a legal-database export (verified on a real DOCX in spike T072): the banner lives in
+# the page header/footer and in a first table; the change list and editorial notes are 1x4 tables.
+SPPS_BODY: list[tuple[str, str]] = [
+    ("table", "Список изменяющих документов " + SPPS_EDIT),
+    ("p", "I. Общие положения"),
+    ("p", "1.1. Настоящий Административный регламент устанавливает порядок выдачи пропусков."),
+    ("p", "1.2. Срок выдачи пропуска не должен превышать семи рабочих дней."),
+    ("p", SPPS_EDIT),
+    (
+        "p",
+        "1.3. Утратил силу. - Приказ Управления охраны объектов Северной области "
+        "от 10.05.2024 N 44.",
+    ),
+    (
+        "table",
+        "КонсультантПлюс: примечание. П. 1.4 применяется с учетом особенностей, установленных "
+        "приказом Управления от 10.05.2024 N 44.",
+    ),
+    ("p", "1.4. Пропуск выдаётся специалистом отдела пропусков."),
 ]
 
 DUP_NUMBERING = [
@@ -283,6 +290,33 @@ def make_simple_docx(name: str, paragraphs: list[str]) -> None:
     for paragraph in paragraphs:
         doc.add_paragraph(paragraph)
     save_docx(doc, name)
+
+
+def _note_table(doc: DocxDocument, text: str) -> None:
+    table = doc.add_table(rows=1, cols=4)
+    table.rows[0].cells[2].text = text
+
+
+def make_spps_docx() -> None:
+    doc = new_docx()
+    section = doc.sections[0]
+    section.header.paragraphs[0].text = (
+        f"{SPPS_ACT} (ред. от 10.05.2024) Документ предоставлен КонсультантПлюс "
+        "Дата сохранения: 01.06.2024"
+    )
+    section.footer.paragraphs[
+        0
+    ].text = "КонсультантПлюс надежная правовая поддержка www.consultant.ru Страница 1 из 1"
+    banner = doc.add_table(rows=3, cols=1)
+    banner.rows[1].cells[0].text = SPPS_ACT
+    banner.rows[2].cells[0].text = "Документ предоставлен КонсультантПлюс"
+    doc.add_paragraph("АДМИНИСТРАТИВНЫЙ РЕГЛАМЕНТ выдачи пропусков")
+    for kind, text in SPPS_BODY:
+        if kind == "table":
+            _note_table(doc, text)
+        else:
+            doc.add_paragraph(text)
+    save_docx(doc, "spps_export.docx")
 
 
 def make_table_docx() -> None:
@@ -420,7 +454,7 @@ def main() -> None:
     make_regulation_docx_manual()
     make_regulation_docx_autonum()
     make_simple_docx("multi_approved.docx", MULTI_APPROVED)
-    make_simple_docx("spps_export.docx", SPPS_EXPORT)
+    make_spps_docx()
     make_table_docx()
     make_tracked_changes_docx()
 
