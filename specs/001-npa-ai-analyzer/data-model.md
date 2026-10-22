@@ -180,7 +180,14 @@ matched_end?: int, original_fragment_id?: str (если relocated), reason?: str
 `issues: list[ValidationIssue]`, где `ValidationIssue = {code, severity: "error" | "warning",
 element_id, message}`. Коды:
 `missing_result`, `no_operations`, `dangling_dependency`, `cycle`, `unverified_quote`,
-`deadline_not_in_quote`, `performer_not_in_quote`, `duplicate_merged`, `relocated_citation`.
+`deadline_not_in_quote`, `performer_not_in_quote`, `duplicate_merged`, `relocated_citation`,
+`invalid_decision_point` (меньше двух исходов или нет операции, после которой принимается
+решение).
+
+### `ProcessModel` (результат S5 на запуск)
+`processes: list[Process]`, `unverified: list[UnverifiedItem]`, `coverage: CoverageReport`.
+`UnverifiedItem = {element_type, element_id, process_id, value, citation?, reason}` — утверждение
+модели, не прошедшее проверку: показывается в блоке «Не подтверждено» и не используется как факт.
 
 ### `CoverageReport` (на запуск)
 `fragments_total`, `fragments_used`, `uncovered_action_fragments: list[str]` — фрагменты, которые

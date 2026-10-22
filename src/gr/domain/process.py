@@ -101,6 +101,7 @@ IssueCode = Literal[
     "performer_not_in_quote",
     "duplicate_merged",
     "relocated_citation",
+    "invalid_decision_point",
 ]
 
 
@@ -157,3 +158,40 @@ class CoverageReport(DomainModel):
         if self.fragments_used > self.fragments_total:
             raise ValueError("fragments_used must not exceed fragments_total")
         return self
+
+
+UnverifiedElement = Literal[
+    "process_name",
+    "goal",
+    "trigger",
+    "result",
+    "participant",
+    "input",
+    "information_system",
+    "deadline",
+    "operation",
+    "performer",
+    "condition",
+    "decision_point",
+    "criterion",
+]
+
+
+class UnverifiedItem(DomainModel):
+    """A claim of the model that did not pass verification: shown in «Не подтверждено», never
+    used as a fact (principle I, FR-025)."""
+
+    element_type: UnverifiedElement
+    element_id: str
+    process_id: str
+    value: str
+    citation: Citation | None = None
+    reason: str
+
+
+class ProcessModel(DomainModel):
+    """The verified result of S3–S5 for one run (api.md `ProcessMap`, without the overlay)."""
+
+    processes: list[Process] = []
+    unverified: list[UnverifiedItem] = []
+    coverage: CoverageReport

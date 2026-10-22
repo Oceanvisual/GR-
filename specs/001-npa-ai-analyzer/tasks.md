@@ -560,7 +560,7 @@ UI карты процессов.
     Сценарий FakeLLM «обрезанный ответ» → деление окна → успех.
   - **Тесты**: `test_detailing.py`.
 
-- [ ] T031 [US2] S5 Validate — `src/gr/validation/`
+- [X] T031 [US2] S5 Validate — `src/gr/validation/`
   - **Цель**: FR-024…FR-028 (llm.md § S4 «Валидация»).
     Трассировка: FR-023, FR-026.
   - **Зависит**: T024, T025, T026, T030

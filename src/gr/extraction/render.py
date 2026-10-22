@@ -93,12 +93,27 @@ def _paths(fragments: Sequence[Fragment]) -> dict[str, str]:
     return paths
 
 
+def in_force(fragments: Sequence[Fragment]) -> set[str]:
+    """Ids of fragments neither repealed nor inside a repealed one: the only text the model
+    sees (T031)."""
+    by_id = {f.id: f for f in fragments}
+    alive: set[str] = set()
+    for fragment in sorted(fragments, key=lambda f: f.order):
+        parent = fragment.parent_id
+        if not fragment.repealed and (parent is None or parent in alive or parent not in by_id):
+            alive.add(fragment.id)
+    return alive
+
+
 def with_subtrees(fragments: Sequence[Fragment], ids: Iterable[str]) -> list[Fragment]:
-    """The given fragments and all their descendants, once each, in document order."""
+    """The given fragments and all their descendants in force, once each, in document order."""
     wanted = set(ids)
     by_id = {f.id: f for f in fragments}
+    alive = in_force(fragments)
     selected: list[Fragment] = []
     for fragment in sorted(fragments, key=lambda f: f.order):
+        if fragment.id not in alive:
+            continue
         node: Fragment | None = fragment
         while node is not None and node.id not in wanted:
             node = by_id.get(node.parent_id or "")

@@ -10,7 +10,13 @@ from dataclasses import dataclass, field
 
 from gr.domain.document import Fragment
 from gr.domain.enums import FragmentKind
-from gr.extraction.render import ChunkingConfig, FragmentAliases, escape, load_chunking
+from gr.extraction.render import (
+    ChunkingConfig,
+    FragmentAliases,
+    escape,
+    in_force,
+    load_chunking,
+)
 
 # Continuations of a point and lines of form templates: their start is enough to place them.
 _MINOR = frozenset({FragmentKind.PARAGRAPH, FragmentKind.LIST_ITEM})
@@ -35,8 +41,10 @@ class _Outline:
         self.cfg = cfg
         self.aliases = aliases
         self.children: dict[str | None, list[Fragment]] = {}
+        alive = in_force(fragments)  # repealed text is not offered to the model
         for fragment in sorted(fragments, key=lambda f: f.order):
-            self.children.setdefault(fragment.parent_id, []).append(fragment)
+            if fragment.id in alive:
+                self.children.setdefault(fragment.parent_id, []).append(fragment)
 
     def line(self, fragment: Fragment, depth: int) -> _Line:
         limit = (
