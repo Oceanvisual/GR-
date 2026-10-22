@@ -1,6 +1,7 @@
 """Baseline must never bless incomplete runs or unreviewed annotations."""
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -153,3 +154,27 @@ def test_a_discovery_model_without_tariff_fails_before_llm(
     monkeypatch.setattr(run, "load_config", lambda: {"live_budget": rates})
     monkeypatch.setattr(run, "run_documents", lambda *a, **kw: pytest.fail("LLM invoked"))
     assert run.main(["--budget-usd", "1", "--discovery-model", "unpriced"]) == 2
+
+
+def test_the_discovery_model_and_its_tariff_reach_the_run(
+    prepared: Outcome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, object] = {}
+
+    async def documents(cases: list[Case], *, cached: bool, budget: Budget | None = None,
+                        s6: bool = False, discovery_model: str | None = None,
+                        ) -> dict[str, Outcome | str]:  # fmt: skip
+        seen.update(budget=budget, discovery_model=discovery_model)
+        return {"toy": prepared}
+
+    rates = {"model": "cheap", "input_per_mtok": "1", "output_per_mtok": "1",
+             "models": {"big": {"input_per_mtok": "4", "output_per_mtok": "10"}}}  # fmt: skip
+    monkeypatch.setattr(run, "load_config", lambda: {"live_budget": rates})
+    monkeypatch.setattr(run, "run_documents", documents)
+    run.main(["--budget-usd", "1", "--discovery-model", "big"])
+    assert seen["discovery_model"] == "big"
+    assert isinstance(seen["budget"], Budget)
+    assert seen["budget"].other_models == {"big": (Decimal("4"), Decimal("10"))}
+    assert run.main(["--rescore", "missing.json", "--discovery-model", "big"]) == 2
+    with pytest.raises(SystemExit):  # argparse: «не число», not a traceback
+        run.main(["--budget-usd", "0,5x"])

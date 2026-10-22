@@ -107,7 +107,9 @@ LLM_MODEL_ANALYSIS=<имя модели в vLLM>
 
 `LLM_STRUCTURED_MODE` задаёт способ получения JSON: `json_schema`, `json_object` или `auto`
 (по умолчанию). Стоимость запуска считается, если заданы `LLM_PRICE_INPUT_PER_MTOK` и
-`LLM_PRICE_OUTPUT_PER_MTOK` (за 1 млн токенов). Этапы и рассуждение моделей настраиваются в
+`LLM_PRICE_OUTPUT_PER_MTOK` (за 1 млн токенов) — один тариф на все вызовы запуска; счёт
+провайдера из ответов (OpenRouter отдаёт `usage.cost`) точнее при разных моделях на этапах и
+имеет приоритет. Этапы и рассуждение моделей настраиваются в
 `src/gr/config/llm.toml`.
 
 ### Пользователи

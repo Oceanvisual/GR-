@@ -190,6 +190,8 @@ class OpenAICompatibleLLM:
                 model, schema, messages, max_tokens, mode, options, temperature
             )
         except openai.BadRequestError as exc:
+            log.warning("llm.rejected", stage=stage.value, model=model, mode=mode,
+                        reason=str(getattr(exc, "message", exc))[:200])  # fmt: skip
             if not (self._may_fall_back and mode == "json_schema"):
                 raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
             rejected = getattr(exc, "code", None) or type(exc).__name__
@@ -198,9 +200,11 @@ class OpenAICompatibleLLM:
                 response = await self._request(
                     model, schema, messages, max_tokens, "json_object", options, temperature
                 )
-            except openai.BadRequestError:
+            except openai.BadRequestError as again:
                 # Rejected either way: the request itself is at fault (context length, model
                 # id, max_tokens), not the structured mode, which therefore stays as it was.
+                log.warning("llm.rejected", stage=stage.value, model=model, mode="json_object",
+                            reason=str(getattr(again, "message", again))[:200])  # fmt: skip
                 raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
             log.warning("llm.structured_mode_fallback", stage=stage.value, schema=schema.__name__,
                         to="json_object", reason=rejected)  # fmt: skip

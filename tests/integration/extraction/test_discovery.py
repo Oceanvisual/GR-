@@ -221,3 +221,25 @@ async def test_a_fragment_holding_a_process_is_not_outside_processes() -> None:
     }
     result = await run(FakeLLM({StageName.DISCOVER: [reply]}))
     assert result.non_process_fragment_ids == ids("разд. IV")
+
+
+async def test_a_related_mention_does_not_overturn_a_non_process_section() -> None:
+    # T064 review: one context reference inside «разд. II» must not turn the section the model
+    # excluded into coverage gaps; the related fragment itself counts as used.
+    aliases = FragmentAliases(document().fragments)
+    labels = ("п. 3.2", "п. 2.1", "разд. II", "разд. IV")
+    a = dict(zip(labels, (aliases.alias(i) for i in ids(*labels)), strict=True))
+    reply = {
+        "processes": [
+            {
+                "key": "p1",
+                "name": "Приём заявления",
+                "core_refs": [a["п. 3.2"]],
+                "related_refs": [a["п. 2.1"]],
+                "evidence": {"text": "x", "ref": a["п. 3.2"], "quote": "принимает заявление"},
+            }
+        ],
+        "non_process_refs": [a["разд. II"], a["п. 2.1"], a["разд. IV"]],
+    }
+    result = await run(FakeLLM({StageName.DISCOVER: [reply]}))
+    assert result.non_process_fragment_ids == ids("разд. II", "разд. IV")

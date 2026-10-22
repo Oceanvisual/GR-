@@ -1,7 +1,7 @@
 """Storage over a temporary SQLite file (T009)."""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -24,6 +24,9 @@ from gr.domain.ids import new_id
 from gr.domain.priority import PriorityConfig, PriorityConfigVersion
 from gr.domain.review import ReviewEvent
 from gr.domain.run import AnalysisRun, ErrorInfo
+from gr.llm.cache import CachedLLM
+from gr.llm.factory import build_llm
+from gr.settings import Settings
 from gr.storage import db as tables
 from gr.storage.db import Database, SchemaVersionError
 from gr.storage.files import FileStore
@@ -399,3 +402,26 @@ async def test_stage_items_are_per_run_stage_and_written_once(repos: Repositorie
     assert await repos.stage_items.for_stage("run_1", StageName.DISCOVER).get("proc_1") is None
     with pytest.raises(ConflictError):
         await detail.put("proc_1", {"windows": 2})
+
+
+async def test_usage_cost_is_the_sum_of_provider_bills(repos: Repositories) -> None:
+    def billed(n: int, cost: float) -> LlmCall:
+        return _call("run_c", n).model_copy(update={"response": {"usage": {"cost": cost}}})
+
+    await repos.llm_calls.add(billed(0, 0.0012))
+    await repos.llm_calls.add(billed(1, 0.003))
+    assert (await repos.llm_calls.usage_for_run("run_c")).cost == Decimal("0.0042")
+    await repos.llm_calls.add(_call("run_c", 2))  # answered without a bill: the sum is unknown
+    assert (await repos.llm_calls.usage_for_run("run_c")).cost is None
+
+
+async def test_the_cache_is_keyed_by_the_model_of_each_stage(
+    repos: Repositories, make_settings: Callable[..., Settings]
+) -> None:
+    settings = make_settings(llm_data_policy="local_only", llm_base_url="http://localhost:9999/v1",
+                             llm_model_extraction="m-extract", llm_model_analysis="m-analyze",
+                             llm_model_discovery="m-discover")  # fmt: skip
+    llm = build_llm(settings, repos)
+    assert isinstance(llm, CachedLLM)
+    assert llm.model_for(StageName.DISCOVER) == "m-discover"
+    assert llm.model_for(StageName.DETAIL) == "m-extract"

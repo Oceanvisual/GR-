@@ -28,7 +28,8 @@ s6_reference_integrity = 1.0
 
 [judge]
 # LLM-as-judge of S6 (T066): a cheap model, the endpoint of the environment. With
-# --budget-usd it must be the model of [live_budget]. Verdicts are cached in judge_cache.json.
+# --budget-usd it must be priced in [live_budget] or [live_budget.models]. Verdicts are cached
+# in judge_cache.json.
 model = "anthropic/claude-haiku-5.5"
 
 [live_budget]

@@ -43,41 +43,45 @@ async def ask(llm: replay.ReplayLLM) -> str:
 
 
 async def test_fenced_answer_replays_without_network() -> None:
-    llm = replay.ReplayLLM([call('```json\n{"text":"ok"}\n```')], OPTIONS)
+    llm = replay.ReplayLLM([call('```json\n{"text":"ok"}\n```')], lambda _m: OPTIONS)
     assert await ask(llm) == "ok"
 
 
 async def test_repair_used_only_if_first_response_invalid() -> None:
-    llm = replay.ReplayLLM([call("invalid"), call('{"text":"repaired"}')], OPTIONS)
+    llm = replay.ReplayLLM([call("invalid"), call('{"text":"repaired"}')], lambda _m: OPTIONS)
     assert await ask(llm) == "repaired"
 
 
 async def test_prefer_first_valid_response_to_repair() -> None:
-    llm = replay.ReplayLLM([call('{"text":"first"}'), call('{"text":"second"}')], OPTIONS)
+    llm = replay.ReplayLLM(
+        [call('{"text":"first"}'), call('{"text":"second"}')], lambda _m: OPTIONS
+    )
     assert await ask(llm) == "first"
 
 
 @pytest.mark.parametrize("options", [OPTIONS, {}])
 async def test_request_or_options_mismatch_fails_closed(options: dict[str, Any]) -> None:
-    llm = replay.ReplayLLM([call('{"text":"ok"}', user="other")], options)
+    llm = replay.ReplayLLM([call('{"text":"ok"}', user="other")], lambda _m: options)
     with pytest.raises(replay.ReplayError, match="request_hash"):
         await ask(llm)
 
 
 async def test_options_are_part_of_identity() -> None:
-    llm = replay.ReplayLLM([call('{"text":"ok"}')], {})
+    llm = replay.ReplayLLM([call('{"text":"ok"}')], lambda _m: {})
     with pytest.raises(replay.ReplayError, match="request_hash"):
         await ask(llm)
 
 
 async def test_invalid_twice_is_not_a_success() -> None:
-    llm = replay.ReplayLLM([call("invalid"), call("invalid"), call('{"text":"third"}')], OPTIONS)
+    llm = replay.ReplayLLM(
+        [call("invalid"), call("invalid"), call('{"text":"third"}')], lambda _m: OPTIONS
+    )
     with pytest.raises(LLMInvalidOutputError):
         await ask(llm)
 
 
 async def test_truncated_response_keeps_split_signal() -> None:
-    llm = replay.ReplayLLM([call('{"text":"ok"}', finish="length")], OPTIONS)
+    llm = replay.ReplayLLM([call('{"text":"ok"}', finish="length")], lambda _m: OPTIONS)
     with pytest.raises(LLMOutputTruncatedError):
         await ask(llm)
 

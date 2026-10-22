@@ -21,7 +21,7 @@ from gr.domain.run import AnalysisRun, UsageTotals
 from gr.extraction.render import FragmentAliases
 from gr.llm.base import LLMTimeoutError
 from gr.llm.fake import FakeLLM
-from gr.services.analyses import price
+from gr.services.analyses import price, run_config
 from gr.settings import Settings
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -223,3 +223,17 @@ def test_price_from_settings(make_settings: Callable[..., Settings]) -> None:
         ),
     )
     assert priced.cost == Decimal("0.0066")
+
+
+def test_run_config_records_the_discovery_model(make_settings: Callable[..., Settings]) -> None:
+    assert "discovery" not in run_config(make_settings()).models
+    models = run_config(make_settings(llm_model_discovery="m-discover")).models
+    assert models["discovery"] == "m-discover"
+
+
+def test_the_providers_bill_wins_over_the_tariff(make_settings: Callable[..., Settings]) -> None:
+    billed = UsageTotals(calls=1, in_tokens=10, out_tokens=10, cost=Decimal("0.5"))
+    settings = make_settings(
+        llm_price_input_per_mtok=Decimal("1"), llm_price_output_per_mtok=Decimal("1")
+    )
+    assert price(billed, settings).cost == Decimal("0.5")

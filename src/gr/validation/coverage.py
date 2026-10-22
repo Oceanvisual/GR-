@@ -33,7 +33,8 @@ def describes_action(text: str) -> bool:
 
 
 def _bare_heading(fragment: Fragment) -> bool:
-    return bool(fragment.heading) and fragment.text.split() == (fragment.heading or "").split()
+    heading = fragment.heading or ""
+    return bool(heading) and fragment.text.split() == heading.split()
 
 
 def coverage_report(
@@ -58,5 +59,5 @@ def coverage_report(
         fragments_total=len(counted),
         fragments_used=sum(1 for f in counted if f.id in used),
         uncovered_action_fragments=uncovered,
-        non_process_fragments=[f.id for f in counted if f.id in non_process],
+        non_process_fragments=[f.id for f in counted if f.id in non_process and f.id not in used],
     )

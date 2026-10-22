@@ -415,3 +415,14 @@ async def test_fence_does_not_hide_schema_errors_or_extra_content(
     with pytest.raises(LLMInvalidOutputError):
         await ask(make_llm(llm_settings(), recorder))
     assert len(recorder.requests) == 2
+
+
+def test_cache_keys_differ_by_the_model_of_the_stage(llm_settings: Callable[..., Settings]) -> None:
+    # T064 review: S3 on its own model must never read the cache of the extraction model.
+    def key(llm: OpenAICompatibleLLM, stage: StageName) -> str:
+        return request_hash(llm.model_for(stage), Answer, "s", "u", llm.options_for(stage))
+
+    split = make_llm(llm_settings(llm_model_discovery="m-discover"), Recorder())
+    assert key(split, StageName.DISCOVER) != key(split, StageName.DETAIL)
+    plain = make_llm(llm_settings(), Recorder())
+    assert key(plain, StageName.DISCOVER) == key(plain, StageName.DETAIL)

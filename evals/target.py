@@ -132,13 +132,22 @@ def to_prediction(model: ProcessModel, fragments: Sequence[Fragment], full_text:
 def llm_overrides(
     budget: Budget | None, *, s6: bool, discovery_model: str | None
 ) -> dict[str, Any]:
-    """Settings over the environment: a budget pins its default model; S3 may have its own."""
+    """Settings over the environment: a budget pins its models; S3 may have its own."""
     overrides: dict[str, Any] = {}
     if budget is not None:
-        overrides = {"llm_model_extraction": budget.allowed_model, "llm_max_retries": 0}
+        overrides = {
+            "llm_model_extraction": budget.allowed_model,
+            # None pins S3 to the extraction model: LLM_MODEL_DISCOVERY of the environment must
+            # not reach a budgeted run past the tariff check (--discovery-model).
+            "llm_model_discovery": discovery_model,
+            "llm_max_retries": 0,
+            # A reservation per request in flight: in parallel they hit the limit before the
+            # first answer arrives.
+            "llm_concurrency": 1,
+        }
         if s6:  # S6 runs on the analysis model: the budget's default model
             overrides["llm_model_analysis"] = budget.allowed_model
-    if discovery_model:  # LLM_MODEL_DISCOVERY, the rest unchanged
+    elif discovery_model:  # LLM_MODEL_DISCOVERY, the rest unchanged
         overrides["llm_model_discovery"] = discovery_model
     return overrides
 

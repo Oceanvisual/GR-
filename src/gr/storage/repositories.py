@@ -6,6 +6,7 @@ expose no update or delete.
 
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -410,7 +411,10 @@ class LlmCallRepository(_Repository):
             return [LlmCall.model_validate(dict(row)) for row in rows]
 
     async def usage_for_run(self, run_id: str) -> UsageTotals:
+        """Totals over the run; `cost` is the sum of the provider's bills (`usage.cost` in the
+        responses) when every answered call carried one — exact across models — else None."""
         c = t.llm_calls.c
+        billed = func.json_extract(c.response, "$.usage.cost")
         async with self.db.read() as conn:
             row = (
                 await conn.execute(
@@ -419,11 +423,17 @@ class LlmCallRepository(_Repository):
                         func.coalesce(func.sum(c.in_tokens), 0),
                         func.coalesce(func.sum(c.out_tokens), 0),
                         func.coalesce(func.max(c.tokens_estimated), 0),
+                        func.count(c.response),
+                        func.count(billed),
+                        func.coalesce(func.sum(billed), 0),
                     ).where(c.run_id == run_id)
                 )
             ).one()
+        cost = None
+        if row[4] and row[4] == row[5]:
+            cost = Decimal(str(row[6])).quantize(Decimal("0.0001"))
         return UsageTotals(
-            calls=row[0], in_tokens=row[1], out_tokens=row[2], estimated=bool(row[3])
+            calls=row[0], in_tokens=row[1], out_tokens=row[2], estimated=bool(row[3]), cost=cost
         )
 
 

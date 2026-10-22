@@ -11,7 +11,7 @@
 {% endif %}
 <p class="muted small">
   Запуск <code>{{ run.id }}</code> · {{ run.created_at.strftime("%d.%m.%Y %H:%M") }} · {{ run.created_by }}
-  {% if run.config_snapshot.models.extraction %} · модель {{ run.config_snapshot.models.extraction }}{% endif %}
+  {% if run.config_snapshot.models.extraction %} · модель {{ run.config_snapshot.models.extraction }}{% if run.config_snapshot.models.discovery %} (S3: {{ run.config_snapshot.models.discovery }}){% endif %}{% endif %}
 </p>
 <section class="card">
   {% include "partials/run_status.html" %}

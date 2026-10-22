@@ -43,3 +43,14 @@ def test_a_bare_heading_is_not_a_gap() -> None:
     lead_in = fragments(**{"разд. III": {"heading": None, "text": title}})
     assert fid("разд. III") not in coverage_report(heading, [], [], []).uncovered_action_fragments
     assert fid("разд. III") in coverage_report(lead_in, [], [], []).uncovered_action_fragments
+
+
+def test_a_heading_with_a_lead_in_is_a_gap() -> None:
+    # A heading alone is structure; the same words followed by an action are a gap.
+    heading, action = "Регистрация", "Специалист регистрирует заявление"
+    lead_in = fragments(**{"разд. III": {"heading": heading, "text": f"{heading}. {action}"}})
+    assert fid("разд. III") in coverage_report(lead_in, [], [], []).uncovered_action_fragments
+    same = fragments(
+        **{"разд. III": {"heading": action, "text": f"  {action.replace(' ', chr(10))}  "}}
+    )
+    assert fid("разд. III") not in coverage_report(same, [], [], []).uncovered_action_fragments

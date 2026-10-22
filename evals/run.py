@@ -8,6 +8,8 @@
     uv run python -m evals.run --strict            # also the targets of SC-003 / SC-002
     uv run python -m evals.run --s6                # with S6: the initiatives (T066)
     uv run python -m evals.run --judge             # S6 and the LLM judge, verdicts cached
+    uv run python -m evals.run --budget-usd 2      # live run under a cost limit ([live_budget])
+    uv run python -m evals.run --discovery-model anthropic/claude-sonnet-5.5  # S3 on its own model
 
 The model comes from the environment (LLM_MODEL_EXTRACTION and the rest), as for the service.
 Exit: 0 — fine, 1 — regression, ceiling, failed target or a document not analysed,
@@ -173,6 +175,8 @@ def _main(args: argparse.Namespace) -> int:
             )
         config = load_config()
         budget = None
+        if args.discovery_model and args.rescore:
+            raise ConfigError("--discovery-model не применяется к --rescore")
         if args.budget_usd is not None:
             if args.cached or args.rescore:
                 raise ConfigError("--budget-usd применяется только к новому живому прогону")
@@ -223,7 +227,7 @@ def _main(args: argparse.Namespace) -> int:
         for doc_id, outcome in outcomes.items():
             if not isinstance(outcome, str):
                 scores[doc_id] = score_document(goldens[doc_id], outcome.prediction)
-    except (ConfigError, ValueError, KeyError) as exc:
+    except (ConfigError, ValueError, KeyError, ArithmeticError) as exc:
         print(f"eval: {exc}", file=sys.stderr)
         return 2
 
@@ -265,7 +269,8 @@ def _main(args: argparse.Namespace) -> int:
     print_documents(scores, outcomes)
     print_s6(per_document)
 
-    baseline = None if partial else _load_baseline([case.id for case in cases])
+    run_models = next((o.models for o in outcomes.values() if not isinstance(o, str)), None)
+    baseline = None if partial else _load_baseline([case.id for case in cases], run_models)
     problems, rows = gate(summary, baseline, config, strict=args.strict)
     print("\n| метрика | baseline | сейчас | Δ | статус |\n|---|---|---|---|---|")
     for row in rows:
@@ -309,7 +314,9 @@ def _main(args: argparse.Namespace) -> int:
     return 0
 
 
-def _load_baseline(documents: list[str]) -> dict[str, float | None] | None:
+def _load_baseline(
+    documents: list[str], models: dict[str, str] | None = None
+) -> dict[str, float | None] | None:
     """The baseline of these documents; one of another eval set compares nothing (a new
     document shifts every `.min` and `.mean`), and the next full run replaces it."""
     if not BASELINE.exists():
@@ -319,6 +326,9 @@ def _load_baseline(documents: list[str]) -> dict[str, float | None] | None:
         print(f"baseline снят на другом наборе ({', '.join(sorted(stored.get('documents', {})))}): "
               "без сравнения")  # fmt: skip
         return None
+    if models and stored.get("models") and stored["models"] != models:
+        print(f"⚠ baseline снят на моделях {stored['models']}, сейчас {models}: "
+              "разница метрик может быть делом модели")  # fmt: skip
     metrics: dict[str, float | None] = stored["metrics"]
     return metrics
 
@@ -343,6 +353,13 @@ def _write_baseline(
     BASELINE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", "utf-8")
 
 
+def _decimal(text: str) -> Decimal:
+    try:
+        return Decimal(text.replace(",", "."))
+    except ArithmeticError:
+        raise argparse.ArgumentTypeError(f"не число: {text}") from None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="evals.run", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -362,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         "--judge", action="store_true", help="S6 и LLM-судья (модель [judge]); вердикты в кэше"
     )
     parser.add_argument(
-        "--budget-usd", type=Decimal, help="лимит живого прогона; тарифы live_budget"
+        "--budget-usd", type=_decimal, help="лимит живого прогона; тарифы live_budget"
     )
     parser.add_argument(
         "--discovery-model", metavar="MODEL", help="своя модель для S3 (LLM_MODEL_DISCOVERY)"

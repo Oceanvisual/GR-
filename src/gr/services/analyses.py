@@ -107,7 +107,10 @@ class Outputs:
 
 
 def price(usage: UsageTotals, settings: Settings) -> UsageTotals:
-    """Usage with its cost from LLM_PRICE_* (per million tokens), if both are set."""
+    """Usage with its cost: the provider's bill when every call carried one (OpenRouter), else
+    LLM_PRICE_* (per million tokens, one tariff for every model of the run) if both are set."""
+    if usage.cost is not None:
+        return usage
     if settings.llm_price_input_per_mtok is None or settings.llm_price_output_per_mtok is None:
         return usage
     cost = (

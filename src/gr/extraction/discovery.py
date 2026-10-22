@@ -306,8 +306,9 @@ async def discover(
         )
     used = {i for p in processes for i in (*p.core_fragment_ids, *p.related_fragment_ids)}
     # A non-process fragment takes its subtree (coverage, FR-028): one that holds a process —
-    # «body» was answered on reg261 — would hide every gap in the act.
-    holding = {a for i in used for a in mapper.ancestors(i)}
+    # «body» was answered on reg261 — would hide every gap in the act. Only action fragments
+    # count: a related mention is context and does not overturn the verdict for its section.
+    holding = {a for p in processes for i in p.core_fragment_ids for a in mapper.ancestors(i)}
     outside = sorted(
         {i for i in non_process if i not in used and i not in holding},
         key=mapper.order.__getitem__,

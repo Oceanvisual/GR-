@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from evals.budget import Budget, BudgetExceeded
+from evals.target import llm_overrides
 
 
 def budget(limit: str = "3") -> Budget:
@@ -142,11 +143,29 @@ def test_a_second_model_is_reserved_at_its_own_price() -> None:
         b.reserve("other", 1000, 1000)
 
 
-def test_a_budget_keeps_the_discovery_model() -> None:
-    # T059 follow-up: the budget's overrides once replaced --discovery-model, S3 ran on Haiku.
-    from evals.target import llm_overrides
-
+def test_a_budget_pins_the_discovery_model() -> None:
+    # T059 follow-up: the budget's overrides once replaced --discovery-model, S3 ran on Haiku;
+    # and without the flag LLM_MODEL_DISCOVERY of the environment slipped past the tariff.
     overrides = llm_overrides(budget(), s6=True, discovery_model="big")
     assert overrides["llm_model_discovery"] == "big"
     assert overrides["llm_model_extraction"] == overrides["llm_model_analysis"] == "m"
-    assert "llm_model_discovery" not in llm_overrides(budget(), s6=False, discovery_model=None)
+    assert overrides["llm_concurrency"] == 1  # reservations in flight would hit the limit
+    assert llm_overrides(budget(), s6=False, discovery_model=None)["llm_model_discovery"] is None
+    assert "llm_model_discovery" not in llm_overrides(None, s6=False, discovery_model=None)
+    assert llm_overrides(None, s6=False, discovery_model="big") == {"llm_model_discovery": "big"}
+
+
+def test_a_rejected_request_releases_its_reservation() -> None:
+    b = budget()
+    bound = b.reserve("m", 1000, 1000)
+    b.release(bound)
+    assert b.committed_usd == 0 and b.requests == 1
+
+
+def test_other_model_prices_are_validated_and_reported() -> None:
+    with pytest.raises(ValueError):
+        Budget(Decimal("3"), Decimal("1"), Decimal("1"), "m", {"big": (Decimal(0), Decimal(1))})
+    report = Budget(
+        Decimal("3"), Decimal("1"), Decimal("1"), "m", {"big": (Decimal(4), Decimal(10))}
+    )
+    assert report.report()["big (input/output per Mtok)"] == "4/10"

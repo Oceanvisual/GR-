@@ -9,6 +9,7 @@ import asyncio
 import json
 import sqlite3
 import sys
+from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -55,9 +56,11 @@ class SourceReport(BaseModel):
 class ReplayLLM:
     """Recorded responses in attempt order, matched against the complete request hash."""
 
-    def __init__(self, calls: list[RecordedCall], options: dict[str, Any]) -> None:
+    def __init__(
+        self, calls: list[RecordedCall], options_for: Callable[[str], dict[str, Any]]
+    ) -> None:
         self.calls = calls
-        self.options = options
+        self.options_for = options_for  # request options of the model of a recorded call
         self.requests = 0
 
     async def generate[T: BaseModel](
@@ -71,7 +74,10 @@ class ReplayLLM:
         run_id: str,
     ) -> LLMResult[T]:
         self.requests += 1
-        keys = {request_hash(c.model, schema, system, user, self.options) for c in self.calls}
+        keys = {
+            request_hash(c.model, schema, system, user, self.options_for(c.model))
+            for c in self.calls
+        }
         matches = [c for c in self.calls if c.request_hash in keys]
         if not matches:
             raise ReplayError("Нет точного request_hash: изменились входные данные или настройки.")
@@ -165,7 +171,9 @@ async def replay_case(
     prompt = load_prompt("detail")
     if config.prompt_versions.get("detail") != prompt.version:
         raise ReplayError(f"{case.id}: изменилась версия промпта детализации.")
-    llm = ReplayLLM(snapshot.calls, request_options(StageName.DETAIL, provider_host))
+    llm = ReplayLLM(
+        snapshot.calls, lambda model: request_options(StageName.DETAIL, provider_host, model)
+    )
     detail = await detail_processes(
         snapshot.discovery,
         snapshot.fragments,

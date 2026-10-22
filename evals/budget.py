@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+import openai
 from pydantic import BaseModel
 
 from gr.llm.base import LLMError, LLMUnavailableError
@@ -57,6 +58,10 @@ class Budget:
         self.committed_usd += bound
         self.requests += 1
         return bound
+
+    def release(self, reserved: Decimal) -> None:
+        """The provider refused the request outright (400): nothing ran, nothing is billed."""
+        self.committed_usd -= reserved
 
     def settle(self, reserved: Decimal, cost: object) -> None:
         if cost is None:
@@ -138,8 +143,13 @@ class BudgetedLLM(OpenAICompatibleLLM):
         ).encode("utf-8")
         reserved = self.budget.reserve(model, len(encoded), max_tokens)
         # A failed request retains its reservation: an interrupted response might be billed.
-        response = await super()._request(
-            model, schema, messages, max_tokens, mode, options, temperature
-        )
+        # A rejected one (400) does not: nothing ran, and the json_object retry reserves anew.
+        try:
+            response = await super()._request(
+                model, schema, messages, max_tokens, mode, options, temperature
+            )
+        except openai.BadRequestError:
+            self.budget.release(reserved)
+            raise
         self.budget.settle(reserved, response.raw.get("usage", {}).get("cost"))
         return response
