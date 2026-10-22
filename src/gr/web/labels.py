@@ -1,6 +1,6 @@
 """Russian labels for statuses shown on the screens."""
 
-from gr.domain.enums import OcrStatus, RunStatus, TextLayerStatus
+from gr.domain.enums import NumberingProfile, OcrStatus, RunStatus, TextLayerStatus
 
 METADATA_FIELDS: dict[str, str] = {
     "act_type": "Вид акта",
@@ -35,6 +35,12 @@ RUN: dict[str, str] = {
     RunStatus.FAILED: "ошибка",
     RunStatus.INTERRUPTED: "прерван",
     RunStatus.CANCELLED: "отменён",
+}
+
+PROFILE: dict[str, str] = {
+    NumberingProfile.LAW: "закон: статьи и части",
+    NumberingProfile.REGULATION: "регламент: пункты и подпункты",
+    NumberingProfile.GENERIC: "без профиля нумерации",
 }
 
 STRATEGY: dict[str, str] = {
@@ -126,6 +132,7 @@ LABELS = {
     "ocr": OCR,
     "run": RUN,
     "strategy": STRATEGY,
+    "profile": PROFILE,
     "stage": STAGE,
     "stage_status": STAGE_STATUS,
     "layer": LAYER,

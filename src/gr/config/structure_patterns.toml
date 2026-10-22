@@ -9,6 +9,10 @@ max_chars = 400
 
 # «Приложение N 1 к приказу …» opens an approved document of a composite act, like «УТВЕРЖДЕН».
 act_appendix = '(?i)^приложение\b.{0,40}?\bк\s+(?:приказу|постановлению|распоряжению|решению|указу)\b'
+# The same header split into paragraphs: «Приложение» (or «Приложение N 2») alone, and the next
+# paragraph starting «к постановлению главы …».
+bare_appendix = '(?i)^приложение(?:\s*(?:n|№)?\s*\d{1,3})?\.?$'
+act_appendix_tail = '(?i)^к\s+(?:приказу|постановлению|распоряжению|решению|указу)\b'
 
 [appendix]
 # «Приложение N 1 …», «Приложение № 2», «Приложение 3», «Приложение к Порядку». Not «Приложение:».
@@ -22,6 +26,12 @@ max_chars = 400
 
 [chapter]
 pattern = '^(?:[Гг]лава|ГЛАВА)\s+(?P<number>\d{1,3}(?:\.\d{1,2})?|[IVXLC]+)\.?\s*(?P<title>.*)$'
+max_chars = 400
+
+[paragraph_section]
+# «§ 1. Предмет регулирования», «§ 2»: a level between a chapter and its articles; numbering
+# restarts in every chapter. Only at the start of a paragraph, never «… § 3 Положения …».
+pattern = '^§\s*(?P<number>\d{1,3}(?:\.\d{1,2})?)\.?(?:\s+(?P<title>\S.*))?$'
 max_chars = 400
 
 [article]

@@ -5,6 +5,7 @@ Sections, chapters, articles with parts, unnumbered subsection headings, decimal
 """
 
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from gr.domain.enums import FragmentKind
 from gr.structure.numbering import (
@@ -19,6 +20,7 @@ from gr.structure.patterns import (
     Match,
     classify,
     looks_like_heading,
+    opens_act_appendix,
     roman_to_int,
     starts_lowercase,
 )
@@ -28,6 +30,14 @@ MAX_HEADING_LINES = 12  # headings broken into lines by hand
 MAX_CENTRED_HEADING_LINES = 30  # while lines stay centred like the first one
 _DATE_OR_NUMBER = ("от ", " N ", "№")
 _K = FragmentKind
+_DIVISIONS = (Marker.SECTION, Marker.CHAPTER, Marker.PARAGRAPH_SECTION)
+# The divisions a new one of each kind may nest in, nearest first: a chapter in a section, a «§»
+# in a chapter (or a section); a section always opens at the top of its scope.
+_NESTS_IN = {
+    Marker.SECTION: (),
+    Marker.CHAPTER: (_K.SECTION,),
+    Marker.PARAGRAPH_SECTION: (_K.CHAPTER, _K.SECTION),
+}
 
 
 @dataclass
@@ -47,6 +57,9 @@ class RegulationBuilder:
         self.root = Node(_K.ROOT, "", "документ", ref="")
         self.warnings: list[str] = []
         self.matches = [classify(unit.text) for unit in units]
+        for i, (unit, following) in enumerate(pairwise(units)):
+            if not unit.in_table and opens_act_appendix(unit.text, following.text):
+                self.matches[i] = Match(Marker.ACT_APPENDIX)
         self.structured = 0
         self.rejected = 0
         self.duplicates = 0
@@ -112,7 +125,7 @@ class RegulationBuilder:
             return self._article(i, match)
         if match.marker == Marker.APPENDIX and not unit.in_table:
             return self._appendix(i)
-        if match.marker in (Marker.SECTION, Marker.CHAPTER) and not unit.in_table:
+        if match.marker in _DIVISIONS and not unit.in_table:
             return self._section(i, match)
         if self._is_heading(i):
             return self._subsection(i)
@@ -184,30 +197,42 @@ class RegulationBuilder:
         self.structured += 1
         return end
 
+    def _division_parent(self, marker: Marker) -> Node:
+        """The nearest open division this one nests in, or the top of the scope."""
+        node: Node | None = self.container
+        while node is not None and node is not self.scope_root:
+            if node.kind in _NESTS_IN[marker]:
+                return node
+            node = node.parent
+        return self.scope_root
+
     def _section(self, i: int, match: Match) -> int:
         number = match.number or ""
         is_chapter = match.marker == Marker.CHAPTER
-        parent = self.scope_root
-        if is_chapter and self.container.kind == _K.SECTION:
-            parent = self.container
-        elif is_chapter and self.container.kind == _K.CHAPTER and self.container.parent:
-            parent = self.container.parent
-        kind = _K.CHAPTER if is_chapter else _K.SECTION
-        label = f"гл. {number}" if is_chapter else f"разд. {number}"
-        node = parent.add(
-            Node(
-                kind,
-                ("ch" if is_chapter else "") + number,
-                label + self.scope_root.scope,
-                number=number,
+        parent = self._division_parent(match.marker)
+        if match.marker == Marker.PARAGRAPH_SECTION:
+            # «§ 1» restarts in every chapter: the label names the chapter it is in.
+            within = f" {parent.label}" if parent.kind == _K.CHAPTER else self.scope_root.scope
+            node = parent.add(
+                Node(_K.PARAGRAPH_SECTION, f"par{number}", f"§ {number}{within}", number=number)
             )
-        )
+        else:
+            kind = _K.CHAPTER if is_chapter else _K.SECTION
+            label = f"гл. {number}" if is_chapter else f"разд. {number}"
+            node = parent.add(
+                Node(
+                    kind,
+                    ("ch" if is_chapter else "") + number,
+                    label + self.scope_root.scope,
+                    number=number,
+                )
+            )
         end = self._continuation(i, lowercase_only=bool(match.title))
         node.units = self.units[i:end]
         node.heading = " ".join(u.text for u in node.units)
         self.container = node
         self._reset_items()
-        if not is_chapter:
+        if match.marker == Marker.SECTION:
             value = int(number) if number.isdigit() else roman_to_int(number)
             self.section_changed = value != self.section_number
             self.section_number = value

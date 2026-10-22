@@ -19,6 +19,7 @@ class Marker(StrEnum):
     APPENDIX = "appendix"
     SECTION = "section"
     CHAPTER = "chapter"
+    PARAGRAPH_SECTION = "paragraph_section"
     POINT = "point"
     SUBPOINT = "subpoint"
     LETTER = "letter"
@@ -39,6 +40,8 @@ class Patterns:
     approved: re.Pattern[str]
     approved_max: int
     act_appendix: re.Pattern[str]
+    bare_appendix: re.Pattern[str]
+    act_appendix_tail: re.Pattern[str]
     article: re.Pattern[str]
     article_max: int
     appendix: re.Pattern[str]
@@ -47,6 +50,8 @@ class Patterns:
     section_max: int
     chapter: re.Pattern[str]
     chapter_max: int
+    paragraph_section: re.Pattern[str]
+    paragraph_section_max: int
     point: re.Pattern[str]
     subpoint: re.Pattern[str]
     letter: re.Pattern[str]
@@ -63,6 +68,8 @@ def load_patterns() -> Patterns:
         approved=re.compile(raw["approved"]["pattern"]),
         approved_max=raw["approved"]["max_chars"],
         act_appendix=re.compile(raw["approved"]["act_appendix"]),
+        bare_appendix=re.compile(raw["approved"]["bare_appendix"]),
+        act_appendix_tail=re.compile(raw["approved"]["act_appendix_tail"]),
         article=re.compile(raw["article"]["pattern"]),
         article_max=raw["article"]["max_chars"],
         appendix=re.compile(raw["appendix"]["pattern"]),
@@ -71,6 +78,8 @@ def load_patterns() -> Patterns:
         section_max=raw["section"]["max_chars"],
         chapter=re.compile(raw["chapter"]["pattern"]),
         chapter_max=raw["chapter"]["max_chars"],
+        paragraph_section=re.compile(raw["paragraph_section"]["pattern"]),
+        paragraph_section_max=raw["paragraph_section"]["max_chars"],
         point=re.compile(raw["point"]["pattern"]),
         subpoint=re.compile(raw["subpoint"]["numeric"]),
         letter=re.compile(raw["subpoint"]["letter"]),
@@ -118,6 +127,8 @@ def classify(text: str, patterns: Patterns | None = None) -> Match:
             return Match(Marker.SECTION, number, m.group("title").strip())
     if len(text) <= p.chapter_max and (m := p.chapter.match(text)):
         return Match(Marker.CHAPTER, m.group("number"), m.group("title").strip())
+    if len(text) <= p.paragraph_section_max and (m := p.paragraph_section.match(text)):
+        return Match(Marker.PARAGRAPH_SECTION, m.group("number"), (m.group("title") or "").strip())
     if m := p.point.match(text):
         number, has_dot = m.group("number"), m.group("dot") is not None
         if has_dot or "." in number:
@@ -129,6 +140,13 @@ def classify(text: str, patterns: Patterns | None = None) -> Match:
     if p.list_item.match(text):
         return Match(Marker.LIST_ITEM)
     return Match(Marker.TEXT)
+
+
+def opens_act_appendix(text: str, following: str, patterns: Patterns | None = None) -> bool:
+    """«Приложение» alone, followed by «к приказу …»: the header of an approved document whose
+    parts the layout put into paragraphs of their own."""
+    p = patterns or load_patterns()
+    return bool(p.bare_appendix.match(text.strip()) and p.act_appendix_tail.match(following))
 
 
 def looks_like_heading(text: str, patterns: Patterns | None = None) -> bool:

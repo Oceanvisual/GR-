@@ -1,0 +1,242 @@
+[
+ [
+  "root",
+  "root",
+  "документ"
+ ],
+ [
+  "preamble",
+  "preamble",
+  "вводная часть"
+ ],
+ [
+  "preamble/a1",
+  "paragraph",
+  "абз. 1 вводной части"
+ ],
+ [
+  "preamble/a2",
+  "paragraph",
+  "абз. 2 вводной части"
+ ],
+ [
+  "preamble/a3",
+  "paragraph",
+  "абз. 3 вводной части"
+ ],
+ [
+  "preamble/a4",
+  "paragraph",
+  "абз. 4 вводной части"
+ ],
+ [
+  "preamble/a5",
+  "paragraph",
+  "абз. 5 вводной части"
+ ],
+ [
+  "preamble/a6",
+  "paragraph",
+  "абз. 6 вводной части"
+ ],
+ [
+  "preamble/a7",
+  "paragraph",
+  "абз. 7 вводной части"
+ ],
+ [
+  "preamble/1",
+  "point",
+  "п. 1 вводной части"
+ ],
+ [
+  "preamble/2",
+  "point",
+  "п. 2 вводной части"
+ ],
+ [
+  "preamble/3",
+  "point",
+  "п. 3 вводной части"
+ ],
+ [
+  "preamble/4",
+  "point",
+  "п. 4 вводной части"
+ ],
+ [
+  "preamble/4/a2",
+  "paragraph",
+  "абз. 2 п. 4 вводной части"
+ ],
+ [
+  "preamble/4/a3",
+  "paragraph",
+  "абз. 3 п. 4 вводной части"
+ ],
+ [
+  "preamble/4/a4",
+  "paragraph",
+  "абз. 4 п. 4 вводной части"
+ ],
+ [
+  "preamble/4/a5",
+  "paragraph",
+  "абз. 5 п. 4 вводной части"
+ ],
+ [
+  "body",
+  "approved_document",
+  "утверждаемый документ"
+ ],
+ [
+  "body/a1",
+  "paragraph",
+  "абз. 1"
+ ],
+ [
+  "body/1",
+  "point",
+  "п. 1"
+ ],
+ [
+  "body/2",
+  "point",
+  "п. 2"
+ ],
+ [
+  "body/2/spа",
+  "subpoint",
+  "пп. а п. 2"
+ ],
+ [
+  "body/2/spб",
+  "subpoint",
+  "пп. б п. 2"
+ ],
+ [
+  "body/2/spв",
+  "subpoint",
+  "пп. в п. 2"
+ ],
+ [
+  "body/2/spг",
+  "subpoint",
+  "пп. г п. 2"
+ ],
+ [
+  "body/3",
+  "point",
+  "п. 3"
+ ],
+ [
+  "body/3/spа",
+  "subpoint",
+  "пп. а п. 3"
+ ],
+ [
+  "body/3/spб",
+  "subpoint",
+  "пп. б п. 3"
+ ],
+ [
+  "body/3/spв",
+  "subpoint",
+  "пп. в п. 3"
+ ],
+ [
+  "body/3/spг",
+  "subpoint",
+  "пп. г п. 3"
+ ],
+ [
+  "body/4",
+  "point",
+  "п. 4"
+ ],
+ [
+  "body/4/spа",
+  "subpoint",
+  "пп. а п. 4"
+ ],
+ [
+  "body/4/spб",
+  "subpoint",
+  "пп. б п. 4"
+ ],
+ [
+  "body/5",
+  "point",
+  "п. 5"
+ ],
+ [
+  "body/6",
+  "point",
+  "п. 6"
+ ],
+ [
+  "body/6/spа",
+  "subpoint",
+  "пп. а п. 6"
+ ],
+ [
+  "body/6/spб",
+  "subpoint",
+  "пп. б п. 6"
+ ],
+ [
+  "body/7",
+  "point",
+  "п. 7"
+ ],
+ [
+  "body/8",
+  "point",
+  "п. 8"
+ ],
+ [
+  "body/8/a2",
+  "paragraph",
+  "абз. 2 п. 8"
+ ],
+ [
+  "body/9",
+  "point",
+  "п. 9"
+ ],
+ [
+  "body/10",
+  "point",
+  "п. 10"
+ ],
+ [
+  "body/11",
+  "point",
+  "п. 11"
+ ],
+ [
+  "body/11/a2",
+  "paragraph",
+  "абз. 2 п. 11"
+ ],
+ [
+  "body/12",
+  "point",
+  "п. 12"
+ ],
+ [
+  "body/13",
+  "point",
+  "п. 13"
+ ],
+ [
+  "body/13/a2",
+  "paragraph",
+  "абз. 2 п. 13"
+ ],
+ [
+  "body/14",
+  "point",
+  "п. 14"
+ ]
+]

@@ -25,7 +25,11 @@ def test_reg261_is_recorded() -> None:
 
 def test_every_corpus_file_is_recorded() -> None:
     recorded = {path for path, _ in _rows()}
-    present = {p for p in (FIXTURES / "corpus").iterdir() if p.name != "SOURCES.md"}
+    present = {
+        p
+        for p in (FIXTURES / "corpus").iterdir()
+        if p.name != "SOURCES.md" and not p.name.endswith(".structure.json")  # derived snapshots
+    }
     assert present <= recorded, f"not in SOURCES.md: {sorted(p.name for p in present - recorded)}"
 
 

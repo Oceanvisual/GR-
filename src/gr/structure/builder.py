@@ -2,13 +2,14 @@
 
 What is not the act's text is taken out first (cleanup.py); several strategies then build the
 tree independently and the best-scoring one wins (scoring.py); the editorial notes go back on
-the fragments they are about.
+the fragments they are about. The numbering profile is read off the tree that won (T068).
 """
 
+from collections import Counter
 from dataclasses import dataclass
 
 from gr.domain.document import Fragment, RawDocument, RemovedNoise, StructureChoice
-from gr.domain.enums import StructureMode
+from gr.domain.enums import FragmentKind, NumberingProfile, StructureMode
 from gr.domain.ir import IRText, full_text
 from gr.structure.cleanup import clean, place_notes
 from gr.structure.scoring import MIN_CONFIDENCE, Choice, choose
@@ -30,6 +31,23 @@ class StructureResult:
     stats: dict[str, int]
     choice: StructureChoice
     removed: RemovedNoise  # service lines and editorial notes taken out of the text
+    profile: NumberingProfile = NumberingProfile.GENERIC
+
+
+MIN_PROFILE_UNITS = 2  # articles for a law, points for a regulation
+
+
+def numbering_profile(strategy: str, fragments: list[Fragment]) -> NumberingProfile:
+    """Articles make a law (its points live in them), numbered points a regulation; a tree
+    built from formatting or paragraphs has no numbering profile."""
+    if strategy != "regulation":
+        return NumberingProfile.GENERIC
+    kinds = Counter(fragment.kind for fragment in fragments)
+    if kinds[FragmentKind.ARTICLE] >= MIN_PROFILE_UNITS:
+        return NumberingProfile.LAW
+    if kinds[FragmentKind.POINT] >= MIN_PROFILE_UNITS:
+        return NumberingProfile.REGULATION
+    return NumberingProfile.GENERIC
 
 
 def build_structure(
@@ -67,4 +85,5 @@ def build_structure(
         removed=RemovedNoise(
             spps_lines=cleaned.spps_lines, editorial_notes=cleaned.editorial_notes
         ),
+        profile=numbering_profile(outcome.name, fragments),
     )

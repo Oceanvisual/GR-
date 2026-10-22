@@ -15,6 +15,7 @@ from gr.domain.document import (
 )
 from gr.domain.enums import DocFormat, StructureMode, TextLayerStatus
 from gr.ingestion.base import IngestionError
+from gr.ingestion.convert import CONVERTED, ConvertingExtractor
 from gr.ingestion.detect import detect_format
 from gr.ingestion.docx import DocxExtractor, ZipLimits
 from gr.ingestion.html import HtmlExtractor
@@ -31,6 +32,7 @@ class ParseLimits:
     max_pages: int
     max_chars: int
     max_unzipped_bytes: int
+    convert_timeout_s: float = 60.0  # LibreOffice, within the worker's own timeout (T075)
 
 
 @dataclass(frozen=True)
@@ -54,14 +56,17 @@ class ParseFailure:
 
 
 def registry(limits: ParseLimits, ocr: OcrOptions | None = None) -> ExtractorRegistry:
+    docx = DocxExtractor(ZipLimits(max_unzipped_bytes=limits.max_unzipped_bytes))
     return ExtractorRegistry(
         [
             TxtExtractor(),
-            DocxExtractor(ZipLimits(max_unzipped_bytes=limits.max_unzipped_bytes)),
+            docx,
             PdfExtractor(max_pages=limits.max_pages, ocr=ocr),
             HtmlExtractor(),
+            *(ConvertingExtractor(fmt, docx, timeout_s=limits.convert_timeout_s)
+              for fmt in CONVERTED),
         ]
-    )
+    )  # fmt: skip
 
 
 def parse_file(
@@ -128,6 +133,7 @@ def parse_raw(raw: RawDocument, doc_id: str, limits: ParseLimits) -> ParsedDocum
             "warnings": warnings,
             "structure": StructureChoice.model_validate(structure.choice.model_dump()),
             "removed_noise": removed.model_dump(),
+            "numbering_profile": structure.profile,
         }
     )
     return ParsedDocument(

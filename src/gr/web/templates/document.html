@@ -88,7 +88,7 @@
     <dd>
       {% if diag.structure %}
         {% set choice = diag.structure %}
-        {{ labels.strategy.get(choice.strategy, choice.strategy) }},
+        {{ labels.strategy.get(choice.strategy, choice.strategy) }} ({{ labels.profile[diag.numbering_profile] }}),
         <span class="{{ 'warn' if choice.confidence < min_confidence else '' }}">уверенность {{ "%.2f" | format(choice.confidence) }}</span>
         <div class="muted small">
           {% for name, value in choice.scores | dictsort(by='value', reverse=true) %}{{ labels.strategy.get(name, name) }}: {{ "%.2f" | format(value) }}{% if not loop.last %}; {% endif %}{% endfor %}
