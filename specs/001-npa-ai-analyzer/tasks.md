@@ -652,18 +652,20 @@ UI карты процессов.
 
 **Independent Test**: quickstart Q5 на FakeLLM и на живой LLM.
 
-- [ ] T037 [P] [US3] Каталог проблем и tech guard — `src/gr/analysis/tech_guard.py`
+- [X] T037 [P] [US3] Каталог проблем и tech guard — `src/gr/analysis/tech_guard.py`
   - **Цель**: FR-043.
   - **Зависит**: T008
   - **Файлы**: `config/problem_catalog.toml`, `analysis/tech_guard.py`,
     `tests/unit/analysis/test_tech_guard.py`
   - **Результат**: паттерн → минимальная категория; `evaluate(initiative, findings) ->
     TechGuard`.
+    Тип операции `completeness_check` учитывается дополнительным аргументом `operations`:
+    это `OperationType`, а не новый элемент закрытого `ProblemPattern`.
   - **Готово, когда**: LLM-инициатива для `completeness_check` или `duplicate_checks` →
     `requires_justification`; `classic_automation` → нет.
   - **Тесты**: `test_tech_guard.py`.
 
-- [ ] T038 [P] [US3] Статус допустимости и ограничение автономности — `src/gr/analysis/gating.py`
+- [X] T038 [P] [US3] Статус допустимости и ограничение автономности — `src/gr/analysis/gating.py`
   - **Цель**: FR-045, FR-063 (data-model §6).
   - **Зависит**: T008
   - **Файлы**: `analysis/gating.py`, `tests/unit/analysis/test_gating.py`
@@ -672,7 +674,7 @@ UI карты процессов.
     `decision` → `human_approval` + `autonomy_capped`.
   - **Тесты**: `test_gating.py`.
 
-- [ ] T039 [P] [US3] Связи инициатив — `src/gr/analysis/relations.py`
+- [X] T039 [P] [US3] Связи инициатив — `src/gr/analysis/relations.py`
   - **Цель**: FR-048.
   - **Зависит**: T008
   - **Файлы**: `analysis/relations.py`, `tests/unit/analysis/test_relations.py`
