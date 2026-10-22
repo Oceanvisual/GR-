@@ -1,5 +1,6 @@
 """Conservative request budget for explicitly authorized live evals; no service defaults."""
 
+import asyncio
 import json
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -7,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from gr.llm.base import LLMError
+from gr.llm.base import LLMError, LLMUnavailableError
 from gr.llm.cache import strict_json_schema
 from gr.llm.openai_compat import Mode, OpenAICompatibleLLM, _Response
 
@@ -77,7 +78,13 @@ class Budget:
         }
 
 
+TRANSIENT_RETRIES = (2.0, 6.0)  # seconds before the 2nd and 3rd try of a provider failure
+
+
 class BudgetedLLM(OpenAICompatibleLLM):
+    """HTTP retries of the SDK are off (they would bypass the budget): a provider failure
+    (5xx, 429, no connection) is tried again here, each try reserved like any request."""
+
     budget: Budget
 
     async def _request(
@@ -88,6 +95,28 @@ class BudgetedLLM(OpenAICompatibleLLM):
         max_tokens: int,
         mode: Mode,
         options: dict[str, Any] | None = None,
+        temperature: float = 0.0,
+    ) -> _Response:
+        for pause in (*TRANSIENT_RETRIES, None):
+            try:
+                return await self._budgeted(
+                    model, schema, messages, max_tokens, mode, options, temperature
+                )
+            except LLMUnavailableError:
+                if pause is None:
+                    raise
+                await asyncio.sleep(pause)
+        raise AssertionError("unreachable")
+
+    async def _budgeted(
+        self,
+        model: str,
+        schema: type[BaseModel],
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        mode: Mode,
+        options: dict[str, Any] | None,
+        temperature: float,
     ) -> _Response:
         if self.settings.llm_max_retries:
             raise BudgetExceeded("Для ограниченного eval отключите автоматические HTTP-повторы.")
@@ -97,6 +126,8 @@ class BudgetedLLM(OpenAICompatibleLLM):
         ).encode("utf-8")
         reserved = self.budget.reserve(model, len(encoded), max_tokens)
         # A failed request retains its reservation: an interrupted response might be billed.
-        response = await super()._request(model, schema, messages, max_tokens, mode, options)
+        response = await super()._request(
+            model, schema, messages, max_tokens, mode, options, temperature
+        )
         self.budget.settle(reserved, response.raw.get("usage", {}).get("cost"))
         return response

@@ -219,6 +219,19 @@ async def test_invalid_then_repair_succeeds(
     assert [c.status for c in await calls.list_for_run("run_1")] == ["invalid", "ok"]
 
 
+async def test_broken_json_is_asked_again_from_scratch(
+    llm_settings: Callable[..., Settings],
+) -> None:
+    # T059: shown its broken answer, the model copied it byte for byte; asked again from
+    # scratch and slightly warmer, it answers anew.
+    recorder = Recorder(completion('{"title": "ok", "steps": [}'), completion(json.dumps(VALID)))
+    result = await ask(make_llm(llm_settings(), recorder))
+    assert result.attempts == 2
+    first, second = recorder.requests
+    assert second["messages"] == first["messages"] and len(second["messages"]) == 2
+    assert (first["temperature"], second["temperature"]) == (0, 0.3)
+
+
 async def test_invalid_twice_fails(llm_settings: Callable[..., Settings]) -> None:
     recorder = Recorder(completion("not json"), completion('{"title": 1}'))
     with pytest.raises(LLMInvalidOutputError) as exc:

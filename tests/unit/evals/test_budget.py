@@ -90,3 +90,44 @@ async def test_http_request_is_blocked_before_transport(
             )
     finally:
         await client.client.close()
+
+
+async def test_a_provider_failure_is_tried_again_within_the_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import BaseModel
+
+    from evals.budget import BudgetedLLM
+    from gr.llm.base import LLMUnavailableError
+    from gr.llm.openai_compat import OpenAICompatibleLLM, _Response
+    from gr.settings import Settings
+
+    class Answer(BaseModel):
+        text: str
+
+    outcomes: list[object] = [LLMUnavailableError(), LLMUnavailableError()]
+
+    async def flaky(*args: object, **kwargs: object) -> object:
+        if outcomes:
+            failure = outcomes.pop(0)
+            assert isinstance(failure, LLMUnavailableError)
+            raise failure
+        bill = {"usage": {"cost": 0.0001}}
+        return _Response(content='{"text": "ok"}', finish_reason="stop", input_tokens=1,
+                         output_tokens=1, estimated=False, raw=bill)  # fmt: skip
+
+    async def no_pause(seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(OpenAICompatibleLLM, "_request", flaky)
+    monkeypatch.setattr("evals.budget.asyncio.sleep", no_pause)
+    client = BudgetedLLM(Settings(_env_file=None, auth_enabled=False, llm_max_retries=0))
+    client.budget = budget("1")
+    try:
+        response = await client._request(
+            "m", Answer, [{"role": "user", "content": "text"}], 100, "json_schema"
+        )
+    finally:
+        await client.client.close()
+    assert response.content == '{"text": "ok"}'
+    assert client.budget.requests == 3  # every try reserved, as any request

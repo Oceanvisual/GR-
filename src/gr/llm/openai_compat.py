@@ -38,6 +38,9 @@ Mode = Literal["json_schema", "json_object"]
 EXTRACTION_STAGES = frozenset({StageName.DISCOVER, StageName.DETAIL, StageName.VALIDATE})
 _CHARS_PER_TOKEN = 3  # rough for Russian text; used only when the provider omits `usage`
 _ERROR_DETAIL_LIMIT = 20
+# Broken JSON is asked again from scratch, slightly warmer: shown its own answer, the model
+# copied it byte for byte (T059). Schema errors keep the repair with the answer and errors.
+RETRY_TEMPERATURE = 0.3
 _JSON_FENCE = re.compile(r"\A```(?:json)?[ \t]*\r?\n(?P<body>[\s\S]*?)\r?\n```\Z", re.IGNORECASE)
 
 
@@ -116,12 +119,13 @@ class OpenAICompatibleLLM:
         ]
         totals = {"in": 0, "out": 0, "latency": 0}
         estimated = False
+        temperature = 0.0
         for attempt in (1, 2):
             started = time.perf_counter()
             try:
                 async with self._semaphore:
                     response = await self._complete(
-                        model, schema, messages, max_tokens, stage, options
+                        model, schema, messages, max_tokens, stage, options, temperature
                     )
             except LLMError as exc:
                 elapsed = int((time.perf_counter() - started) * 1000)
@@ -144,7 +148,9 @@ class OpenAICompatibleLLM:
                 except ValidationError as exc:
                     status = "invalid"
                     error = LLMInvalidOutputError()
-                    if attempt == 1:
+                    if all(e["type"] == "json_invalid" for e in exc.errors()):
+                        temperature = RETRY_TEMPERATURE
+                    elif attempt == 1:
                         messages += [
                             {"role": "assistant", "content": response.content or ""},
                             {"role": "user", "content": _repair_message(exc)},
@@ -174,10 +180,13 @@ class OpenAICompatibleLLM:
         max_tokens: int,
         stage: StageName,
         options: dict[str, Any],
+        temperature: float = 0.0,
     ) -> _Response:
         mode: Mode = "json_object" if schema.__name__ in self._refused else self._mode
         try:
-            return await self._request(model, schema, messages, max_tokens, mode, options)
+            return await self._request(
+                model, schema, messages, max_tokens, mode, options, temperature
+            )
         except openai.BadRequestError as exc:
             if not (self._may_fall_back and mode == "json_schema"):
                 raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
@@ -185,7 +194,7 @@ class OpenAICompatibleLLM:
             # `auto`: perhaps the endpoint does not take json_schema. Retry once in json_object.
             try:
                 response = await self._request(
-                    model, schema, messages, max_tokens, "json_object", options
+                    model, schema, messages, max_tokens, "json_object", options, temperature
                 )
             except openai.BadRequestError:
                 # Rejected either way: the request itself is at fault (context length, model
@@ -204,6 +213,7 @@ class OpenAICompatibleLLM:
         max_tokens: int,
         mode: Mode,
         options: dict[str, Any] | None = None,
+        temperature: float = 0.0,
     ) -> _Response:
         strict = strict_json_schema(schema)
         if mode == "json_schema":
@@ -223,7 +233,7 @@ class OpenAICompatibleLLM:
                 model=model,
                 messages=cast("list[ChatCompletionMessageParam]", sent),
                 response_format=cast("ResponseFormat", response_format),
-                temperature=0,
+                temperature=temperature,
                 max_tokens=max_tokens,
                 extra_body=options or None,
             )
