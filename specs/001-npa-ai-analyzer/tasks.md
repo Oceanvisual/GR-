@@ -492,7 +492,7 @@ UI карты процессов.
     Проверка 500 цитат на документе в 130 тыс. знаков занимает ≤ 5 с.
   - **Тесты**: `test_quotes.py`.
 
-- [ ] T025 [P] [US2] Русские числительные и сроки — `src/gr/grounding/deadlines.py`
+- [X] T025 [P] [US2] Русские числительные и сроки — `src/gr/grounding/deadlines.py`
   - **Цель**: проверка сроков (FR-025, FR-029).
   - **Зависит**: T019
   - **Файлы**: `grounding/numerals_ru.py`, `deadlines.py`, `tests/unit/grounding/test_deadlines.py`
