@@ -17,7 +17,7 @@ from gr.domain.document import IngestionDiagnostics, OcrInfo, RawDocument, Remov
 from gr.domain.enums import DocFormat, OcrStatus, TextLayerStatus, TextSource
 from gr.ingestion.base import IngestionError
 from gr.ingestion.ocr import OcrEngine, OcrPage, PageImage
-from gr.ingestion.pdf_layout import Line, build_blocks
+from gr.ingestion.pdf_layout import COLUMN_GUTTER, Line, build_blocks
 
 _PASSWORD_ERROR = 4  # FPDF_ERR_PASSWORD
 # Fewer letters/digits than this on a page with an image: a scan (perhaps with a stamp or a
@@ -27,7 +27,12 @@ DEFAULT_FONT_SIZE = 12.0
 
 
 def _page_lines(page: pdfium.PdfPage, number: int) -> tuple[list[Line], int]:
-    """Lines of one page and the count of its letters and digits."""
+    """Lines of one page and the count of its letters and digits.
+
+    PDFium joins text at one height into one line even across a column gutter, so a line is cut
+    where the gap between two glyphs is wider than COLUMN_GUTTER font sizes (T079); the pieces
+    of a line that is not in columns are joined again by the layout (merge_line_pieces).
+    """
     width, height = page.get_size()
     textpage = page.get_textpage()
     try:
@@ -38,34 +43,67 @@ def _page_lines(page: pdfium.PdfPage, number: int) -> tuple[list[Line], int]:
         for raw_line in text.split("\r\n"):
             start, end = offset, offset + len(raw_line)
             offset = end + 2
-            stripped = raw_line.strip()
-            if not stripped:
+            if not raw_line.strip():
                 continue
             first = start + (len(raw_line) - len(raw_line.lstrip()))
             last = start + len(raw_line.rstrip()) - 1
-            boxes = [textpage.get_charbox(i) for i in range(first, last + 1)]
-            boxes = [b for b in boxes if b[2] > b[0] or b[3] > b[1]] or boxes
             size = float(pdfium_raw.FPDFText_GetFontSize(textpage.raw, first))
-            if not size > 0:  # a damaged font dictionary: fall back to the glyph height
-                size = max(b[3] for b in boxes) - min(b[1] for b in boxes)
-            if not size > 0:
-                size = DEFAULT_FONT_SIZE
-            lines.append(
-                Line(
-                    text=stripped,
-                    page=number,
-                    x0=boxes[0][0],
-                    x1=max(b[2] for b in boxes),
-                    top=max(b[3] for b in boxes),
-                    bottom=min(b[1] for b in boxes),
-                    size=size,
-                    page_width=width,
-                    page_height=height,
-                )
-            )
+            for piece_first, piece_last in _pieces(textpage, text, first, last, size):
+                lines.append(_line(textpage, text, piece_first, piece_last, size, number,
+                                   (width, height)))  # fmt: skip
         return lines, meaningful
     finally:
         textpage.close()
+
+
+def _pieces(
+    textpage: pdfium.PdfTextPage, text: str, first: int, last: int, size: float
+) -> list[tuple[int, int]]:
+    """Character ranges of a PDFium line, cut at gaps as wide as a column gutter."""
+    if not size > 0:
+        return [(first, last)]
+    pieces: list[tuple[int, int]] = []
+    piece_first, previous, right = first, None, 0.0
+    for index in range(first, last + 1):
+        if text[index].isspace():
+            continue
+        box = textpage.get_charbox(index)
+        if box[2] <= box[0]:
+            continue  # no width: a generated or invisible character
+        if previous is not None and box[0] - right > COLUMN_GUTTER * size:
+            pieces.append((piece_first, previous))
+            piece_first = index
+        previous, right = index, box[2]
+    pieces.append((piece_first, last))
+    return pieces
+
+
+def _line(
+    textpage: pdfium.PdfTextPage,
+    text: str,
+    first: int,
+    last: int,
+    size: float,
+    number: int,
+    page_size: tuple[float, float],
+) -> Line:
+    boxes = [textpage.get_charbox(i) for i in range(first, last + 1)]
+    boxes = [b for b in boxes if b[2] > b[0] or b[3] > b[1]] or boxes
+    if not size > 0:  # a damaged font dictionary: fall back to the glyph height
+        size = max(b[3] for b in boxes) - min(b[1] for b in boxes)
+    if not size > 0:
+        size = DEFAULT_FONT_SIZE
+    return Line(
+        text=text[first : last + 1].strip(),
+        page=number,
+        x0=boxes[0][0],
+        x1=max(b[2] for b in boxes),
+        top=max(b[3] for b in boxes),
+        bottom=min(b[1] for b in boxes),
+        size=size,
+        page_width=page_size[0],
+        page_height=page_size[1],
+    )
 
 
 @dataclass(frozen=True)

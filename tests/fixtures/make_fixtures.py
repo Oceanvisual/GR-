@@ -30,6 +30,7 @@ FONT_CANDIDATES = (
     Path("/Library/Fonts/Arial Unicode.ttf"),
 )
 PDF_WRAP = 86
+COLUMN_WRAP = 38  # characters per line of a column of two_columns.pdf
 LINES_PER_PAGE = 40
 
 ORDER = [
@@ -456,6 +457,43 @@ def make_scan_pdf(source: str, name: str, dpi: int = 300) -> None:
     pdf.output(str(OUT / name))
 
 
+def _two_columns(pdf: FPDF, paragraphs: list[str], y: float) -> float:
+    """The lines of `paragraphs` in two columns, written row by row; returns the bottom."""
+    lines = [part for paragraph in paragraphs for part in textwrap.wrap(paragraph, COLUMN_WRAP)]
+    half = (len(lines) + 1) // 2
+    left, right = lines[:half], lines[half:]
+    for row, text in enumerate(left):
+        pdf.set_xy(15, y + 6.5 * row)
+        pdf.cell(85, 6.5, text)
+        if row < len(right):
+            pdf.set_xy(110, y + 6.5 * row)
+            pdf.cell(85, 6.5, right[row])
+    return y + 6.5 * len(left)
+
+
+def make_two_columns_pdf(name: str = "two_columns.pdf") -> list[str]:
+    """A page set in two columns and written row by row, as many typesetters do: the order of
+    the content stream is not the order of reading (T079). Returns the paragraphs in reading
+    order; a line across the page parts two runs of columns."""
+    title = ORDER[:3]
+    first = [flat(paragraph) for paragraph in BODY[:8]]
+    across = "Ниже текст снова набран в две колонки, как и выше; эта строка идёт через всю ширину."
+    second = [flat(paragraph) for paragraph in BODY[8:16]]
+    pdf = new_pdf()
+    pdf.add_page()
+    y = 18.0
+    for line in title:
+        pdf.set_xy(15, y)
+        pdf.cell(180, 6.5, line, align="C")
+        y += 6.5
+    y = _two_columns(pdf, first, y + 4) + 4
+    pdf.set_xy(15, y)
+    pdf.cell(180, 6.5, across)
+    _two_columns(pdf, second, y + 6.5 + 4)
+    pdf.output(str(OUT / name))
+    return [*title, *first, across, *second]
+
+
 def make_html() -> None:
     body = "\n".join(f"<p>{p}</p>" for p in regulation_paragraphs())
     html = (
@@ -501,6 +539,7 @@ def main() -> None:
     make_scan_pdf("regulation.pdf", "scan.pdf")
     first_page = pdf_lines([*ORDER, *BODY, *APPENDIX])[:LINES_PER_PAGE]
     write_text("scan.expected.txt", first_page)
+    write_text("two_columns.expected.txt", make_two_columns_pdf())
     corrupted = (OUT / "regulation.pdf").read_bytes()[:400]
     (OUT / "corrupted.pdf").write_bytes(corrupted)
     make_html()

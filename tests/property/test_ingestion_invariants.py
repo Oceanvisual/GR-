@@ -58,7 +58,9 @@ def readable() -> list[str]:
 
 
 def letters_and_digits(text: str) -> list[str]:
-    return [char for char in unicodedata.normalize("NFC", text) if char.isalnum()]
+    # Decomposed, without combining marks: normalisation may drop an invisible character
+    # between a letter and its mark, and NFC then composes them into another letter (г + ◌́ → ѓ).
+    return [char for char in unicodedata.normalize("NFD", text) if char.isalnum()]
 
 
 def in_order(part: list[str], whole: list[str]) -> bool:

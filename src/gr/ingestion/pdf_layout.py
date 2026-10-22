@@ -3,7 +3,9 @@
 Lines come from PDFium's own text reconstruction; this module drops running headers and page
 numbers, re-attaches line pieces split by superscripts, and decides where a paragraph starts:
 first-line indent, a list marker after a finished sentence, a large vertical gap, a centred
-heading, or a short line that ends a sentence.
+heading, or a short line that ends a sentence. A page set in columns is read column by column
+(FR-019, T079): columns are found by the left edges of the lines, and each column has its own
+margin and right edge for the paragraph rules.
 """
 
 import re
@@ -18,6 +20,9 @@ HEADER_BAND = 0.15  # top and bottom share of the page searched for running head
 REPEAT_SHARE = 0.5  # a masked line repeated on this share of same-parity pages is a header
 MIN_PAGES_FOR_HEADERS = 3
 SYLLABLE_HYPHENS_PER_PAGE = 2.0  # typeset book: ~8.5 per page; Word-made PDF: ~0.02 (T072)
+MIN_COLUMN_LINES = 5  # lines starting at one left edge, side by side with lines left of it
+COLUMN_GUTTER = 1.5  # blank band between columns, in font sizes
+COLUMN_LINE_WIDTH = 12  # median width of a column's lines, in font sizes: prose, not table cells
 
 _DIGITS_RE = re.compile(r"\d+")
 _PAGE_NUMBER_RE = re.compile(
@@ -47,6 +52,7 @@ class Line:
     size: float
     page_width: float
     page_height: float
+    column: int | None = None  # on a page set in columns; None: the whole width
 
 
 @dataclass
@@ -217,6 +223,9 @@ def _starts_paragraph(prev: Line, line: Line, stats: _Stats, prev_stats: _Stats)
         return True  # a list item, or a parenthetical note such as an edition remark
     if _DASH_ITEM_RE.match(line.text) and prev.text.rstrip().endswith((",", ";", ":", ".")):
         return True  # dash list items often end with a comma
+    next_column = None not in (prev.column, line.column) and prev.column != line.column
+    if next_column and _LIST_START_RE.match(line.text):
+        return True  # a numbered item tops the column: the heading that ended the last one ended
     deliberate = prev.page == line.page and _next_word_fits(prev, line, prev_stats)
     starts_new = line.text[:1].isupper() or bool(_LIST_START_RE.match(line.text))
     return deliberate and (ends_sentence or starts_new)
@@ -235,18 +244,78 @@ def _next_word_fits(prev: Line, line: Line, stats: _Stats) -> bool:
     return stats.right - prev.x1 > needed
 
 
+def column_starts(lines: list[Line]) -> list[float]:
+    """Where each column after the first starts; [] for a page in one column.
+
+    A column start is a left edge shared by several lines that stand side by side with lines
+    left of it, with a blank band between them, and that are as wide as prose: indented first
+    lines have nothing beside them, and the cells of a two-column table are short.
+    """
+    if len(lines) < 2 * MIN_COLUMN_LINES:
+        return []
+    size = median(line.size for line in lines)
+    clusters: list[list[Line]] = []
+    for line in sorted(lines, key=lambda ln: ln.x0):
+        if clusters and line.x0 - clusters[-1][0].x0 <= 0.5 * size:
+            clusters[-1].append(line)
+        else:
+            clusters.append([line])
+    starts = []
+    for members in clusters[1:]:
+        if len(members) < MIN_COLUMN_LINES:
+            continue
+        start = members[0].x0
+        left = [line for line in lines if line.x1 <= start - COLUMN_GUTTER * size]
+        beside = [
+            line
+            for line in members
+            if any(_vertical_overlap(line, other) > 0.5 * line.size for other in left)
+        ]
+        wide = median(line.x1 - line.x0 for line in members) >= COLUMN_LINE_WIDTH * size
+        if len(beside) >= MIN_COLUMN_LINES and wide:
+            starts.append(start)
+    return starts
+
+
 def detect_columns(lines: list[Line]) -> bool:
-    """Two or more text lines side by side at the same height, repeatedly: a multi-column page."""
-    side_by_side = 0
-    for a, b in pairwise(lines):
-        if _vertical_overlap(a, b) > 0.5 * a.size and b.x0 > a.x1 + 2 * a.size:
-            side_by_side += 1
-    return side_by_side >= 5
+    return bool(column_starts(lines))
+
+
+def in_reading_order(lines: list[Line], starts: list[float]) -> list[Line]:
+    """Column by column; a line across the columns (a heading) ends the columns above it.
+
+    Within a column the order of the page is kept: it is top to bottom whether the PDF was
+    written column by column or row by row, and a line split by a superscript stays together.
+    """
+    size = median(line.size for line in lines)
+    ordered: list[Line] = []
+    columns: list[list[Line]] = [[] for _ in range(len(starts) + 1)]
+
+    def close() -> None:
+        for column in columns:
+            ordered.extend(column)
+            column.clear()
+
+    for line in lines:
+        index = sum(1 for start in starts if line.x0 >= start - 0.5 * size)
+        across = index < len(starts) and line.x1 > starts[index] - size
+        if across:
+            close()
+            ordered.append(line)
+        else:
+            columns[index].append(replace(line, column=index))
+    close()
+    return ordered
 
 
 def build_blocks(pages: list[list[Line]]) -> LayoutResult:
     pages, removed = strip_running_headers(pages)
-    columns_pages = [i + 1 for i, lines in enumerate(pages) if detect_columns(lines)]
+    pages = list(pages)  # the caller's list stays as it was
+    columns_pages = []
+    for i, lines in enumerate(pages):
+        if starts := column_starts(lines):
+            columns_pages.append(i + 1)
+            pages[i] = in_reading_order(lines, starts)
     syllable_hyphens = hyphenation_density(pages) >= SYLLABLE_HYPHENS_PER_PAGE
     pages = [
         merge_line_pieces(
@@ -258,7 +327,14 @@ def build_blocks(pages: list[list[Line]]) -> LayoutResult:
         )
         for lines in pages
     ]
-    stats = {lines[0].page: _page_stats(lines) for lines in pages if lines}
+    # A line across the page is measured against the whole page; a column line, its column.
+    stats: dict[tuple[int, int | None], _Stats] = {}
+    for lines in pages:
+        if lines:
+            stats[(lines[0].page, None)] = _page_stats(lines)
+        for column in {line.column for line in lines} - {None}:
+            in_column = [line for line in lines if line.column == column]
+            stats[(in_column[0].page, column)] = _page_stats(in_column)
 
     blocks: list[Block] = []
     current: list[Line] = []
@@ -267,7 +343,7 @@ def build_blocks(pages: list[list[Line]]) -> LayoutResult:
         if not current:
             return
         first = current[0]
-        page_stats = stats[first.page]
+        page_stats = stats[(first.page, first.column)]
         text = current[0].text
         for line in current[1:]:
             text = _join(text, line.text)
@@ -293,7 +369,7 @@ def build_blocks(pages: list[list[Line]]) -> LayoutResult:
     for lines in pages:
         for line in lines:
             if prev is not None and _starts_paragraph(
-                prev, line, stats[line.page], stats[prev.page]
+                prev, line, stats[(line.page, line.column)], stats[(prev.page, prev.column)]
             ):
                 flush()
             current.append(line)
