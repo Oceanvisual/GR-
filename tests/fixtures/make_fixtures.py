@@ -9,6 +9,9 @@ Generated files are committed; regenerate only when this script changes.
 
 import io
 import re
+import shutil
+import subprocess
+import tempfile
 import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
@@ -494,6 +497,24 @@ def make_two_columns_pdf(name: str = "two_columns.pdf") -> list[str]:
     return [*title, *first, across, *second]
 
 
+def make_converted() -> None:
+    """sample.{doc,rtf,odt}: regulation_manual.docx saved by LibreOffice (T075). Needs soffice;
+    the committed files were made by LibreOffice 7.4 in the Docker image of the service."""
+    soffice = shutil.which("soffice")
+    if soffice is None:
+        print("soffice not found: sample.{doc,rtf,odt} left as they are")
+        return
+    with tempfile.TemporaryDirectory() as folder:
+        work = Path(folder)
+        shutil.copy(OUT / "regulation_manual.docx", work / "sample.docx")
+        for fmt in ("doc", "rtf", "odt"):
+            subprocess.run(
+                [soffice, f"-env:UserInstallation={(work / 'profile').as_uri()}", "--headless",
+                 "--convert-to", fmt, "--outdir", str(OUT), str(work / "sample.docx")],
+                check=True, capture_output=True, timeout=120,
+            )  # fmt: skip
+
+
 def make_html() -> None:
     body = "\n".join(f"<p>{p}</p>" for p in regulation_paragraphs())
     html = (
@@ -543,6 +564,7 @@ def main() -> None:
     corrupted = (OUT / "regulation.pdf").read_bytes()[:400]
     (OUT / "corrupted.pdf").write_bytes(corrupted)
     make_html()
+    make_converted()
     print(f"written to {OUT} ({len(pages)} pages in headers.pdf)")
 
 

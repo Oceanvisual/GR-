@@ -211,6 +211,7 @@ class DocumentService:
             max_pages=settings.max_pages,
             max_chars=settings.max_chars,
             max_unzipped_bytes=settings.max_unzipped_bytes,
+            convert_timeout_s=settings.parse_timeout_s / 2,  # the worker outlives LibreOffice
         )
 
     @property

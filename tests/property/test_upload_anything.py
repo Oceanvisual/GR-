@@ -70,10 +70,10 @@ CASES: dict[str, tuple[str, bytes, set[str]]] = {
     "gif": ("anim.gif", b"GIF89a" + bytes(64), {"unsupported_format"}),
     "webp": ("image.webp", b"RIFF\x24\x00\x00\x00WEBPVP8 " + bytes(64), {"unsupported_format"}),
     "exe": ("setup.exe", b"MZ\x90\x00" + bytes(256), {"unsupported_format"}),
-    "doc": ("old.doc", ole("WordDocument"), {"unsupported_format"}),
+    # Without LibreOffice: «save it as DOCX»; with it, a fake DOC does not convert.
+    "doc": ("old.doc", ole("WordDocument"), {"unsupported_format", "corrupted_file"}),
     "xls_ole": ("old.xls", ole("Workbook"), {"unsupported_format"}),
     "encrypted_ole": ("secret.docx", ole("EncryptionInfo"), {"encrypted_file"}),
-    "rtf": ("text.rtf", rb"{\rtf1\ansi Hello}", {"unsupported_format"}),
     "html_without_text": (
         "page.html",
         "<html><body><nav>Меню</nav><script>var x = 1;</script></body></html>".encode(),
@@ -135,7 +135,15 @@ def test_any_file_gets_a_clear_answer(client: TestClient, case: str) -> None:
     assert_clear_answer(client, response, case)
     assert response.json()["error"]["code"] in codes, response.text
     if response.status_code == 415:
-        assert response.json()["error"]["details"]["supported"] == ["docx", "html", "pdf", "txt"]
+        assert response.json()["error"]["details"]["supported"] == [
+            "doc",
+            "docx",
+            "html",
+            "odt",
+            "pdf",
+            "rtf",
+            "txt",
+        ]
 
 
 def test_utf16_text_is_accepted(client: TestClient) -> None:

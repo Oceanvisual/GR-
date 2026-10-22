@@ -157,7 +157,7 @@ def _encrypted_pdf() -> bytes:
     [
         ("corrupted.pdf", (SYNTHETIC / "corrupted.pdf").read_bytes(), 422, "corrupted_file"),
         ("report.txt", _xlsx(), 415, "unsupported_format"),
-        ("old.rtf", rb"{\rtf1\ansi Hello}", 415, "unsupported_format"),
+        ("scan.png", b"\x89PNG\r\n\x1a\n" + bytes(64), 415, "unsupported_format"),
         ("secret.pdf", _encrypted_pdf(), 422, "encrypted_file"),
         ("empty.txt", b"", 422, "empty_document"),
         ("blank.txt", b"   \n\n", 422, "empty_document"),
@@ -168,7 +168,15 @@ def test_q3_refusals(client: TestClient, name: str, data: bytes, status: int, co
     assert response.status_code == status, response.text
     assert error_code(response) == code
     if code == "unsupported_format":
-        assert response.json()["error"]["details"]["supported"] == ["docx", "html", "pdf", "txt"]
+        assert response.json()["error"]["details"]["supported"] == [
+            "doc",
+            "docx",
+            "html",
+            "odt",
+            "pdf",
+            "rtf",
+            "txt",
+        ]
     assert client.get(URL).json() == []
 
 
