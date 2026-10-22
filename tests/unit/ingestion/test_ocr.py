@@ -92,15 +92,18 @@ def test_the_engine_reads_tsv_from_the_command(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("body", "error"),
+    ("body", "timeout_s", "error"),
     [
-        ("time.sleep(30)", "дольше 0.5 с"),  # a hung page is an error, not a hang
-        ("sys.stderr.write('Error opening data file rus.traineddata'); sys.exit(1)",
+        ("time.sleep(30)", 0.5, "дольше 0.5 с"),  # a hung page is an error, not a hang
+        # A loaded machine may take a while to start the stand-in: its timeout is generous.
+        ("sys.stderr.write('Error opening data file rus.traineddata'); sys.exit(1)", 30,
          "rus.traineddata"),
     ],
 )  # fmt: skip
-def test_a_page_that_fails_is_reported_not_raised(tmp_path: Path, body: str, error: str) -> None:
-    page = TesseractEngine("rus", 0.5, binary=stand_in(tmp_path, body)).recognize(image(3))
+def test_a_page_that_fails_is_reported_not_raised(
+    tmp_path: Path, body: str, timeout_s: float, error: str
+) -> None:
+    page = TesseractEngine("rus", timeout_s, binary=stand_in(tmp_path, body)).recognize(image(3))
     assert page.number == 3 and page.lines == [] and page.error is not None
     assert error in page.error
 

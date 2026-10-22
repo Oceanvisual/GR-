@@ -10,23 +10,19 @@ from gr.domain.document import (
     DocumentMetadata,
     Fragment,
     IngestionDiagnostics,
-    OcrInfo,
     RawDocument,
     StructureChoice,
 )
-from gr.domain.enums import DocFormat, OcrStatus, StructureMode, TextLayerStatus
+from gr.domain.enums import DocFormat, StructureMode, TextLayerStatus
 from gr.ingestion.base import IngestionError
 from gr.ingestion.detect import detect_format
 from gr.ingestion.docx import DocxExtractor, ZipLimits
-from gr.ingestion.pdf import PdfExtractor
+from gr.ingestion.ocr import OcrEngine, OcrPage
+from gr.ingestion.pdf import OcrOptions, PdfExtractor, recognize_file
 from gr.ingestion.registry import ExtractorRegistry
 from gr.ingestion.txt import TxtExtractor
 from gr.structure.builder import EmptyTextError, build_structure
 from gr.structure.metadata import extract_metadata
-
-OCR_NOT_CONNECTED = (
-    "Распознавание сканов (OCR) пока не подключено: страницы без текста не разобраны."
-)
 
 
 @dataclass(frozen=True)
@@ -56,28 +52,23 @@ class ParseFailure:
     details: dict[str, Any] = field(default_factory=dict)
 
 
-def registry(limits: ParseLimits) -> ExtractorRegistry:
+def registry(limits: ParseLimits, ocr: OcrOptions | None = None) -> ExtractorRegistry:
     return ExtractorRegistry(
         [
             TxtExtractor(),
             DocxExtractor(ZipLimits(max_unzipped_bytes=limits.max_unzipped_bytes)),
-            PdfExtractor(max_pages=limits.max_pages),
+            PdfExtractor(max_pages=limits.max_pages, ocr=ocr),
         ]
     )
 
 
-def _ocr_info(diagnostics: IngestionDiagnostics) -> OcrInfo:
-    attempted = diagnostics.ocr.status != OcrStatus.NOT_NEEDED  # recognised in the extractor
-    if attempted or diagnostics.text_layer in (TextLayerStatus.OK,) or not diagnostics.empty_pages:
-        return diagnostics.ocr
-    return OcrInfo(
-        status=OcrStatus.UNAVAILABLE, pages=diagnostics.empty_pages, error=OCR_NOT_CONNECTED
-    )
-
-
-def parse_file(path: str, doc_id: str, limits: ParseLimits) -> ParsedDocument | ParseFailure:
+def parse_file(
+    path: str, doc_id: str, limits: ParseLimits, ocr: OcrOptions | None = None
+) -> ParsedDocument | ParseFailure:
+    """`ocr`: pages without text are recognised (or were: `OcrOptions.done`); without it they
+    are only reported, and the document service decides when to recognise them (T070)."""
     try:
-        return _parse(Path(path).read_bytes(), doc_id, limits)
+        return _parse(Path(path).read_bytes(), doc_id, limits, ocr)
     except IngestionError as exc:
         details = dict(exc.details)
         if exc.code == "unsupported_format":
@@ -85,15 +76,20 @@ def parse_file(path: str, doc_id: str, limits: ParseLimits) -> ParsedDocument | 
         return ParseFailure(exc.code, exc.message_ru, details)
 
 
-def _parse(data: bytes, doc_id: str, limits: ParseLimits) -> ParsedDocument:
+def recognize_pages(path: str, numbers: list[int], engine: OcrEngine, dpi: int) -> list[OcrPage]:
+    """A batch of pages of a stored PDF, in a worker process (T070)."""
+    return recognize_file(path, numbers, engine, dpi)
+
+
+def _parse(data: bytes, doc_id: str, limits: ParseLimits, ocr: OcrOptions | None) -> ParsedDocument:
     fmt = detect_format(data)
-    return parse_raw(registry(limits).get(fmt).extract(data), doc_id, limits)
+    return parse_raw(registry(limits, ocr).get(fmt).extract(data), doc_id, limits)
 
 
 def parse_raw(raw: RawDocument, doc_id: str, limits: ParseLimits) -> ParsedDocument:
     """Extracted blocks → structure and requisites. Raises `IngestionError` only."""
     fmt = raw.format
-    diagnostics = raw.diagnostics.model_copy(update={"ocr": _ocr_info(raw.diagnostics)})
+    diagnostics = raw.diagnostics
     try:
         # Emptiness is judged after normalisation: invisible characters alone are no text.
         structure = build_structure(raw, doc_id)

@@ -1,15 +1,20 @@
-"""Document upload and reading (api.md § Документы; FR-001…FR-006, FR-013, NFR-008).
+"""Document upload and reading (api.md § Документы; FR-001…FR-006, FR-008, FR-013, NFR-008).
 
 Parsing runs in a worker process (NFR-014). A document is stored only after its text and
-structure are, so a stored document is always complete.
+structure are, so a stored document is always complete. A PDF with pages without text is
+stored with what it has and, when tesseract is there, its pages are recognised in the
+background (T070): batch by batch in worker processes, so the progress shows; then the file is
+parsed again with the recognised pages and its text and structure are replaced at once.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import os
 import re
 import tempfile
 from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -18,18 +23,42 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field
 
 from gr.api.deps import AppState
-from gr.domain.document import Document, DocumentMetadata, Fragment, MetaField
-from gr.domain.enums import DocFormat, RunStatus, TextLayerStatus
+from gr.domain.document import (
+    Document,
+    DocumentMetadata,
+    Fragment,
+    IngestionDiagnostics,
+    MetaField,
+    OcrInfo,
+    OcrProgress,
+)
+from gr.domain.enums import DocFormat, OcrStatus, RunStatus, TextLayerStatus
 from gr.domain.ids import new_id
 from gr.errors import AppError
+from gr.ingestion.ocr import OcrPage, TesseractEngine
+from gr.ingestion.ocr_probe import OcrAvailability
+from gr.ingestion.pdf import OcrOptions
 from gr.logging import get_logger
-from gr.pipeline.workers import WorkerCrashedError, WorkerTaskError, WorkerTimeoutError
-from gr.services.parsing import ParseFailure, ParseLimits, parse_file
+from gr.pipeline.workers import (
+    WorkerCrashedError,
+    WorkerError,
+    WorkerTaskError,
+    WorkerTimeoutError,
+)
+from gr.services.parsing import ParseFailure, ParseLimits, parse_file, recognize_pages
 from gr.storage.repositories import ConflictError, DocumentText, NotFoundError
 
 log = get_logger(__name__)
 
 CHUNK = 1 << 16
+OCR_BATCH = 5  # pages per worker process: the progress moves between batches
+OCR_WORKER_MARGIN_S = 30.0  # rendering and process start, beyond the page timeouts
+ACTIVE_OCR = (OcrStatus.QUEUED, OcrStatus.RUNNING)
+_WORKER_FAILURES: dict[type[WorkerError], str] = {
+    WorkerTimeoutError: "пачка страниц распознавалась дольше отведённого времени",
+    WorkerCrashedError: "процесс распознавания аварийно завершился",
+    WorkerTaskError: "страницы не удалось подготовить к распознаванию",
+}
 PREVIEW_CHARS = 160
 _UNSAFE_FILENAME = re.compile(r"[\x00-\x1f\x7f]")
 MAX_META_CHARS = 2000
@@ -118,6 +147,11 @@ class IngestResult:
     document: Document
     duplicate: bool
 
+    @property
+    def recognising(self) -> bool:
+        """Pages without text are being recognised: the upload answers 202 (api.md)."""
+        return self.document.diagnostics.ocr.status in ACTIVE_OCR
+
 
 # --- helpers -------------------------------------------------------------------------------
 
@@ -197,6 +231,7 @@ class DocumentService:
             return IngestResult(existing, duplicate=True)
         doc_id = new_id("doc")
         parsed = await self._parse(upload, doc_id)
+        diagnostics = self._ocr_plan(parsed.diagnostics)
         document = Document(
             id=doc_id,
             filename=upload.filename,
@@ -207,7 +242,7 @@ class DocumentService:
             uploaded_by=user,
             page_count=parsed.page_count,
             char_count=len(parsed.text),
-            diagnostics=parsed.diagnostics,
+            diagnostics=diagnostics,
             metadata=parsed.metadata,
             structure_mode=parsed.structure_mode,
             user_source=source_note or None,
@@ -235,12 +270,18 @@ class DocumentService:
             strategy=parsed.diagnostics.structure.strategy
             if parsed.diagnostics.structure
             else None,
+            ocr=diagnostics.ocr.status.value,
         )
+        if diagnostics.ocr.status == OcrStatus.QUEUED:
+            self.submit_ocr(doc_id)
         return IngestResult(document, duplicate=False)
 
     async def _parse(self, upload: Upload, doc_id: str) -> Any:
+        return await self._parse_path(str(upload.path), doc_id)
+
+    async def _parse_path(self, path: str, doc_id: str, ocr: OcrOptions | None = None) -> Any:
         try:
-            result = await self.state.workers.run(parse_file, str(upload.path), doc_id, self.limits)
+            result = await self.state.workers.run(parse_file, path, doc_id, self.limits, ocr)
         except WorkerTimeoutError:
             raise AppError(
                 "corrupted_file", "Разбор файла занял слишком много времени.", {"reason": "timeout"}
@@ -253,6 +294,156 @@ class DocumentService:
         if isinstance(result, ParseFailure):
             raise AppError(result.code, result.message, result.details)
         return result
+
+    # --- OCR (T070) ---------------------------------------------------------------------
+
+    def _ocr_plan(self, diagnostics: IngestionDiagnostics) -> IngestionDiagnostics:
+        """Pages without text: queued when the engine is there, otherwise why not (R-04)."""
+        if not diagnostics.empty_pages or diagnostics.ocr.status != OcrStatus.NOT_NEEDED:
+            return diagnostics
+        pages = diagnostics.empty_pages
+        if self.state.ocr.available:
+            total = min(len(pages), self.state.settings.ocr_max_pages)
+            ocr = OcrInfo(status=OcrStatus.QUEUED, pages=pages[:total],
+                          progress=OcrProgress(done=0, total=total))  # fmt: skip
+        else:
+            ocr = OcrInfo(status=OcrStatus.UNAVAILABLE, pages=pages,
+                          error=_unavailable(self.state.ocr))  # fmt: skip
+        return _with_ocr(diagnostics, ocr)
+
+    def submit_ocr(self, doc_id: str) -> None:
+        self.state.ocr_jobs.submit(doc_id, lambda: self.recognize(doc_id))
+
+    def _editing(self, doc_id: str) -> AbstractAsyncContextManager[None]:
+        """One read-modify-write of a document at a time: OCR state, its result, a user's edit."""
+        return self.state.upload_locks.hold(f"document:{doc_id}")
+
+    async def _update_ocr(self, doc_id: str, **changes: Any) -> None:
+        """Only the OCR state changes: an edit of the requisites made meanwhile stays."""
+        async with self._editing(doc_id):
+            current = await self.get(doc_id)
+            ocr = current.diagnostics.ocr.model_copy(update=changes)
+            await self.repos.documents.update(
+                current.model_copy(update={"diagnostics": _with_ocr(current.diagnostics, ocr)})
+            )
+
+    async def recognize(self, doc_id: str) -> None:
+        """Recognise the pages without text of a stored PDF and parse it again (T070).
+
+        Any failure ends in `failed` with its reason, and the user may retry; only a stop of the
+        service leaves the document `running`, and the next start resumes it."""
+        try:
+            await self._recognize(doc_id)
+        except Exception as error:  # an unforeseen one too: never `running` for good
+            log.error("ocr.crashed", doc_id=doc_id, error=type(error).__name__)
+            with contextlib.suppress(Exception):
+                reason = "распознавание прервано: внутренняя ошибка"
+                await self._update_ocr(doc_id, status=OcrStatus.FAILED, error=reason)
+
+    async def _recognize(self, doc_id: str) -> None:
+        document = await self.get(doc_id)
+        if document.diagnostics.ocr.status not in ACTIVE_OCR:
+            return
+        settings = self.state.settings
+        numbers = document.diagnostics.empty_pages[: settings.ocr_max_pages]
+        engine = self.state.ocr_engine or TesseractEngine(
+            settings.ocr_lang, settings.ocr_page_timeout_s, version=self.state.ocr.version
+        )
+        path = str(self.state.files.path_for(document.sha256))
+        done: dict[int, OcrPage] = {}
+
+        def progress() -> OcrProgress:
+            return OcrProgress(done=len(done), total=len(numbers))
+
+        await self._update_ocr(doc_id, status=OcrStatus.RUNNING, pages=numbers,
+                               progress=progress(), error=None)  # fmt: skip
+        log.info("ocr.started", doc_id=doc_id, pages=len(numbers))
+        try:
+            for start in range(0, len(numbers), OCR_BATCH):
+                batch = numbers[start : start + OCR_BATCH]
+                pages = await self.state.workers.run(
+                    recognize_pages, path, batch, engine, settings.ocr_dpi,
+                    timeout_s=len(batch) * settings.ocr_page_timeout_s + OCR_WORKER_MARGIN_S,
+                )  # fmt: skip
+                done.update({page.number: page for page in pages})
+                await self._update_ocr(doc_id, progress=progress())
+            options = OcrOptions(dpi=settings.ocr_dpi, max_pages=settings.ocr_max_pages,
+                                 min_confidence=settings.ocr_min_confidence, done=done,
+                                 version=engine.version)  # fmt: skip
+            parsed = await self._parse_path(path, doc_id, options)
+        except (AppError, WorkerError) as error:
+            reason = (
+                error.message_ru
+                if isinstance(error, AppError)
+                else _WORKER_FAILURES.get(type(error), "ошибка распознавания")
+            )
+            await self._update_ocr(doc_id, status=OcrStatus.FAILED,
+                                   error=f"распознавание прервано: {reason}")  # fmt: skip
+            log.warning("ocr.failed", doc_id=doc_id, error=type(error).__name__)
+            return
+        ocr = parsed.diagnostics.ocr
+        if ocr.status != OcrStatus.DONE:  # nothing recognised: the pages still wait for it
+            ocr = ocr.model_copy(update={"pages": numbers})
+        ocr = ocr.model_copy(update={"progress": progress()})
+        text = DocumentText(doc_id=doc_id, full_text=parsed.text, page_offsets=parsed.page_starts)
+        async with self._editing(doc_id):
+            current = await self.get(doc_id)
+            updated = Document.model_validate(
+                {
+                    **current.model_dump(),
+                    "page_count": parsed.page_count,
+                    "char_count": len(parsed.text),
+                    "diagnostics": _with_ocr(parsed.diagnostics, ocr).model_dump(),
+                    "metadata": _kept_metadata(current.metadata, parsed.metadata).model_dump(),
+                    "structure_mode": parsed.structure_mode,
+                }
+            )
+            await self.repos.documents.replace_parsed(updated, text, parsed.fragments)
+        log.info("ocr.finished", doc_id=doc_id, status=ocr.status.value, pages=len(ocr.pages),
+                 confidence=ocr.mean_confidence, fragments=len(parsed.fragments))  # fmt: skip
+
+    async def retry_ocr(self, doc_id: str) -> Document:
+        """After a failure, or once the engine is installed (api.md: POST /documents/{id}/ocr).
+
+        The recognised text replaces the document's, so not once it was analysed: the citations
+        of an analysis point into the text it read. The lock of analysis starts keeps one from
+        slipping in between the check and the queue."""
+        async with self.state.upload_locks.hold(f"analysis:{doc_id}"):
+            document = await self.get(doc_id)
+            if document.diagnostics.ocr.status not in (OcrStatus.FAILED, OcrStatus.UNAVAILABLE):
+                raise AppError(
+                    "validation_error", "Повторить OCR можно только после ошибки распознавания."
+                )
+            if not self.state.ocr.available:
+                raise AppError("validation_error", _unavailable(self.state.ocr))
+            if await self.repos.runs.list_for_document(doc_id):
+                raise AppError(
+                    "validation_error",
+                    "Документ уже анализировался: новый текст разошёлся бы с цитатами анализа. "
+                    "Загрузите файл заново после удаления документа.",
+                )
+            numbers = document.diagnostics.empty_pages[: self.state.settings.ocr_max_pages]
+            await self._update_ocr(doc_id, status=OcrStatus.QUEUED, pages=numbers, error=None,
+                                   progress=OcrProgress(done=0, total=len(numbers)))  # fmt: skip
+        self.submit_ocr(doc_id)
+        log.info("ocr.retried", doc_id=doc_id)
+        return await self.get(doc_id)
+
+    async def recover_ocr(self) -> list[str]:
+        """On startup: documents whose OCR was queued or cut off go back to the queue."""
+        resumed = []
+        for document in await self.repos.documents.list():
+            if document.diagnostics.ocr.status not in ACTIVE_OCR:
+                continue
+            if self.state.ocr.available:
+                self.submit_ocr(document.id)
+                resumed.append(document.id)
+            else:
+                await self._update_ocr(document.id, status=OcrStatus.UNAVAILABLE,
+                                       error=_unavailable(self.state.ocr))  # fmt: skip
+        if resumed:
+            log.info("ocr.resumed_on_start", documents=len(resumed))
+        return resumed
 
     # --- reading -----------------------------------------------------------------------
 
@@ -281,19 +472,20 @@ class DocumentService:
         return summaries
 
     async def patch_metadata(self, doc_id: str, patch: MetadataPatch, user: str) -> Document:
-        document = await self.get(doc_id)
-        metadata: dict[str, MetaField] = {
-            name: getattr(document.metadata, name) for name in DocumentMetadata.model_fields
-        }
-        for name, value in patch.fields.items():
-            # A value entered by the user carries no citation and says so (FR-006).
-            metadata[name] = MetaField(value=value, source="user")
-        update: dict[str, Any] = {"metadata": DocumentMetadata(**metadata)}
-        extra = {"user_source", "relevance_checked_at", "relevance_note"}
-        for attribute in patch.model_fields_set & extra:
-            update[attribute] = getattr(patch, attribute)
-        updated = Document.model_validate({**document.model_dump(), **update})
-        await self.repos.documents.update(updated)
+        async with self._editing(doc_id):
+            document = await self.get(doc_id)
+            metadata: dict[str, MetaField] = {
+                name: getattr(document.metadata, name) for name in DocumentMetadata.model_fields
+            }
+            for name, value in patch.fields.items():
+                # A value entered by the user carries no citation and says so (FR-006).
+                metadata[name] = MetaField(value=value, source="user")
+            update: dict[str, Any] = {"metadata": DocumentMetadata(**metadata)}
+            extra = {"user_source", "relevance_checked_at", "relevance_note"}
+            for attribute in patch.model_fields_set & extra:
+                update[attribute] = getattr(patch, attribute)
+            updated = Document.model_validate({**document.model_dump(), **update})
+            await self.repos.documents.update(updated)
         log.info(
             "document.metadata_edited",
             doc_id=doc_id,
@@ -376,4 +568,27 @@ def _with_context(fragment: Fragment, fragments: list[Fragment]) -> FragmentWith
         parent=by_id.get(fragment.parent_id or ""),
         previous=siblings[index - 1] if index > 0 else None,
         next=siblings[index + 1] if index + 1 < len(siblings) else None,
+    )
+
+
+def _unavailable(ocr: OcrAvailability) -> str:
+    return f"OCR недоступен: {ocr.reason or 'движок распознавания не найден.'}"
+
+
+def _with_ocr(diagnostics: IngestionDiagnostics, ocr: OcrInfo) -> IngestionDiagnostics:
+    """`analyzable` follows the OCR state: it is derived when the model is validated."""
+    return IngestionDiagnostics.model_validate(
+        {**diagnostics.model_dump(), "ocr": ocr.model_dump()}
+    )
+
+
+def _kept_metadata(current: DocumentMetadata, found: DocumentMetadata) -> DocumentMetadata:
+    """Requisites of the recognised text; those a user entered meanwhile stay (FR-006)."""
+    return DocumentMetadata(
+        **{
+            name: getattr(current, name)
+            if getattr(current, name).source == "user"
+            else getattr(found, name)
+            for name in DocumentMetadata.model_fields
+        }
     )

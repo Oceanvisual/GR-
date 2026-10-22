@@ -968,7 +968,7 @@ UI карты процессов.
     tesseract нет, тесты пропускаются.
   - **Тесты**: `test_ocr.py`.
 
-- [ ] T070 [US1] OCR в потоке загрузки: фон, статусы, UI — `src/gr/services/documents.py`
+- [X] T070 [US1] OCR в потоке загрузки: фон, статусы, UI — `src/gr/services/documents.py`
   - **Цель**: FR-003, FR-008; api.md (`202`, `POST /documents/{id}/ocr`, `409 ocr_in_progress`,
     `readyz.ocr`); ui.md, экран 2.
   - **Зависит**: T069, T014, T022, T023, T067, T076

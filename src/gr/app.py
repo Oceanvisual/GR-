@@ -16,10 +16,12 @@ from gr.llm.base import StructuredLLM
 from gr.llm.factory import build_llm
 from gr.logging import configure_logging, get_logger
 from gr.pipeline.analysis import AnalysisSettings, analysis_stages
+from gr.pipeline.ocr_jobs import OcrJobs
 from gr.pipeline.runner import JobRunner
 from gr.pipeline.stages import Stage
 from gr.pipeline.workers import CpuWorkers
 from gr.services.analyses import price
+from gr.services.documents import DocumentService
 from gr.settings import Settings, get_settings
 from gr.storage.db import Database
 from gr.storage.files import FileStore
@@ -76,8 +78,10 @@ def create_app(
             workers=CpuWorkers(settings.parse_workers, settings.parse_timeout_s),
             runner=runner,
             ocr=probe_tesseract(settings.ocr_lang, enabled=settings.ocr_enabled),
+            ocr_jobs=OcrJobs(settings.ocr_concurrency),
         )
         await runner.recover()
+        await DocumentService(app.state.gr).recover_ocr()
         log.info(
             "app.started",
             env=settings.app_env,
@@ -87,6 +91,7 @@ def create_app(
         try:
             yield
         finally:
+            await app.state.gr.ocr_jobs.shutdown()  # cut off: resumed on the next start
             await runner.shutdown()
             await db.dispose()
 

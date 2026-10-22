@@ -16,7 +16,9 @@
 {% if duplicate %}
 <div class="alert alert-info" role="status">Этот файл уже загружен раньше — открыт существующий документ.</div>
 {% endif %}
-{% if not diag.analyzable %}
+{% if diag.ocr.status in ("queued", "running") %}
+<div class="alert alert-info" role="status">Страницы без текста распознаются (OCR). Структура и анализ станут доступны, когда распознавание закончится; страница обновится сама.</div>
+{% elif not diag.analyzable %}
 <div class="alert alert-error" role="alert">Документ нельзя анализировать: см. диагностику.</div>
 {% endif %}
 
@@ -79,12 +81,7 @@
     </dd>
     {% if diag.ocr.status != "not_needed" %}
     <dt>OCR</dt>
-    <dd>
-      {{ labels.ocr[diag.ocr.status] }}
-      {% if diag.ocr.mean_confidence is not none %} · средняя уверенность {{ "%.0f" | format(diag.ocr.mean_confidence) }}%{% endif %}
-      {% if diag.ocr.low_confidence_pages %} · низкое качество: стр. {{ diag.ocr.low_confidence_pages | join(", ") }}{% endif %}
-      {% if diag.ocr.error %}<div class="muted">{{ diag.ocr.error }}</div>{% endif %}
-    </dd>
+    {% include "partials/ocr_status.html" %}
     {% endif %}
     {% if diag.encoding %}<dt>Кодировка</dt><dd>{{ diag.encoding }}</dd>{% endif %}
     <dt>Структура</dt>

@@ -6,7 +6,9 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from gr.auth import BasicAuthenticator
+from gr.ingestion.ocr import OcrEngine
 from gr.ingestion.ocr_probe import OcrAvailability
+from gr.pipeline.ocr_jobs import OcrJobs
 from gr.pipeline.runner import JobRunner
 from gr.pipeline.workers import CpuWorkers
 from gr.services.locks import KeyedLocks
@@ -26,6 +28,8 @@ class AppState:
     runner: JobRunner
     ocr: OcrAvailability
     upload_locks: KeyedLocks = field(default_factory=KeyedLocks)
+    ocr_jobs: OcrJobs = field(default_factory=OcrJobs)
+    ocr_engine: OcrEngine | None = None  # None: the system tesseract of OCR_LANG
 
 
 def get_state(request: Request) -> AppState:

@@ -101,6 +101,38 @@ class DocumentRepository(_Repository):
         if result.rowcount == 0:
             raise NotFoundError(document.id)
 
+    async def replace_parsed(
+        self, document: Document, text: "DocumentText", fragments: Sequence[Fragment]
+    ) -> None:
+        """A document parsed again (after OCR) with its new text and structure, at once."""
+        if text.doc_id != document.id or any(f.doc_id != document.id for f in fragments):
+            raise ValueError("text and fragments must belong to the document")
+        async with self.db.write() as conn:
+            result = await conn.execute(
+                update(t.documents)
+                .where(t.documents.c.id == document.id)
+                .values(payload=_json(document))
+            )
+            if result.rowcount == 0:
+                raise NotFoundError(document.id)
+            await conn.execute(
+                delete(t.document_texts).where(t.document_texts.c.doc_id == document.id)
+            )
+            await conn.execute(
+                t.document_texts.insert().values(
+                    doc_id=text.doc_id, full_text=text.full_text, page_offsets=text.page_offsets
+                )
+            )
+            await conn.execute(delete(t.fragments).where(t.fragments.c.doc_id == document.id))
+            if fragments:
+                await conn.execute(
+                    t.fragments.insert(),
+                    [
+                        {"doc_id": f.doc_id, "id": f.id, "order": f.order, "payload": _json(f)}
+                        for f in fragments
+                    ],
+                )
+
     async def get(self, doc_id: str) -> Document:
         async with self.db.read() as conn:
             payload = await conn.scalar(

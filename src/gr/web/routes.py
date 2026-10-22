@@ -11,11 +11,13 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from gr.api.deps import StateDep, UserDep, require_user
+from gr.api.deps import AppState, StateDep, UserDep, require_user
 from gr.api.documents import read_upload
 from gr.domain.document import Document, DocumentMetadata, Fragment
+from gr.domain.enums import OcrStatus
 from gr.errors import AppError
 from gr.services.documents import (
+    ACTIVE_OCR,
     MAX_META_CHARS,
     DocumentService,
     FragmentWithContext,
@@ -196,8 +198,38 @@ async def document_page(
             ),
             "duplicate": duplicate == "1",
             "llm_policy": state.settings.llm_data_policy,
+            "ocr_retry": _ocr_retry(document, state, bool(runs)),
         },
     )
+
+
+def _ocr_retry(document: Document, state: AppState, analysed: bool) -> bool:
+    """The rules of DocumentService.retry_ocr, so the button shows only when it can work."""
+    failed = document.diagnostics.ocr.status in (OcrStatus.FAILED, OcrStatus.UNAVAILABLE)
+    return failed and state.ocr.available and not analysed
+
+
+@router.get("/documents/{doc_id}/ocr", response_class=HTMLResponse)
+async def ocr_status(request: Request, doc_id: str, service: ServiceDep) -> Response:
+    """The OCR row while it runs (HTMX polling); once over, the page reloads as a whole."""
+    try:
+        document = await service.get(doc_id)
+    except AppError as error:
+        return _error_page(request, error)
+    if document.diagnostics.ocr.status not in ACTIVE_OCR:
+        return Response(status_code=204, headers={"HX-Refresh": "true"})
+    return templates.TemplateResponse(
+        request, "partials/ocr_status.html", {"document": document, "ocr_retry": False}
+    )
+
+
+@router.post("/documents/{doc_id}/ocr", response_class=HTMLResponse)
+async def retry_ocr(request: Request, doc_id: str, service: ServiceDep) -> Response:
+    try:
+        await service.retry_ocr(doc_id)
+    except AppError as error:
+        return _error_page(request, error)
+    return RedirectResponse(f"/documents/{doc_id}#diagnostics", status_code=303)
 
 
 @router.post("/documents/{doc_id}/metadata", response_class=HTMLResponse)

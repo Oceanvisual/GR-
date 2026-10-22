@@ -56,9 +56,15 @@ class Block(DomainModel):
         return value
 
 
+class OcrProgress(DomainModel):
+    done: int = Field(ge=0)  # pages recognised so far
+    total: int = Field(ge=0)
+
+
 class OcrInfo(DomainModel):
     status: OcrStatus = OcrStatus.NOT_NEEDED
-    pages: list[int] = []
+    pages: list[int] = []  # recognised (done) or waiting for OCR (queued, running, failed)
+    progress: OcrProgress | None = None
     mean_confidence: float | None = Field(default=None, ge=0, le=100)
     low_confidence_pages: list[int] = []
     engine_version: str | None = None

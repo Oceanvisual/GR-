@@ -65,7 +65,11 @@ REST JSON, префикс `/api/v1`. Все маршруты, кроме `/healt
   `422 document_not_analyzable`, а во время OCR — `409 ocr_in_progress`.
 
 ### `POST /api/v1/documents/{doc_id}/ocr` — повторить OCR
-Только при `diagnostics.ocr.status = failed`. Ответ — `202 Document`.
+При `diagnostics.ocr.status = failed`, а также `unavailable`, если движок появился после
+перезапуска сервиса. Ответ — `202 Document` (`ocr.status=queued`, `ocr.progress`). `400
+validation_error`: OCR не нужен, уже идёт или выполнен; движок недоступен; по документу уже
+запускался анализ (новый текст разошёлся бы с его цитатами). Прерванный остановкой сервиса OCR
+при следующем старте возвращается в очередь сам.
 
 ### `GET /api/v1/documents` → `list[DocumentSummary]`
 `DocumentSummary = {id, filename, format, uploaded_at, metadata.title, diagnostics.text_layer,

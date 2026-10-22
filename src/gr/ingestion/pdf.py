@@ -6,7 +6,8 @@ engine, they are rendered here (the only module that may run PDFium) and recogni
 lines go through the same layout as the others, as text of source `ocr`.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from statistics import fmean
 
 import pypdfium2 as pdfium
@@ -15,7 +16,7 @@ import pypdfium2.raw as pdfium_raw
 from gr.domain.document import IngestionDiagnostics, OcrInfo, RawDocument, RemovedNoise
 from gr.domain.enums import DocFormat, OcrStatus, TextLayerStatus, TextSource
 from gr.ingestion.base import IngestionError
-from gr.ingestion.ocr import OcrEngine, PageImage
+from gr.ingestion.ocr import OcrEngine, OcrPage, PageImage
 from gr.ingestion.pdf_layout import Line, build_blocks
 
 _PASSWORD_ERROR = 4  # FPDF_ERR_PASSWORD
@@ -69,10 +70,12 @@ def _page_lines(page: pdfium.PdfPage, number: int) -> tuple[list[Line], int]:
 
 @dataclass(frozen=True)
 class OcrOptions:
-    engine: OcrEngine
+    engine: OcrEngine | None = None  # None: only the pages of `done` are known
     dpi: int = 300
     max_pages: int = 150
     min_confidence: float = 60.0  # a page below it is reported as poorly recognised
+    done: Mapping[int, OcrPage] = field(default_factory=dict)  # recognised earlier (T070)
+    version: str | None = None  # of the engine that recognised `done`
 
 
 def render_page(page: pdfium.PdfPage, number: int, dpi: int) -> PageImage:
@@ -92,6 +95,27 @@ def render_page(page: pdfium.PdfPage, number: int, dpi: int) -> PageImage:
     return PageImage(number, dpi, width, height, rows, width_pt, height_pt)
 
 
+def _recognize_page(
+    document: pdfium.PdfDocument, number: int, engine: OcrEngine, dpi: int
+) -> OcrPage:
+    page = document[number - 1]
+    try:
+        image = render_page(page, number, dpi)
+    finally:
+        page.close()
+    return engine.recognize(image)
+
+
+def recognize_file(path: str, numbers: list[int], engine: OcrEngine, dpi: int) -> list[OcrPage]:
+    """Some pages of a stored PDF, in a worker process: OCR of a scan goes page batch by page
+    batch, so its progress can be shown (T070)."""
+    document = pdfium.PdfDocument(path)
+    try:
+        return [_recognize_page(document, number, engine, dpi) for number in numbers]
+    finally:
+        document.close()
+
+
 def _recognize(
     document: pdfium.PdfDocument, numbers: list[int], options: OcrOptions
 ) -> tuple[dict[int, list[Line]], OcrInfo]:
@@ -100,12 +124,12 @@ def _recognize(
     confidence: dict[int, float] = {}
     errors: list[str] = []
     for number in numbers[: options.max_pages]:
-        page = document[number - 1]
-        try:
-            image = render_page(page, number, options.dpi)
-        finally:
-            page.close()
-        result = options.engine.recognize(image)
+        if number in options.done:
+            result = options.done[number]
+        elif options.engine is None:
+            result = OcrPage(number, error="страница не распознана")
+        else:
+            result = _recognize_page(document, number, options.engine, options.dpi)
         if result.error is not None:
             errors.append(f"стр. {number}: {result.error}")
             continue
@@ -120,7 +144,7 @@ def _recognize(
         pages=sorted(found),
         mean_confidence=round(fmean(confidence.values()), 1) if confidence else None,
         low_confidence_pages=sorted(n for n, c in confidence.items() if c < options.min_confidence),
-        engine_version=options.engine.version,
+        engine_version=options.version or (options.engine.version if options.engine else None),
         error="; ".join(errors)[:1000] or None,
     )
     return found, info

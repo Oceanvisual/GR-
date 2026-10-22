@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from gr.analysis.mermaid import process_to_mermaid
 from gr.analysis.overlay import EffectiveState
 from gr.api.deps import AppState
-from gr.domain.enums import RunStatus, StageName, StageStatus
+from gr.domain.enums import OcrStatus, RunStatus, StageName, StageStatus
 from gr.domain.ids import new_id
 from gr.domain.initiative import InitiativeSet
 from gr.domain.process import Process, ProcessModel
@@ -156,15 +156,18 @@ class AnalysisService:
         self.settings = state.settings
 
     async def start(self, doc_id: str, user: str) -> AnalysisRun:
-        try:
-            document = await self.repos.documents.get(doc_id)
-        except NotFoundError:
-            raise AppError("not_found", "Документ не найден.") from None
-        if not document.diagnostics.analyzable:
-            raise AppError("document_not_analyzable")
-        _check_policy(self.settings)
-        # One start at a time per document: the active-run check and the insert go together.
+        # One start at a time per document: the checks and the insert go together. A retried
+        # OCR, which replaces the text, queues under the same lock (DocumentService.retry_ocr).
         async with self.state.upload_locks.hold(f"analysis:{doc_id}"):
+            try:
+                document = await self.repos.documents.get(doc_id)
+            except NotFoundError:
+                raise AppError("not_found", "Документ не найден.") from None
+            if document.diagnostics.ocr.status in (OcrStatus.QUEUED, OcrStatus.RUNNING):
+                raise AppError("ocr_in_progress")
+            if not document.diagnostics.analyzable:
+                raise AppError("document_not_analyzable")
+            _check_policy(self.settings)
             active = await self.repos.runs.active_for_document(doc_id)
             if active is not None:
                 raise AppError("run_in_progress", details={"run_id": active.id})

@@ -23,10 +23,9 @@ API_MD = Path(__file__).resolve().parents[2] / "specs" / "001-npa-ai-analyzer" /
 HEADING = re.compile(r"^### `(GET|POST|PUT|PATCH|DELETE) (/[^`\s?]+)")
 ROW = re.compile(r"^\| (GET|POST|PUT|PATCH|DELETE) \| `(/[^`?]+)")
 SUCCESS = re.compile(r"`(2\d\d)\b")
-# Described in api.md, built by a later task.
-PENDING = {("POST", "/api/v1/documents/{doc_id}/ocr"): "T070"}
-
 Route = tuple[str, str]
+# Described in api.md, built by a later task: (method, path) → the task.
+PENDING: dict[Route, str] = {}
 
 
 def documented() -> dict[Route, int]:

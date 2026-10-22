@@ -132,7 +132,8 @@ def test_scan_page_explains_why_not_analyzable(client: TestClient) -> None:
     doc_id = upload(client, SYNTHETIC / "scan.pdf")
     html = client.get(f"/documents/{doc_id}").text
     assert "Документ нельзя анализировать" in html and "скан: нужен OCR" in html
-    assert "Распознавание сканов (OCR) пока не подключено" in html
+    assert "OCR недоступен: OCR отключён (OCR_ENABLED=false)." in html
+    assert "Повторить распознавание" not in html  # the engine is off: retrying cannot work
     assert "Структура пуста" in html
 
 

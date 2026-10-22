@@ -83,7 +83,12 @@ async def read_upload(request: Request, service: DocumentService) -> tuple[Uploa
     return upload, note.strip() if isinstance(note, str) else None
 
 
-@router.post("", status_code=201, response_model=Document)
+@router.post(
+    "",
+    status_code=201,
+    response_model=Document,
+    responses={202: {"model": Document, "description": "Страницы без текста распознаются"}},
+)
 async def upload_document(
     request: Request, response: Response, service: ServiceDep, user: UserDep
 ) -> Document:
@@ -92,6 +97,8 @@ async def upload_document(
     if result.duplicate:
         response.status_code = 200
         response.headers["X-Duplicate-Of"] = result.document.id
+    elif result.recognising:
+        response.status_code = 202  # the client polls GET /documents/{id} (api.md)
     return result.document
 
 
@@ -103,6 +110,11 @@ async def list_documents(service: ServiceDep) -> list[DocumentSummary]:
 @router.get("/{doc_id}", response_model=Document)
 async def get_document(doc_id: str, service: ServiceDep) -> Document:
     return await service.get(doc_id)
+
+
+@router.post("/{doc_id}/ocr", status_code=202, response_model=Document)
+async def retry_ocr(doc_id: str, service: ServiceDep) -> Document:
+    return await service.retry_ocr(doc_id)
 
 
 @router.patch("/{doc_id}/metadata", response_model=Document)
