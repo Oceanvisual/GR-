@@ -1,13 +1,16 @@
-"""US2 stages for the runner: S3 discover, S4 detail, S5 validate (contracts/llm.md, R-03).
+"""Stages for the runner: S3 discover, S4 detail, S5 validate, S6 opportunities, S7 postprocess
+(contracts/llm.md, R-03).
 
 Each stage reads the document and the outputs of earlier stages, and returns its own output,
-which the runner stores once. S4 also stores every finished process, so a resumed run redoes
-only the rest, and reports processes it could not detail as failed items of the run.
+which the runner stores once. S4 and S6 also store every finished process, so a resumed run
+redoes only the rest, and report processes they could not handle as failed items of the run.
+S7 also saves the first version of the assumption set, from the profile.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
+from gr.analysis.defaults import build_assumptions
 from gr.domain.document import Document, Fragment
 from gr.domain.enums import StageName
 from gr.domain.process import ProcessModel
@@ -124,6 +127,14 @@ class PostprocessStage:
         model = ProcessModel.model_validate(await ctx.output_of(StageName.VALIDATE))
         drafts = OpportunitiesResult.model_validate(await ctx.output_of(StageName.OPPORTUNITIES))
         result = postprocess(model, drafts, fragments)
+        # Assumption set v1 from the profile (llm.md § S6, validation 7); a resumed run that
+        # adds nothing new keeps the stored version.
+        existing = await ctx.repos.assumptions.latest(ctx.run.id)
+        assumptions = build_assumptions(
+            model, result.initiatives, existing=existing, run_id=ctx.run.id
+        )
+        if assumptions is not existing:
+            await ctx.repos.assumptions.add(assumptions)
         serious = {"no_result", "missing_provision", "invalid_initiative", "empty_initiative"}
         failures = {(i.process_id, i.code) for i in result.issues if i.code in serious}
         return StageResult(

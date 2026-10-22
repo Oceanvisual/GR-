@@ -166,6 +166,7 @@ def _units(currency: str) -> dict[str, str]:
     share = "доля"
     return {
         "hourly_cost": f"{currency}/ч",
+        "hourly_cost_override": f"{currency}/ч",
         "overhead_ratio": share,
         "fte_hours_per_year": "ч",
         "horizon_years": "лет",
@@ -181,6 +182,11 @@ def _units(currency: str) -> dict[str, str]:
         "adoption_y2": share,
         "adoption_y3": share,
     }
+
+
+def assumption_unit(parameter: str, profile: AssumptionProfile | None = None) -> str:
+    """The unit of a parameter, in the currency of the profile."""
+    return _units((profile or load_profile()).currency)[parameter]
 
 
 class _Builder:

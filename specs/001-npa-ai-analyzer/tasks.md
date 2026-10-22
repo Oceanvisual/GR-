@@ -788,7 +788,7 @@ UI карты процессов.
   - **Тесты**: `test_economics.py`, `test_economics_properties.py`.
     Модели результата — `domain/economics.py` (как `PriorityResult` в `domain/priority.py`).
 
-- [ ] T045 [US4] API допущений и экономики — `src/gr/services/results.py`
+- [X] T045 [US4] API допущений и экономики — `src/gr/services/results.py`
   - **Цель**: api.md: `GET`/`PATCH /assumptions`, `GET /economics`, solo-экономика в
     `/initiatives`; FR-056, FR-057. Портфель добавляется в T065 и T049.
   - **Зависит**: T044, T042
@@ -799,6 +799,9 @@ UI карты процессов.
   - **Готово, когда**: PATCH возвращает пересчитанную таблицу; счётчик FakeLLM не изменился;
     время ответа ≤ 2 с на 100 инициатив (маркер `slow`); конфликт версий → 409.
   - **Тесты**: `test_assumptions_api.py`.
+    Версия 1 создаётся в `PostprocessStage` (`pipeline/analysis.py`); карточка инициативы
+    получила экономику по трём сценариям и использованные допущения
+    (`InitiativeEconomics.assumption_keys`).
 
 - [ ] T046 [US4] Экран настроек модели и экономика в таблице — `src/gr/web/templates/settings.html`
   - **Цель**: экран 6 из ui.md (часть с допущениями); экономика на экранах 4–5; баннеры

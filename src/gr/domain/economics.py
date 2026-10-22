@@ -35,6 +35,7 @@ class Effect(DomainModel):
 class InitiativeEconomics(DomainModel):
     initiative_id: str
     solo: Effect
+    assumption_keys: list[str] = []  # the assumptions the effect was computed from (FR-070)
     # The portfolio part (attribution, membership) comes with build_portfolio (T065).
     attributed: Effect | None = None
     in_portfolio: bool = False

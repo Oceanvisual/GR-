@@ -13,7 +13,9 @@ REST JSON, префикс `/api/v1`. Все маршруты, кроме `/healt
 - Даты: ISO 8601 UTC. Деньги: строка-decimal (`"1234567.89"`), чтобы не терять точность.
 - Пагинация в MVP не нужна: объёмы малы. Списки отдаются целиком.
 - Оптимистическая блокировка для версионируемых ресурсов (допущения, конфигурация приоритета):
-  заголовок `If-Match: <version>`. При несовпадении — `409 version_conflict`.
+  `GET` отдаёт `ETag: "<version>"`, изменяющий запрос обязан прислать `If-Match` с этой
+  версией (принимаются `"4"`, `4` и `W/"4"`; без заголовка — `400 validation_error`). При
+  несовпадении — `409 version_conflict` с `details.current_version`.
 
 ### Формат ошибки
 ```json
@@ -143,14 +145,21 @@ Query-параметр `scenario` во всех запросах этого ра
 ### `GET /api/v1/analyses/{run_id}/economics` → `EconomicsResult`
 
 ### `GET /api/v1/analyses/{run_id}/assumptions` → `AssumptionSet` (текущая версия)
-Заголовок `ETag: <version>`.
+Заголовок `ETag: "<version>"`. Версия 1 создаётся в S7 по профилю (T043); ключи элементов,
+появившихся позже, дозаполняются по профилю при чтении новой версией.
 
 ### `PATCH /api/v1/analyses/{run_id}/assumptions` (заголовок `If-Match`)
 Тело: `{changes: list[{key, values?: Triple, note?}], comment?}`. Создаётся новая версия, в
-журнал пишется `ReviewEvent(entity_type="assumption_set")`. Ответ — `200 {assumption_set,
-initiatives: InitiativeTable}`: сразу пересчитанная таблица, ни одного вызова LLM (SC-005).
-Валидация FR-057: `400 validation_error` с перечнем ключей. Нелогичный порядок сценариев
-возвращается в `warnings`, а не ошибкой.
+журнал пишется `ReviewEvent(entity_type="assumption_set", entity_id="assumptions",
+action="edit")` с `patch` и `previous` по ключам. Изменённое значение получает источник
+`user` и снимает `requires_input`; правка только `note` источник не меняет. Новый ключ можно
+добавить только один: `proc.<process_id>.hourly_cost_override` существующего процесса. Ответ —
+`200 {assumption_set, initiatives: InitiativeTable, warnings}` (заголовок `ETag` новой
+версии): сразу пересчитанная таблица, ни одного вызова LLM (SC-005). Валидация FR-057:
+`400 validation_error`, `details.keys` — ключ → причина (отрицательные значения, доля вне
+[0; 1], горизонт, неизвестный или повторный ключ, расчёт невозможен — например, нулевой
+фонд времени FTE в любом сценарии); при ошибке версия не создаётся. Нелогичный порядок
+сценариев возвращается в `warnings`, а не ошибкой.
 
 ### `GET /api/v1/analyses/{run_id}/priority-config` → `PriorityConfig` (+ `ETag`)
 

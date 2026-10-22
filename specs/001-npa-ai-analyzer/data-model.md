@@ -378,6 +378,7 @@ EconomicsResult
 InitiativeEconomics
   initiative_id
   solo:       Effect
+  assumption_keys: list[str]   # допущения, по которым посчитан эффект (FR-070)
   attributed: Effect | None    # None, если не в портфеле (alternative/blocked/rejected)
   in_portfolio: bool
   excluded_reason?: str

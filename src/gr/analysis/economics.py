@@ -66,6 +66,7 @@ class _Values:
         self.scenario = scenario
         self.used: dict[str, Assumption] = {}
         self.problems: dict[str, str] = {}
+        self.trace: list[str] = []  # keys read since the last reset: one initiative's inputs
 
     def get(self, key: str) -> Decimal:
         value = self.optional(key)
@@ -79,6 +80,7 @@ class _Values:
         if item is None:
             return None
         self.used[key] = item
+        self.trace.append(key)
         return item.values.get(self.scenario)
 
 
@@ -185,12 +187,20 @@ def compute_solo(
             (i for i in initiatives if i.review.status != ReviewStatus.REJECTED),
             key=lambda i: i.id,
         )
+        shared = [global_key(k) for k in ("horizon_years", "overhead_ratio", "fte_hours_per_year")]
         per_initiative = []
         for initiative in active:
+            values.trace = []
             override = values.optional(process_key(initiative.process_id, "hourly_cost_override"))
             rate = (hourly if override is None else override) * (1 + overhead)
             solo = _solo(initiative, values, horizon, rate, fte_hours)
-            per_initiative.append(InitiativeEconomics(initiative_id=initiative.id, solo=solo))
+            hourly_key = [] if override is not None else [global_key("hourly_cost")]
+            inputs = dict.fromkeys([*shared, *hourly_key, *values.trace])
+            per_initiative.append(
+                InitiativeEconomics(
+                    initiative_id=initiative.id, solo=solo, assumption_keys=list(inputs)
+                )
+            )
         if values.problems:
             raise AssumptionValidationError(values.problems)
         return EconomicsResult(

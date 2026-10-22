@@ -362,3 +362,16 @@ def test_defaults_from_the_profile_are_enough_to_compute() -> None:
     assert len(economics.solo.hours) == 3  # the profile horizon
     assert economics.attributed is None and not economics.in_portfolio  # portfolio: T065
     assert any("модельная заглушка" in w for w in found.warnings)
+
+
+def test_assumption_keys_name_exactly_what_the_effect_is_computed_from() -> None:
+    values = one_operation()
+    found = compute_solo(model(), [rag()], assumptions(values), Scenario.BASE)
+    (economics,) = found.per_initiative
+    keys = economics.assumption_keys
+    assert "hourly_cost" in keys and ini("adoption_y2") not in keys  # a one-year horizon
+    assert solo({k: v for k, v in values.items() if k in keys}) == economics.solo
+    rate = process_key("proc_1", "hourly_cost_override")
+    priced = compute_solo(model(), [rag()], assumptions(values | {rate: "1500"}), Scenario.BASE)
+    assert rate in priced.per_initiative[0].assumption_keys
+    assert "hourly_cost" not in priced.per_initiative[0].assumption_keys

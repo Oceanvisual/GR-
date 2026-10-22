@@ -1,12 +1,25 @@
-"""Initiative read API (T042); calculations are added by US4 and US5."""
+"""Initiatives, assumptions and economics API (T042, T045); priority is added by US5.
+
+Assumptions are versioned: `GET` returns `ETag: "<version>"`, `PATCH` needs `If-Match` with
+the version it was based on and answers 409 when another change came first.
+"""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, Response
 
-from gr.api.deps import StateDep, require_user
+from gr.api.deps import StateDep, UserDep, require_user
+from gr.domain.assumptions import AssumptionSet
+from gr.domain.economics import EconomicsResult
 from gr.domain.enums import LegalGate, Scenario
-from gr.services.results import InitiativeDetail, InitiativeTable, ResultsService
+from gr.errors import AppError
+from gr.services.results import (
+    AssumptionsPatch,
+    AssumptionsUpdate,
+    InitiativeDetail,
+    InitiativeTable,
+    ResultsService,
+)
 
 router = APIRouter(prefix="/api/v1/analyses", dependencies=[Depends(require_user)])
 
@@ -16,6 +29,20 @@ def get_service(state: StateDep) -> ResultsService:
 
 
 ServiceDep = Annotated[ResultsService, Depends(get_service)]
+
+
+def etag(version: int) -> str:
+    return f'"{version}"'
+
+
+def parse_if_match(value: str | None) -> int:
+    """`"4"`, `4` or `W/"4"`; anything else, or nothing, is refused."""
+    if not value:
+        raise AppError("validation_error", "Нужен заголовок If-Match с версией допущений.")
+    version = value.strip().removeprefix("W/").strip('"')
+    if not version.isdigit():
+        raise AppError("validation_error", "If-Match: ожидается номер версии допущений.")
+    return int(version)
 
 
 @router.get("/{run_id}/initiatives", response_model=InitiativeTable)
@@ -39,3 +66,34 @@ async def initiatives(
 @router.get("/{run_id}/initiatives/{initiative_id}", response_model=InitiativeDetail)
 async def initiative(run_id: str, initiative_id: str, service: ServiceDep) -> InitiativeDetail:
     return await service.detail(run_id, initiative_id)
+
+
+@router.get("/{run_id}/economics", response_model=EconomicsResult)
+async def economics(
+    run_id: str, service: ServiceDep, scenario: Scenario = Scenario.BASE
+) -> EconomicsResult:
+    return await service.economics(run_id, scenario)
+
+
+@router.get("/{run_id}/assumptions", response_model=AssumptionSet)
+async def assumptions(run_id: str, service: ServiceDep, response: Response) -> AssumptionSet:
+    current = await service.assumptions(run_id)
+    response.headers["ETag"] = etag(current.version)
+    return current
+
+
+@router.patch("/{run_id}/assumptions", response_model=AssumptionsUpdate)
+async def update_assumptions(
+    run_id: str,
+    body: AssumptionsPatch,
+    service: ServiceDep,
+    user: UserDep,
+    response: Response,
+    scenario: Scenario = Scenario.BASE,
+    if_match: Annotated[str | None, Header()] = None,
+) -> AssumptionsUpdate:
+    update = await service.update_assumptions(
+        run_id, body, version=parse_if_match(if_match), user=user, scenario=scenario
+    )
+    response.headers["ETag"] = etag(update.assumption_set.version)
+    return update
