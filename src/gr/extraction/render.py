@@ -18,7 +18,7 @@ from gr.domain.document import Fragment
 _ALIAS_RE = re.compile(r"\s*\[?\s*[fFфФ]\s*(\d+)\s*\]?\s*")
 # Prompt structure markers: a document cannot open or close blocks of its own (R-12).
 # No word boundary after the name: «<document_meta>» must be caught too.
-_MARKER_RE = re.compile(r"([\[<])(\s*/?\s*(?:fragment|document|task))", re.IGNORECASE)
+_MARKER_RE = re.compile(r"([\[<])(\s*/?\s*(?:fragment|document|task|process_card))", re.IGNORECASE)
 _FULL_WIDTH = {"[": "［", "<": "＜"}
 _PATH_MAX_CHARS = 200
 

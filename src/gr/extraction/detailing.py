@@ -246,8 +246,11 @@ class Detailer:
     async def _window(
         self, text: _ProcessText, core_part: list[Fragment], first: bool, note: str, depth: int
     ) -> list[DetailOut]:
-        user = f"<task>{self.prompt.task}\n{text.card}{note}</task>\n" + render_document(
-            text.document(core_part, first), {"title": self.title}
+        # The card is the model's own reading of the document, so it is data, not the task.
+        user = (
+            f"<task>{self.prompt.task}{note}</task>\n"
+            f"<process_card>\n{text.card}\n</process_card>\n"
+            + render_document(text.document(core_part, first), {"title": self.title})
         )
         try:
             answer = await self.llm.generate(

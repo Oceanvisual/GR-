@@ -14,9 +14,11 @@ from gr.domain.enums import Confidence, GroundingStatus, KnowledgeLayer, TextSou
 from gr.domain.process import Grounded
 from gr.extraction.render import FragmentAliases
 from gr.extraction.schemas import Fact
+from gr.grounding.injection import InstructionIndex
 from gr.grounding.quotes import QuoteIndex
 
 UNKNOWN_FRAGMENT = "unknown"
+INSTRUCTION_REASON = "цитата из фразы, похожей на внедрённую инструкцию для ИИ"
 _REASONS = {
     GroundingStatus.PARTIAL: "близкое совпадение с текстом, но не дословное",
     GroundingStatus.UNVERIFIED: "цитата не найдена в тексте акта",
@@ -43,6 +45,7 @@ class FactMapper:
     def __init__(self, fragments: Sequence[Fragment]) -> None:
         self.aliases = FragmentAliases(fragments)
         self.quotes = QuoteIndex(fragments)
+        self.instructions = InstructionIndex(self.quotes.text)
         self.fragments = {f.id: f for f in fragments}
 
     def resolve(self, ref: str) -> str | None:
@@ -63,14 +66,20 @@ class FactMapper:
                 reason = f"фрагмент «{fact.ref.strip()[:20]}» не найден; {reason}"
             return Checked(text, citation, passed=False, confidence=Confidence.LOW, reason=reason)
         fragment = self.fragments.get(match.fragment_id)
+        refused = None
         if fragment is not None and fragment.repealed:
-            return Checked(
-                text,
-                citation,
-                passed=False,
-                confidence=Confidence.LOW,
-                reason="фрагмент утратил силу",
+            refused = "фрагмент утратил силу"
+        elif grounding.matched_start is not None and self.instructions.overlaps(
+            grounding.matched_start, grounding.matched_end or grounding.matched_start
+        ):
+            refused = INSTRUCTION_REASON
+        if refused is not None:
+            # Found in the text, but not evidence: the status says so everywhere downstream.
+            rejected = grounding.model_copy(
+                update={"status": GroundingStatus.UNVERIFIED, "reason": refused}
             )
+            citation = citation.model_copy(update={"grounding": rejected})
+            return Checked(text, citation, passed=False, confidence=Confidence.LOW, reason=refused)
         exact = grounding.status == GroundingStatus.VERIFIED and grounding.score == 100
         confidence = Confidence.HIGH if exact else Confidence.MEDIUM
         if fragment is not None and fragment.text_source == TextSource.OCR:

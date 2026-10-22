@@ -14,11 +14,11 @@ from pydantic import BaseModel
 
 from gr.domain.document import Citation, DocumentMetadata, Fragment
 from gr.domain.enums import Confidence, GroundingStatus, StageName
+from gr.extraction.mapping import FactMapper
 from gr.extraction.outline import OutlineChunk, build_outline
 from gr.extraction.prompt_files import load_prompt
-from gr.extraction.render import ChunkingConfig, FragmentAliases, render_document
+from gr.extraction.render import ChunkingConfig, render_document
 from gr.extraction.schemas import DiscoveryOut, ProcessCandidate
-from gr.grounding.quotes import QuoteIndex
 from gr.llm.base import StructuredLLM
 
 MAX_TOKENS = 4000
@@ -76,8 +76,8 @@ def _user_message(task: str, chunk: OutlineChunk, number: int, total: int, meta:
 
 class _Mapper:
     def __init__(self, fragments: Sequence[Fragment]) -> None:
-        self.aliases = FragmentAliases(fragments)
-        self.quotes = QuoteIndex(fragments)
+        self.facts = FactMapper(fragments)
+        self.aliases = self.facts.aliases
         self.order = {f.id: f.order for f in fragments}
         self.parent = {f.id: f.parent_id for f in fragments}
         self.issues: list[DiscoveryIssue] = []
@@ -112,12 +112,9 @@ class _Mapper:
         return sorted(resolved, key=self.order.__getitem__)
 
     def evidence(self, item: ProcessCandidate) -> Citation | None:
-        quote = item.evidence.quote.strip()
-        if not quote:
+        if not item.evidence.quote.strip():
             return None
-        fragment_id = self.aliases.resolve(item.evidence.ref) or ""
-        match = self.quotes.verify(quote, fragment_id)
-        return Citation(fragment_id=match.fragment_id, quote=quote, grounding=match.grounding)
+        return self.facts.check(item.evidence).citation
 
     def candidate(self, item: ProcessCandidate, chunk: int) -> _Candidate | None:
         core = self.topmost(self.ids(item.core_refs, item.key))

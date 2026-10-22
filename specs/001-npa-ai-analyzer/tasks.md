@@ -618,7 +618,7 @@ UI карты процессов.
     элементы `unverified` не выводятся в таблице фактов.
   - **Тесты**: `test_web_processes.py`.
 
-- [ ] T035 [US2] Тест устойчивости к инъекциям — `tests/integration/test_injection.py`
+- [X] T035 [US2] Тест устойчивости к инъекциям — `tests/integration/test_injection.py`
   - **Цель**: SC-011, NFR-005.
   - **Зависит**: T032
   - **Файлы**: `tests/integration/test_injection.py`, `tests/fixtures/llm/injection_obedient.json`

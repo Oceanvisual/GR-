@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from gr.domain.document import Fragment
-from gr.domain.enums import Confidence, DeadlineUnit
+from gr.domain.enums import Confidence, DeadlineUnit, KnowledgeLayer
 from gr.domain.process import (
     Deadline,
     DecisionOutcome,
@@ -33,7 +33,7 @@ from gr.domain.process import (
     ValidationReport,
     derive_legally_significant,
 )
-from gr.extraction.detailing import DetailingResult
+from gr.extraction.detailing import DetailedProcess, DetailingResult
 from gr.extraction.discovery import DiscoveredProcess, DiscoveryResult
 from gr.extraction.mapping import Checked, FactMapper
 from gr.extraction.schemas import DeadlineOut, DecisionPointOut, DetailOut, Fact, OperationOut
@@ -383,12 +383,31 @@ class ProcessValidator:
         for duplicate, kept in merged:
             merged_into.setdefault(kept, []).append(duplicate)
 
-        pids = {d.process_key: f"proc_{n}" for n, d in enumerate(detailed, 1)}
-        processes: list[Process] = []
         unverified: list[UnverifiedItem] = []
+        # A process with neither a verified name nor a verified operation is not in the act
+        # (an obedient answer to an injected instruction, say): it goes to «Не подтверждено».
+        survivors: list[DetailedProcess] = []
+        for item in detailed:
+            trial, _ = self._process(item.process_key, item.detail, found[item.process_key])
+            if trial.operations or trial.name.layer == KnowledgeLayer.FACT:
+                survivors.append(item)
+                continue
+            unverified.append(
+                UnverifiedItem(
+                    element_type="process_name",
+                    element_id=item.process_key,
+                    process_id=item.process_key,
+                    value=trial.name.value,
+                    citation=found[item.process_key].evidence,
+                    reason="ни название, ни одна операция процесса не подтверждены текстом акта",
+                )
+            )
+
+        pids = {d.process_key: f"proc_{n}" for n, d in enumerate(survivors, 1)}
+        processes: list[Process] = []
         cited: set[str] = set()
         used: list[str] = []
-        for item in detailed:
+        for item in survivors:
             candidate = found[item.process_key]
             process, report = self._process(pids[item.process_key], item.detail, candidate)
             for duplicate in merged_into.get(item.process_key, []):
