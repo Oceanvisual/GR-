@@ -7,7 +7,7 @@ overlap (Jaccard ≥ 0.5). An empty map is a valid result: «процессы н
 """
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Literal
 
 from pydantic import BaseModel
@@ -79,7 +79,21 @@ class _Mapper:
         self.aliases = FragmentAliases(fragments)
         self.quotes = QuoteIndex(fragments)
         self.order = {f.id: f.order for f in fragments}
+        self.parent = {f.id: f.parent_id for f in fragments}
         self.issues: list[DiscoveryIssue] = []
+
+    def topmost(self, ids: list[str], covered: Iterable[str] = ()) -> list[str]:
+        """Drop fragments already inside another listed (or covered) one: a reference takes
+        the whole subtree, so «п. 3.2» and «абз. 2 п. 3.2» say the same as «п. 3.2»."""
+        above = set(ids) | set(covered)
+        kept = []
+        for fragment_id in ids:
+            parent = self.parent.get(fragment_id)
+            while parent is not None and parent not in above:
+                parent = self.parent.get(parent)
+            if parent is None:
+                kept.append(fragment_id)
+        return kept
 
     def ids(self, refs: list[str], element: str) -> list[str]:
         resolved: list[str] = []
@@ -106,7 +120,7 @@ class _Mapper:
         return Citation(fragment_id=match.fragment_id, quote=quote, grounding=match.grounding)
 
     def candidate(self, item: ProcessCandidate, chunk: int) -> _Candidate | None:
-        core = self.ids(item.core_refs, item.key)
+        core = self.topmost(self.ids(item.core_refs, item.key))
         if not core:
             self.issues.append(
                 DiscoveryIssue(
@@ -231,6 +245,7 @@ async def discover(
     for candidate in merged:
         key = final_key[candidate.key]
         parent = final_key.get(alias.get(candidate.parent or "", ""))
+        core = mapper.topmost(sorted(candidate.core, key=mapper.order.__getitem__))
         if not _passed(candidate.evidence):
             mapper.issues.append(
                 DiscoveryIssue(
@@ -245,8 +260,10 @@ async def discover(
                 name=candidate.name,
                 trigger=candidate.trigger,
                 result=candidate.result,
-                core_fragment_ids=candidate.core,
-                related_fragment_ids=[i for i in candidate.related if i not in candidate.core],
+                core_fragment_ids=core,
+                related_fragment_ids=mapper.topmost(
+                    [i for i in candidate.related if i not in core], covered=core
+                ),
                 evidence=candidate.evidence,
                 confidence=_confidence(candidate.evidence),
                 parent_key=parent if parent != key else None,
@@ -261,9 +278,10 @@ async def discover(
             )
         )
     used = {i for p in processes for i in p.core_fragment_ids}
+    outside = sorted({i for i in non_process if i not in used}, key=mapper.order.__getitem__)
     return DiscoveryResult(
         processes=processes,
-        non_process_fragment_ids=[i for i in dict.fromkeys(non_process) if i not in used],
+        non_process_fragment_ids=mapper.topmost(outside),
         issues=mapper.issues,
         notes=notes,
         chunks=len(chunks),

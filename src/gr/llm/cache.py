@@ -51,10 +51,18 @@ def schema_hash(schema: type[BaseModel]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def request_hash(model: str, schema: type[BaseModel], system: str, user: str) -> str:
+def request_hash(
+    model: str,
+    schema: type[BaseModel],
+    system: str,
+    user: str,
+    options: dict[str, Any] | None = None,
+) -> str:
     """sha256 over model, schema and messages; the prompt version lives in the system text."""
     payload = json.dumps(
-        {"model": model, "schema": schema_hash(schema), "system": system, "user": user},
+        {"model": model, "schema": schema_hash(schema), "system": system, "user": user}
+        # Request options (reasoning) change the answer; absent ones keep old keys valid.
+        | ({"options": options} if options else {}),
         sort_keys=True,
         ensure_ascii=False,
     )
@@ -69,10 +77,12 @@ class CachedLLM:
         inner: StructuredLLM,
         cache: LlmCacheRepository,
         model_for: Callable[[StageName], str],
+        options_for: Callable[[StageName], dict[str, Any]] = lambda _stage: {},
     ) -> None:
         self.inner = inner
         self.cache = cache
         self.model_for = model_for
+        self.options_for = options_for
 
     async def generate[T: BaseModel](
         self,
@@ -84,7 +94,7 @@ class CachedLLM:
         max_tokens: int,
         run_id: str,
     ) -> LLMResult[T]:
-        key = request_hash(self.model_for(stage), schema, system, user)
+        key = request_hash(self.model_for(stage), schema, system, user, self.options_for(stage))
         stored = await self.cache.get(key)
         if stored is not None:
             value = schema.model_validate(stored["value"])

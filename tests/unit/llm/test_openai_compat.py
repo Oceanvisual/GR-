@@ -20,7 +20,7 @@ from gr.llm.base import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
-from gr.llm.cache import strict_json_schema
+from gr.llm.cache import request_hash, strict_json_schema
 from gr.llm.openai_compat import OpenAICompatibleLLM
 from gr.logging import configure_logging
 from gr.settings import Settings
@@ -298,3 +298,26 @@ def test_strict_schema_refuses_dict_fields() -> None:
 
     with pytest.raises(ValueError, match="dict fields"):
         strict_json_schema(Scores)
+
+
+@pytest.mark.parametrize(
+    ("base_url", "sent"),
+    [
+        ("https://openrouter.ai/api/v1", {"enabled": False}),
+        ("http://localhost:9999/v1", None),
+    ],
+)
+async def test_reasoning_options_only_for_openrouter(
+    llm_settings: Callable[..., Settings], base_url: str, sent: dict[str, Any] | None
+) -> None:
+    recorder = Recorder(completion(json.dumps(VALID)))
+    settings = llm_settings(llm_base_url=base_url, llm_data_policy="external_allowed",
+                            llm_api_key="k")  # fmt: skip
+    await ask(make_llm(settings, recorder), stage=StageName.DISCOVER)
+    assert recorder.requests[0].get("reasoning") == sent
+
+
+def test_request_options_change_the_cache_key() -> None:
+    plain = request_hash("m", Answer, "s", "u")
+    assert plain == request_hash("m", Answer, "s", "u", {})
+    assert plain != request_hash("m", Answer, "s", "u", {"reasoning": {"enabled": False}})

@@ -24,6 +24,7 @@ from gr.llm.base import (
     LLMUnavailableError,
 )
 from gr.llm.cache import request_hash, strict_json_schema
+from gr.llm.options import request_options
 from gr.llm.policy import check_data_policy
 from gr.llm.prompts import JSON_OBJECT_INSTRUCTION, REPAIR_INSTRUCTION
 from gr.logging import get_logger
@@ -69,6 +70,11 @@ class OpenAICompatibleLLM:
         self._may_fall_back = configured == "auto"
         self._semaphore = asyncio.Semaphore(settings.llm_concurrency)
 
+    def options_for(self, stage: StageName) -> dict[str, Any]:
+        """Provider-specific fields of this stage's requests (config/llm.toml)."""
+        host = self.settings.llm_base_url.host if self.settings.llm_base_url else None
+        return request_options(stage, host)
+
     def model_for(self, stage: StageName) -> str:
         model = (
             self.settings.llm_model_extraction
@@ -91,7 +97,8 @@ class OpenAICompatibleLLM:
     ) -> LLMResult[T]:
         check_data_policy(self.settings)  # before any byte of the document leaves
         model = self.model_for(stage)
-        key = request_hash(model, schema, system, user)
+        options = self.options_for(stage)
+        key = request_hash(model, schema, system, user, options)
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -102,7 +109,9 @@ class OpenAICompatibleLLM:
             started = time.perf_counter()
             try:
                 async with self._semaphore:
-                    response = await self._complete(model, schema, messages, max_tokens, stage)
+                    response = await self._complete(
+                        model, schema, messages, max_tokens, stage, options
+                    )
             except LLMError as exc:
                 elapsed = int((time.perf_counter() - started) * 1000)
                 await self._record(run_id, stage, model, attempt, exc.code, None, elapsed, key)
@@ -153,15 +162,18 @@ class OpenAICompatibleLLM:
         messages: list[dict[str, str]],
         max_tokens: int,
         stage: StageName,
+        options: dict[str, Any],
     ) -> _Response:
         try:
-            return await self._request(model, schema, messages, max_tokens, self._mode)
+            return await self._request(model, schema, messages, max_tokens, self._mode, options)
         except openai.BadRequestError:
             if not (self._may_fall_back and self._mode == "json_schema"):
                 raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
             # `auto`: perhaps the endpoint does not take json_schema. Retry once in json_object.
             try:
-                response = await self._request(model, schema, messages, max_tokens, "json_object")
+                response = await self._request(
+                    model, schema, messages, max_tokens, "json_object", options
+                )
             except openai.BadRequestError:
                 # Rejected either way: the request itself is at fault (context length, model
                 # id, max_tokens), not the structured mode, which therefore stays as it was.
@@ -177,6 +189,7 @@ class OpenAICompatibleLLM:
         messages: list[dict[str, str]],
         max_tokens: int,
         mode: Mode,
+        options: dict[str, Any] | None = None,
     ) -> _Response:
         strict = strict_json_schema(schema)
         if mode == "json_schema":
@@ -198,6 +211,7 @@ class OpenAICompatibleLLM:
                 response_format=cast("ResponseFormat", response_format),
                 temperature=0,
                 max_tokens=max_tokens,
+                extra_body=options or None,
             )
         except openai.APITimeoutError:
             raise LLMTimeoutError(

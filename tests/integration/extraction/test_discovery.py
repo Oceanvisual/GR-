@@ -145,3 +145,30 @@ async def test_processes_are_ordered_by_document_position() -> None:
     result = await run(FakeLLM({StageName.DISCOVER: [both]}))
     assert result.processes[0].name == "Ранний"
     assert [p.key for p in result.processes] == ["proc_1", "proc_2"]
+
+
+async def test_nested_references_collapse_to_the_topmost() -> None:
+    fragments = document().fragments
+    aliases = FragmentAliases(fragments)
+    a = {label: aliases.alias(i) for label, i in zip(
+        ("п. 3.2", "п. 3.2.1", "п. 3.2.2", "п. 2.1", "разд. IV", "п. 4.1"),
+        ids("п. 3.2", "п. 3.2.1", "п. 3.2.2", "п. 2.1", "разд. IV", "п. 4.1"),
+        strict=True,
+    )}  # fmt: skip
+    reply = {
+        "processes": [
+            {
+                "key": "p1",
+                "name": "Приём заявления",
+                "core_refs": [a["п. 3.2.1"], a["п. 3.2"]],
+                "related_refs": [a["п. 3.2.2"], a["п. 2.1"]],
+                "evidence": {"text": "x", "ref": a["п. 3.2.1"], "quote": "принимает заявление"},
+            }
+        ],
+        "non_process_refs": [a["п. 4.1"], a["разд. IV"]],
+    }
+    result = await run(FakeLLM({StageName.DISCOVER: [reply]}))
+    (process,) = result.processes
+    assert process.core_fragment_ids == ids("п. 3.2")
+    assert process.related_fragment_ids == ids("п. 2.1")  # п. 3.2.2 is inside the core
+    assert result.non_process_fragment_ids == ids("разд. IV")
