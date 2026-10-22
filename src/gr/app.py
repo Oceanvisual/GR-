@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 import gr
-from gr.api import analyses, documents, health
+from gr.api import analyses, documents, health, results
 from gr.api.deps import AppState
 from gr.auth import BasicAuthenticator, SameOriginGuard
 from gr.errors import install_error_handlers
@@ -25,6 +25,7 @@ from gr.storage.db import Database
 from gr.storage.files import FileStore
 from gr.storage.repositories import Repositories
 from gr.web import analyses as web_analyses
+from gr.web import results as web_results
 from gr.web import routes as web
 
 log = get_logger(__name__)
@@ -103,7 +104,9 @@ def create_app(
     app.include_router(health.readiness)
     app.include_router(documents.router)
     app.include_router(analyses.router)
+    app.include_router(results.router)
     app.include_router(web.router)
     app.include_router(web_analyses.router)
+    app.include_router(web_results.router)
     app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")
     return app

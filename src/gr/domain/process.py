@@ -89,6 +89,7 @@ class DecisionPoint(DomainModel):
     condition: Grounded[str]
     outcomes: list[DecisionOutcome] = Field(min_length=2)
     criteria: list[Grounded[str]] = []
+    review: ReviewState = ReviewState()
 
 
 IssueCode = Literal[

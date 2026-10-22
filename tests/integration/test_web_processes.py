@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
+from pipeline_helpers import no_change_for_s6
 
 from gr.api.deps import AppState
 from gr.app import create_app
@@ -79,7 +80,7 @@ class Env:
 def make_env(tmp_path: Path, make_settings: Callable[..., Settings]) -> Callable[..., Any]:
     def factory(**overrides: Any) -> AsyncIterator[Env]:
         settings = make_settings(data_dir=tmp_path / "data", ocr_enabled=False, **(LLM | overrides))
-        llm = FakeLLM()
+        llm = FakeLLM(default=no_change_for_s6)
         app = create_app(settings, llm=llm)
 
         async def env() -> AsyncIterator[Env]:
@@ -108,7 +109,7 @@ async def test_status_page_after_the_run(make_env: Callable[..., Any]) -> None:
     async for env in make_env():
         doc_id, run_id = await env.analysed()
         html = (await env.client.get(f"/analyses/{run_id}")).text
-        assert "завершён" in html and "S3 · карта процессов" in html and "пропущен" in html
+        assert "завершён" in html and "S3 · карта процессов" in html and "S6 · возможности" in html
         assert "Вызовов LLM:" in html
         assert f'href="/analyses/{run_id}/processes"' in html
         assert "hx-trigger" not in html  # finished: no polling

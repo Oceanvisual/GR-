@@ -36,7 +36,11 @@ def _error(request: Request, error: AppError, back: str | None = None) -> HTMLRe
 
 def _run_context(run: AnalysisRun) -> dict[str, object]:
     validated = run.stage(StageName.VALIDATE).status == StageStatus.SUCCEEDED
-    return {"run": run, "map_ready": validated}
+    return {
+        "run": run,
+        "map_ready": validated,
+        "initiatives_ready": run.stage(StageName.POSTPROCESS).status == StageStatus.SUCCEEDED,
+    }
 
 
 @router.post("/documents/{doc_id}/analyses", response_class=HTMLResponse)

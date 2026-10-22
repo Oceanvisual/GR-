@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 import pytest
 from fastapi import FastAPI
+from pipeline_helpers import no_change_for_s6
 
 from gr.api.deps import AppState
 from gr.app import create_app
@@ -69,7 +70,7 @@ class Env:
 def make_env(tmp_path: Path, make_settings: Callable[..., Settings]) -> Callable[..., Any]:
     def factory(**overrides: Any) -> Any:
         settings = make_settings(data_dir=tmp_path / "data", ocr_enabled=False, **(LLM | overrides))
-        llm = FakeLLM()
+        llm = FakeLLM(default=no_change_for_s6)
         app = create_app(settings, llm=llm)
 
         async def env() -> AsyncIterator[Env]:
@@ -107,11 +108,15 @@ async def test_upload_analyse_and_read_the_process_map(make_env: Callable[..., A
             "discover": "succeeded",
             "detail": "succeeded",
             "validate": "succeeded",
-            "opportunities": "skipped",
-            "postprocess": "skipped",
+            "opportunities": "succeeded",
+            "postprocess": "succeeded",
         }
         assert done["completeness"]["complete"] is True
-        assert [c.stage for c in env.llm.calls] == [StageName.DISCOVER, StageName.DETAIL]
+        assert [c.stage for c in env.llm.calls] == [
+            StageName.DISCOVER,
+            StageName.DETAIL,
+            StageName.OPPORTUNITIES,
+        ]
 
         model = (await env.client.get(f"/api/v1/analyses/{run['id']}/processes")).json()
         (process,) = model["processes"]

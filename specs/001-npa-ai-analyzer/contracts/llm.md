@@ -222,7 +222,7 @@ initiatives: list[{
 no_change: {applies: bool, justification: str = ""}   # «оптимизация не требуется»
 ```
 
-**Валидация** (`analysis/postprocess.py`, детерминированная):
+**Валидация** (`validation/postprocess.py`, детерминированная):
 1. все `operation_ids` и `fragment_id` существуют и не отклонены. Иначе ссылка удаляется, а
    инициатива без операций отбрасывается (FR-047);
 2. для каждой операции инициативы есть `reduction_potential`. Пропуск → `very_low` с issue;

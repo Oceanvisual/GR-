@@ -684,7 +684,7 @@ UI карты процессов.
     альтернатив, переопределение.
   - **Тесты**: `test_relations.py`.
 
-- [ ] T040 [US3] S6 Opportunities — `src/gr/extraction/opportunities.py`
+- [X] T040 [US3] S6 Opportunities — `src/gr/extraction/opportunities.py`
   - **Цель**: [llm.md § S6](./contracts/llm.md#s6--opportunities--проблемы-и-инициативы).
     Трассировка: FR-042, FR-046.
   - **Зависит**: T027, T031, T037
@@ -696,12 +696,15 @@ UI карты процессов.
     несуществующую операцию».
   - **Тесты**: `test_opportunities.py`.
 
-- [ ] T041 [US3] S7 Postprocess и подключение к runner — `src/gr/analysis/postprocess.py`
+- [X] T041 [US3] S7 Postprocess и подключение к runner — `src/gr/validation/postprocess.py`
   - **Цель**: llm.md § S6 «Валидация» (п. 1–6).
     Трассировка: FR-042, FR-044.
   - **Зависит**: T038, T039, T040
-  - **Файлы**: `analysis/postprocess.py`, `pipeline/stages.py`,
-    `tests/unit/analysis/test_postprocess.py`, обновление `test_analysis_e2e.py`
+  - **Файлы**: `validation/postprocess.py`, `pipeline/analysis.py`,
+    `tests/unit/validation/test_postprocess.py`, обновление `test_analysis_e2e.py`
+    Модуль в `validation/`, а не в `analysis/`: он разбирает ответ S6 (`extraction`), а
+    `analysis` — чистый слой (`test_layering.py`); правила S7 (tech guard, допустимость,
+    связи) остаются в `analysis/`.
   - **Результат**: `InitiativeSet` в `stage_outputs`.
   - **Готово, когда**: инварианты data-model §4 выполняются на всех сценариях FakeLLM; E2E
     доходит до `postprocess=succeeded`.
@@ -722,7 +725,7 @@ UI карты процессов.
     относительно baseline даёт exit 1.
   - **Тесты**: `test_metrics_opportunities.py`.
 
-- [ ] T042 [US3] API и экраны инициатив (без экономики) — `src/gr/api/results.py`, `initiatives.html`
+- [X] T042 [US3] API и экраны инициатив (без экономики) — `src/gr/api/results.py`, `initiatives.html`
   - **Цель**: api.md § Инициативы (без economics и priority), экраны 4 и 5 из ui.md.
     Трассировка: FR-071.
   - **Зависит**: T041, T034
@@ -733,7 +736,8 @@ UI карты процессов.
     Баннер «Анализ неполный» при неполном результате.
   - **Готово, когда**: Q5 на FakeLLM. Карточка содержит все поля FR-070, кроме экономики и
     приоритета (они помечены «будет рассчитано»).
-  - **Тесты**: `test_initiatives_api.py`, `test_web_initiatives.py`.
+  - **Тесты**: `test_initiatives_api.py` (API и HTML-экраны: фильтры, экранирование, баннер
+    неполноты, `no_change`).
 
 **Checkpoint US3**: инициативы видны и объяснимы.
 

@@ -35,6 +35,7 @@
   </p>
   <div class="actions">
     {% if map_ready %}<a class="button" href="/analyses/{{ run.id }}/processes">Карта процессов →</a>{% endif %}
+    {% if initiatives_ready %}<a class="button" href="/analyses/{{ run.id }}/initiatives">Инициативы →</a>{% endif %}
     {% if run.status in ("failed", "interrupted") %}
     <form method="post" action="/analyses/{{ run.id }}/resume"><button type="submit">Продолжить</button></form>
     {% endif %}

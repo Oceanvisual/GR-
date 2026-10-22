@@ -1,0 +1,67 @@
+{
+  "findings": [
+    {
+      "key": "f1",
+      "pattern": "duplicate_checks",
+      "operation_ids": [
+        "proc_1.op_2"
+      ],
+      "description": "Повторная сверка комплектности"
+    }
+  ],
+  "initiatives": [
+    {
+      "key": "i1",
+      "title": "Проверка комплектности по перечню",
+      "finding_keys": [
+        "f1"
+      ],
+      "operation_ids": [
+        "proc_1.op_2"
+      ],
+      "solution_category": "classic_automation",
+      "description": "Правила сравнивают состав документов с перечнем",
+      "architecture_idea": "Реестр документов, правила, журнал проверок",
+      "tech_rationale": "Проверка по закрытому перечню выполняется правилами",
+      "alternatives_considered": [
+        {
+          "category": "llm_rag",
+          "why_not": "Вероятностная модель не требуется для закрытого перечня"
+        }
+      ],
+      "reduction_potential": [
+        {
+          "operation_id": "proc_1.op_2",
+          "level": "medium",
+          "justification": "Автоматическая сверка перечня"
+        }
+      ],
+      "ratings": {
+        "feasibility": {
+          "level": "medium",
+          "justification": "Оценка по модели процесса"
+        },
+        "data_availability": {
+          "level": "medium",
+          "justification": "Оценка по модели процесса"
+        },
+        "integration_complexity": {
+          "level": "medium",
+          "justification": "Оценка по модели процесса"
+        },
+        "legal_risk": {
+          "level": "medium",
+          "justification": "Оценка по модели процесса"
+        },
+        "operational_risk": {
+          "level": "medium",
+          "justification": "Оценка по модели процесса"
+        },
+        "duration": {
+          "bucket": "m3_6",
+          "justification": "Интеграция с реестром"
+        }
+      }
+    }
+  ]
+}

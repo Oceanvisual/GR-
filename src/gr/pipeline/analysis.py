@@ -10,11 +10,14 @@ from typing import Any
 
 from gr.domain.document import Document, Fragment
 from gr.domain.enums import StageName
+from gr.domain.process import ProcessModel
 from gr.domain.run import FailedItem
 from gr.extraction.detailing import DetailingResult, detail_processes
 from gr.extraction.discovery import DiscoveryResult, discover
+from gr.extraction.opportunities import OpportunitiesResult, extract_opportunities
 from gr.llm.base import StructuredLLM
 from gr.pipeline.stages import Stage, StageContext, StageError, StageResult
+from gr.validation.postprocess import postprocess
 from gr.validation.process_validator import validate
 
 
@@ -87,6 +90,55 @@ class ValidateStage:
         return StageResult(output=_output(validate(found, detailed, fragments)))
 
 
-def analysis_stages(llm: StructuredLLM, settings: AnalysisSettings) -> list[Stage]:
-    """The stages of US2; S6 and S7 come with US3."""
-    return [DiscoverStage(llm), DetailStage(llm, settings), ValidateStage()]
+class OpportunitiesStage:
+    name = StageName.OPPORTUNITIES
+
+    def __init__(self, llm: StructuredLLM, settings: AnalysisSettings) -> None:
+        self.llm, self.settings = llm, settings
+
+    async def run(self, ctx: StageContext) -> StageResult:
+        model = ProcessModel.model_validate(await ctx.output_of(StageName.VALIDATE))
+        result = await extract_opportunities(
+            model,
+            self.llm,
+            run_id=ctx.run.id,
+            max_tokens=self.settings.max_output_tokens,
+            concurrency=self.settings.concurrency,
+            store=ctx.repos.stage_items.for_stage(ctx.run.id, self.name),
+            progress=ctx.report_progress,
+        )
+        return StageResult(
+            output=_output(result),
+            failed_items=[
+                FailedItem(stage=self.name, process_key=f.process_id, error_code=f.code)
+                for f in result.failed
+            ],
+        )
+
+
+class PostprocessStage:
+    name = StageName.POSTPROCESS
+
+    async def run(self, ctx: StageContext) -> StageResult:
+        _, fragments = await _document(ctx)
+        model = ProcessModel.model_validate(await ctx.output_of(StageName.VALIDATE))
+        drafts = OpportunitiesResult.model_validate(await ctx.output_of(StageName.OPPORTUNITIES))
+        result = postprocess(model, drafts, fragments)
+        serious = {"no_result", "missing_provision", "invalid_initiative", "empty_initiative"}
+        failures = {(i.process_id, i.code) for i in result.issues if i.code in serious}
+        return StageResult(
+            output=_output(result),
+            failed_items=[
+                FailedItem(stage=self.name, process_key=pid, error_code=code)
+                for pid, code in sorted(failures)
+            ],
+        )
+
+
+def analysis_stages(
+    llm: StructuredLLM, settings: AnalysisSettings, *, include_opportunities: bool = True
+) -> list[Stage]:
+    stages: list[Stage] = [DiscoverStage(llm), DetailStage(llm, settings), ValidateStage()]
+    if include_opportunities:
+        stages += [OpportunitiesStage(llm, settings), PostprocessStage()]
+    return stages

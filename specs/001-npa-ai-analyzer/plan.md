@@ -234,10 +234,10 @@ src/gr/
 │   ├── schemas.py, outline.py, render.py (блок <document>)
 │   ├── discovery.py, detailing.py, opportunities.py, mapping.py
 │   └── prompts/ discover.md, detail.md, opportunities.md
-├── validation/                   # S5
-│   ├── process_validator.py, graph.py, dedupe.py, confidence.py, coverage.py
-├── analysis/                     # S7–S9 + overlay
-│   ├── postprocess.py, tech_guard.py, gating.py, relations.py, defaults.py
+├── validation/                   # S5, S7: ответы LLM → проверенная доменная модель
+│   ├── process_validator.py, graph.py, dedupe.py, confidence.py, coverage.py, postprocess.py
+├── analysis/                     # правила S7, S8–S9, overlay (чистые функции)
+│   ├── tech_guard.py, gating.py, relations.py, defaults.py
 │   ├── economics.py, scoring.py, grouping.py, portfolio.py, overlay.py, mermaid.py
 ├── pipeline/
 │   ├── stages.py, runner.py, workers.py (пул процессов)

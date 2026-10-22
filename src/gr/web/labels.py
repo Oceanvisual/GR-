@@ -48,7 +48,7 @@ STAGE: dict[str, str] = {
     "detail": "S4 · операции",
     "validate": "S5 · проверка",
     "opportunities": "S6 · возможности",
-    "postprocess": "S7 · экономика и приоритет",
+    "postprocess": "S7 · проверка инициатив",
 }
 
 STAGE_STATUS: dict[str, str] = {
@@ -135,3 +135,64 @@ LABELS = {
     "unverified_element": UNVERIFIED_ELEMENT,
     "grounding": GROUNDING,
 }
+
+LABELS.update(
+    {
+        "gate": {
+            "allowed": "Допустимо",
+            "allowed_with_hitl": "Контроль человеком",
+            "requires_regulatory_change": "Нужно изменение НПА",
+            "blocked": "Заблокировано",
+        },
+        "solution": {
+            "classic_automation": "Классическая автоматизация",
+            "ai_nlp": "AI/NLP",
+            "llm_rag": "LLM + RAG",
+            "ai_agent": "AI-агент",
+            "hybrid": "Гибрид",
+            "no_change": "Оптимизация не требуется",
+        },
+        "regulatory": {
+            "within_current": "В рамках действующего регулирования",
+            "requires_change": "Требует изменения НПА",
+        },
+        "automation": {
+            "assistive": "Подсказка",
+            "human_approval": "Решение подтверждает человек",
+            "autonomous": "Автономно",
+        },
+        "level": {
+            "very_low": "Очень низкий",
+            "low": "Низкий",
+            "medium": "Средний",
+            "high": "Высокий",
+            "very_high": "Очень высокий",
+        },
+        "duration": {
+            "lt_3m": "до 3 месяцев",
+            "m3_6": "3–6 месяцев",
+            "m6_12": "6–12 месяцев",
+            "gt_12m": "более 12 месяцев",
+        },
+        "rating": {
+            "feasibility": "Реализуемость",
+            "data_availability": "Доступность данных",
+            "integration_complexity": "Сложность интеграции",
+            "legal_risk": "Юридический риск",
+            "operational_risk": "Операционный риск",
+            "duration": "Срок внедрения",
+        },
+        "problem": {
+            "manual_document_processing": "Ручная обработка документов",
+            "duplicate_data_entry": "Повторный ввод",
+            "lookup_and_reconciliation": "Поиск и сверка",
+            "request_classification": "Классификация обращений",
+            "template_document_preparation": "Типовые документы",
+            "duplicate_checks": "Повторные проверки",
+            "long_approvals": "Длительные согласования",
+            "interdepartmental_handoff": "Передача документов",
+            "large_text_analysis": "Анализ большого объёма текста",
+            "other": "Иное",
+        },
+    }
+)

@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 import pytest
+from pipeline_helpers import no_change_for_s6
 
 from gr.api.deps import AppState
 from gr.app import create_app
@@ -50,7 +51,7 @@ def citations(node: Any) -> Iterator[dict[str, Any]]:
 def env(tmp_path: Path, make_settings: Callable[..., Settings]) -> Callable[[], Any]:
     def factory() -> AsyncIterator[tuple[httpx.AsyncClient, AppState, FakeLLM]]:
         settings = make_settings(data_dir=tmp_path / "data", ocr_enabled=False, **LLM)
-        llm = FakeLLM()
+        llm = FakeLLM(default=no_change_for_s6)
         app = create_app(settings, llm=llm)
 
         async def run() -> AsyncIterator[tuple[httpx.AsyncClient, AppState, FakeLLM]]:
@@ -147,6 +148,6 @@ def test_task_texts_name_no_data_blocks() -> None:
     """A tag mentioned in the task would read as another data block opening in the message."""
     from gr.extraction.prompt_files import load_prompt
 
-    for stage in ("discover", "detail"):
+    for stage in ("discover", "detail", "opportunities"):
         task = load_prompt(stage).task
         assert "<" not in task and ">" not in task, stage

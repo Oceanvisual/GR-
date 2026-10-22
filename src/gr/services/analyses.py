@@ -74,7 +74,9 @@ def run_config(settings: Settings) -> RunConfig:
             "extraction": settings.llm_model_extraction or "",
             "analysis": settings.llm_model_analysis or "",
         },
-        prompt_versions={stage: load_prompt(stage).version for stage in ("discover", "detail")},
+        prompt_versions={
+            stage: load_prompt(stage).version for stage in ("discover", "detail", "opportunities")
+        },
         structured_mode=settings.llm_structured_mode,
         chunking=dict(asdict(load_chunking())),
         grounding_thresholds={

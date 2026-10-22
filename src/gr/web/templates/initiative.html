@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import grounded with context %}
+{% block title %}{{ detail.initiative.title }} — AI-анализ НПА{% endblock %}
+{% block content %}
+{% set i = detail.initiative %}
+<p><a href="/analyses/{{ run.id }}/initiatives">← Инициативы</a> · <a href="/analyses/{{ run.id }}/processes?process={{ i.process_id }}">Процесс</a></p>
+<h1>{{ i.title }}</h1><span class="badge">Гипотеза</span>
+<div class="alert alert-warn">{{ disclaimer }}</div>
+{% if not run.completeness.complete %}<div class="alert alert-warn">Анализ неполный.</div>{% endif %}
+<p>{{ detail.process.name.value }} · Уверенность модели процесса: {{ labels.confidence[detail.process.confidence] }}</p>
+<h2>Проблемы</h2>{% for finding in detail.findings %}<p><strong>{{ labels.problem[finding.pattern] }}</strong>: {{ finding.description }}</p>{% endfor %}
+<h2>Решение</h2><p>{{ labels.solution[i.solution_category] }}: {{ i.description }}</p>
+<h3>Архитектурная идея</h3><p>{{ i.architecture_idea }}</p>
+<h3>Обоснование технологии</h3><p>{{ i.tech_rationale }}</p>
+{% if i.tech_guard and i.tech_guard.requires_justification %}<div class="alert alert-warn">Требует обоснования: минимально достаточный класс — {{ labels.solution[i.tech_guard.min_category] }}.</div>{% endif %}
+<h3>Рассмотренные альтернативы</h3><ul>{% for a in i.alternatives_considered %}<li>{{ labels.solution[a.category] }}: {{ a.why_not }}</li>{% endfor %}</ul>
+<h2>Регулирование и контроль</h2><p>{{ labels.regulatory[i.regulatory_mode] }} · {{ labels.automation[i.automation_level] }}</p>
+{% if i.requires_legal_review %}<strong>Требуется юридическая экспертиза</strong>{% endif %}
+{% if i.autonomy_capped %}<p>Автономность ограничена: юридически значимое решение подтверждает человек.</p>{% endif %}
+{% if i.gate %}<p>{{ labels.gate[i.gate.status] }}</p><ul>{% for reason in i.gate.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+<ul>{% for p in i.provisions_to_revise %}<li><a href="/documents/{{ run.doc_id }}?fragment={{ p.fragment_id | path_quote }}#fragment">{{ fragment_labels.get(p.fragment_id, p.fragment_id) }}</a>: {{ p.change_nature }}</li>{% endfor %}</ul>
+<h2>Операции и нормативные основания</h2>{% for op in detail.operations %}<section><h3>{{ op.seq }} · {{ op.name }}</h3>{{ grounded(run.doc_id, op.action, fragment_labels) }}{% if op.performer %}<p>Исполнитель: {{ grounded(run.doc_id, op.performer, fragment_labels) }}</p>{% endif %}{% if op.deadline %}<p>Срок: {{ grounded(run.doc_id, op.deadline.raw, fragment_labels) }}</p>{% endif %}</section>{% endfor %}
+<h2>Качественные оценки</h2><ul>{% for key, rating in i.ratings.model_dump().items() %}<li>{{ labels.rating[key] }}: {{ labels.duration[rating.bucket] if key == "duration" else labels.level[rating.level] }} — {{ rating.justification }}</li>{% endfor %}</ul>
+<h2>Риски и ограничения</h2><ul>{% for text in i.risks + i.limitations %}<li>{{ text }}</li>{% else %}<li>Нет данных</li>{% endfor %}</ul>
+<h2>Связи</h2><ul>{% for r in i.relations %}<li><a href="/analyses/{{ run.id }}/initiatives/{{ r.initiative_id }}">{{ r.initiative_id }}</a> — {{ "Альтернатива" if r.relation == "alternative" else "Дополняющая инициатива" }}</li>{% else %}<li>Связанных инициатив нет</li>{% endfor %}</ul>
+<h2>Экономика и приоритет</h2><p>Будет рассчитано. Экономические параметры и оценки приоритета пока не заданы.</p>
+<h2>История решений</h2><ul>{% for event in detail.history %}<li>{{ event.created_at }} · {{ event.user }}: {{ event.action }} — {{ event.comment or "" }}</li>{% else %}<li>Решений эксперта пока нет.</li>{% endfor %}</ul>
+{% endblock %}

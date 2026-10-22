@@ -132,3 +132,23 @@ class Initiative(DomainModel):
         ):
             raise ValueError("autonomy_capped means autonomous was lowered to human_approval")
         return self
+
+
+class NoChangeDecision(DomainModel):
+    process_id: str
+    justification: str = Field(min_length=1)
+    layer: Literal[KnowledgeLayer.HYPOTHESIS] = KnowledgeLayer.HYPOTHESIS
+
+
+class PostprocessIssue(DomainModel):
+    code: str
+    process_id: str
+    element: str
+    message: str
+
+
+class InitiativeSet(DomainModel):
+    findings: list[Finding] = []
+    initiatives: list[Initiative] = []
+    no_change: list[NoChangeDecision] = []
+    issues: list[PostprocessIssue] = []
