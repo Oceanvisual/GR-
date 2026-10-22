@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from evals.budget import Budget, BudgetedLLM
 from evals.metrics import FragmentNode, PredDeadline, Prediction, PredOperation, PredProcess
+from evals.metrics_opportunities import PredOpportunities, to_opportunities
 from gr.api.deps import AppState
 from gr.app import create_app
 from gr.domain.document import Citation, Fragment
@@ -53,6 +54,7 @@ class Outcome(BaseModel):
     usage: dict[str, float]
     models: dict[str, str]
     prompt_versions: dict[str, str]
+    opportunities: PredOpportunities | None = None  # with S6 (--s6, T066)
 
 
 # --- the process model → prediction --------------------------------------------------------
@@ -128,10 +130,14 @@ def to_prediction(model: ProcessModel, fragments: Sequence[Fragment], full_text:
 
 
 @asynccontextmanager
-async def pipeline(*, cached: bool, budget: Budget | None = None) -> AsyncIterator[AppState]:
+async def pipeline(
+    *, cached: bool, budget: Budget | None = None, s6: bool = False
+) -> AsyncIterator[AppState]:
     overrides: dict[str, Any] = {}
     if budget is not None:
         overrides = {"llm_model_extraction": budget.allowed_model, "llm_max_retries": 0}
+        if s6:  # S6 runs on the analysis model: the budget allows one model only
+            overrides["llm_model_analysis"] = budget.allowed_model
     settings = Settings(  # LLM_* from the environment, like the service itself
         data_dir=DATA_DIR,
         llm_cache_enabled=cached,
@@ -158,7 +164,7 @@ async def pipeline(*, cached: bool, budget: Budget | None = None) -> AsyncIterat
                 max_output_tokens=settings.llm_max_output_tokens,
                 concurrency=settings.llm_concurrency,
             ),
-            include_opportunities=False,
+            include_opportunities=s6,
         )
         app = create_app(settings, stages=stages)
         async with app.router.lifespan_context(app):
@@ -166,6 +172,25 @@ async def pipeline(*, cached: bool, budget: Budget | None = None) -> AsyncIterat
     finally:
         await client.client.close()
         await db.dispose()
+
+
+@asynccontextmanager
+async def judge_client(model: str, budget: Budget | None = None) -> AsyncIterator[StructuredLLM]:
+    """The judge's LLM (T066): the endpoint of the environment, the judge's model for S6."""
+    overrides: dict[str, Any] = {"llm_model_analysis": model}
+    if budget is not None:
+        overrides["llm_max_retries"] = 0
+    settings = Settings(data_dir=DATA_DIR, log_level="WARNING", **overrides)
+    if budget is None:
+        client = OpenAICompatibleLLM(settings)
+    else:
+        guarded = BudgetedLLM(settings)
+        guarded.budget = budget
+        client = guarded
+    try:
+        yield client
+    finally:
+        await client.client.close()
 
 
 def _staged_upload(path: Path, tmp_dir: Path) -> Upload:
@@ -187,7 +212,7 @@ async def _ingest(state: AppState, path: Path) -> str:
     return result.document.id
 
 
-async def analyse(state: AppState, path: Path) -> Outcome:
+async def analyse(state: AppState, path: Path, *, s6: bool = False) -> Outcome:
     doc_id = await _ingest(state, path)
     service = AnalysisService(state)
     started = time.perf_counter()
@@ -209,6 +234,10 @@ async def analyse(state: AppState, path: Path) -> Outcome:
     }
     if run.usage.cost is not None:
         usage["cost"] = float(run.usage.cost)
+    opportunities = None
+    if s6:
+        outputs = await service.outputs(run.id, initiatives=True)
+        opportunities = to_opportunities(outputs.effective.result, len(model.processes))
     return Outcome(
         prediction=to_prediction(model, fragments, full_text),
         run_id=run.id,
@@ -218,4 +247,5 @@ async def analyse(state: AppState, path: Path) -> Outcome:
         usage=usage,
         models=dict(run.config_snapshot.models),
         prompt_versions=dict(run.config_snapshot.prompt_versions),
+        opportunities=opportunities,
     )

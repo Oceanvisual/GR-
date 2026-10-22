@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from rapidfuzz import fuzz
 
 from evals.golden import Golden, GoldenProcess
+from evals.metrics_opportunities import S6_INFO, S6_QUALITY
 from gr.domain.enums import DeadlineUnit
 from gr.grounding.deadlines import check_deadline
 
@@ -37,7 +38,9 @@ QUALITY: dict[str, bool] = {
     "verified_share": True,
     "coverage": True,
     "deadlines_not_in_text": False,
+    **S6_QUALITY,  # T066: present when the run included S6 (--s6) or the judge (--judge)
 }
+INFO = S6_INFO  # reported as a mean over documents, never gated
 USAGE = ("calls", "in_tokens", "out_tokens", "latency_s")
 
 
@@ -265,6 +268,10 @@ def aggregate(per_document: Mapping[str, Mapping[str, float | None]]) -> dict[st
             continue
         out[f"{name}.mean"] = round(statistics.fmean(values), 4) if values else None
         out[f"{name}.min"] = round(min(values), 4) if values else None
+    for name in INFO:
+        values = [v for doc in per_document.values() if (v := doc.get(name)) is not None]
+        if values:
+            out[f"{name}.mean"] = round(statistics.fmean(values), 4)
     for name in USAGE:
         values = [v for doc in per_document.values() if (v := doc.get(name)) is not None]
         out[f"{name}.sum"] = round(sum(values), 1) if values else None

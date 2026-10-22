@@ -6,6 +6,8 @@
     uv run python -m evals.run --rescore evals/runs/<stamp>.json   # metrics again, no LLM
     uv run python -m evals.run --update-baseline   # record this run as the baseline
     uv run python -m evals.run --strict            # also the targets of SC-003 / SC-002
+    uv run python -m evals.run --s6                # with S6: the initiatives (T066)
+    uv run python -m evals.run --judge             # S6 and the LLM judge, verdicts cached
 
 The model comes from the environment (LLM_MODEL_EXTRACTION and the rest), as for the service.
 Exit: 0 — fine, 1 — regression, ceiling, failed target or a document not analysed,
@@ -25,6 +27,7 @@ from typing import Any
 
 from evals.budget import Budget
 from evals.golden import EVAL_DIR, Case, Golden, load_cases
+from evals.judge import Judge
 from evals.metrics import (
     USAGE,
     DocumentScore,
@@ -32,7 +35,8 @@ from evals.metrics import (
     gate,
     score_document,
 )
-from evals.target import ROOT, EvalRunError, Outcome, analyse, pipeline
+from evals.metrics_opportunities import score_opportunities
+from evals.target import ROOT, EvalRunError, Outcome, analyse, judge_client, pipeline
 
 RUNS_DIR = EVAL_DIR / "runs"
 BASELINE = EVAL_DIR / "baseline.json"
@@ -55,18 +59,37 @@ def checked_golden(case: Case) -> Golden:
 
 
 async def run_documents(
-    cases: list[Case], *, cached: bool, budget: Budget | None = None
+    cases: list[Case], *, cached: bool, budget: Budget | None = None, s6: bool = False
 ) -> dict[str, Outcome | str]:
     """Outcome per document, or the reason it could not be analysed."""
     results: dict[str, Outcome | str] = {}
-    async with pipeline(cached=cached, budget=budget) as state:
+    async with pipeline(cached=cached, budget=budget, s6=s6) as state:
         for case in cases:
             print(f"… {case.id}: анализ", flush=True)
             try:
-                results[case.id] = await analyse(state, ROOT / case.path)
+                results[case.id] = await analyse(state, ROOT / case.path, s6=s6)
             except EvalRunError as exc:
                 results[case.id] = str(exc)
     return results
+
+
+async def judge_documents(
+    outcomes: dict[str, Outcome | str], model: str, budget: Budget | None = None
+) -> dict[str, dict[str, float | None]]:
+    """The judge's metrics per document with S6 results; new verdicts go to the cache."""
+    found: dict[str, dict[str, float | None]] = {}
+    async with judge_client(model, budget) as llm:
+        judge = Judge(llm, model)
+        try:
+            for doc_id, outcome in outcomes.items():
+                if isinstance(outcome, str) or outcome.opportunities is None:
+                    continue
+                print(f"… {doc_id}: судья S6", flush=True)
+                found[doc_id] = await judge.score(outcome.opportunities.initiatives)
+        finally:
+            judge.save()  # verdicts paid for are kept even if a later call fails
+    print(f"судья: новых вызовов {judge.calls}")
+    return found
 
 
 def stored_outcomes(path: Path, cases: list[Case]) -> dict[str, Outcome | str]:
@@ -116,6 +139,23 @@ def print_documents(scores: dict[str, DocumentScore], outcomes: dict[str, Outcom
             print(f"\n{doc_id}:\n" + "\n".join(lines))
 
 
+def print_s6(per_document: dict[str, dict[str, float | None]]) -> None:
+    rows = {d: m for d, m in per_document.items() if m.get("s6_initiatives") is not None}
+    if not rows:
+        return
+    print(
+        "\n| документ | S6: инициатив | ссылки целы | LLM/агент для простых | есть проще "
+        "| no_change | судья: обосновано | конкретно |\n|---|---|---|---|---|---|---|---|"
+    )
+    for doc_id, m in rows.items():
+        print(
+            f"| {doc_id} | {_fmt(m['s6_initiatives'], 0)} | {_fmt(m['s6_reference_integrity'])} "
+            f"| {_fmt(m['s6_llm_for_classic_share'])} | {_fmt(m['s6_simpler_alternative_share'])} "
+            f"| {_fmt(m['s6_no_change_share'])} | {_fmt(m.get('s6_judge_grounded'))} "
+            f"| {_fmt(m.get('s6_judge_concrete'))} |"
+        )
+
+
 def _main(args: argparse.Namespace) -> int:
     try:
         if args.update_baseline and (args.only or args.cached or args.rescore):
@@ -147,7 +187,14 @@ def _main(args: argparse.Namespace) -> int:
         if args.rescore:
             outcomes = stored_outcomes(Path(args.rescore), cases)
         else:
-            outcomes = asyncio.run(run_documents(cases, cached=args.cached, budget=budget))
+            s6 = args.s6 or args.judge
+            outcomes = asyncio.run(run_documents(cases, cached=args.cached, budget=budget, s6=s6))
+        judged: dict[str, dict[str, float | None]] = {}
+        if args.judge:
+            model = str(config.get("judge", {}).get("model", ""))
+            if not model:
+                raise ConfigError("нет [judge] model в evals/config.toml")
+            judged = asyncio.run(judge_documents(outcomes, model, budget))
         scores: dict[str, DocumentScore] = {}
         for doc_id, outcome in outcomes.items():
             if not isinstance(outcome, str):
@@ -161,7 +208,8 @@ def _main(args: argparse.Namespace) -> int:
         outcome = outcomes[doc_id]
         assert not isinstance(outcome, str)
         usage = {} if args.cached else {k: outcome.usage.get(k) for k in USAGE}
-        per_document[doc_id] = {**score.metrics, **usage}
+        s6_metrics = score_opportunities(outcome.opportunities) if outcome.opportunities else {}
+        per_document[doc_id] = {**score.metrics, **s6_metrics, **judged.get(doc_id, {}), **usage}
     summary = aggregate(per_document)
 
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -191,6 +239,7 @@ def _main(args: argparse.Namespace) -> int:
     if unverified:
         print(f"⚠ эталон не проверен экспертом: {', '.join(unverified)}")
     print_documents(scores, outcomes)
+    print_s6(per_document)
 
     baseline = None if partial else _load_baseline()
     problems, rows = gate(summary, baseline, config, strict=args.strict)
@@ -261,6 +310,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rescore", metavar="RUN", help="пересчитать метрики сохранённого прогона")
     parser.add_argument("--update-baseline", action="store_true")
     parser.add_argument("--strict", action="store_true", help="проверять и цели SC-003")
+    parser.add_argument("--s6", action="store_true", help="с этапом S6: метрики инициатив")
+    parser.add_argument(
+        "--judge", action="store_true", help="S6 и LLM-судья (модель [judge]); вердикты в кэше"
+    )
     parser.add_argument(
         "--budget-usd", type=Decimal, help="лимит живого прогона; тарифы live_budget"
     )

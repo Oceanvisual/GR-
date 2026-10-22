@@ -13,6 +13,32 @@ uv run python -m evals.run --strict           # плюс цели SC-003 / SC-00
 uv run python -m evals.run --strict --budget-usd 3  # лимит одного живого прогона
 ```
 
+### S6: инициативы (T066)
+
+```bash
+uv run python -m evals.run --s6                 # анализ с этапом S6 и его метрики
+uv run python -m evals.run --judge              # то же и LLM-судья (модель [judge] в config.toml)
+uv run python -m evals.run --judge --rescore evals/runs/<stamp>.json   # судья по сохранённому прогону
+```
+
+Детерминированные метрики (`metrics_opportunities.py`, критерии llm.md § S6):
+
+| Метрика | Что меряет | Направление |
+|---|---|---|
+| `s6_reference_integrity` | доля предложенных инициатив без ссылок на несуществующие операции, проблемы и пункты | выше лучше; цель 1,0 |
+| `s6_llm_for_classic_share` | доля LLM- и агентных решений там, где по каталогу хватает классической автоматизации | ниже лучше; цель ≤ 0,2 |
+| `s6_simpler_alternative_share` | доля инициатив, рассмотревших решение проще своего | выше лучше |
+| `s6_no_change_share`, `s6_initiatives` | доля процессов «оптимизация не требуется», число инициатив | только для сведения, без гейта |
+
+Судья (`judge.py`, промпт `prompts/judge_initiative.md`) по каждой инициативе отвечает:
+- обоснован ли выбор технологии (`s6_judge_grounded`);
+- конкретна ли инициатива (`s6_judge_concrete`).
+
+Вердикты кэшируются в `judge_cache.json` по хэшу модели, версии промпта и инициативы. Повторный
+прогон и `--rescore` не платят. Файл коммитится вместе с baseline. Метрики S6 попадают в
+baseline, если он снимался с `--s6`/`--judge`. Их регрессия даёт exit 1, как у метрик S3–S5. С
+`--budget-usd` судья и S6 идут на модели `[live_budget]`.
+
 Модель берётся из окружения, как у сервиса. Для дешёвого прогона её подставляют в команде:
 `LLM_MODEL_EXTRACTION=anthropic/claude-haiku-5.5 uv run python -m evals.run`.
 Результаты анализа лежат в `evals/.data`; открыть их в интерфейсе — `DATA_DIR=evals/.data uv run gr serve`.

@@ -22,6 +22,14 @@ process_recall = 0.85
 process_precision = 0.80
 operation_recall = 0.75
 verified_share = 0.95
+# llm.md § S6 (T066), with --s6 / --judge: LLM or agent where classic automation suffices.
+s6_llm_for_classic_share = 0.20
+s6_reference_integrity = 1.0
+
+[judge]
+# LLM-as-judge of S6 (T066): a cheap model, the endpoint of the environment. With
+# --budget-usd it must be the model of [live_budget]. Verdicts are cached in judge_cache.json.
+model = "anthropic/claude-haiku-5.5"
 
 [live_budget]
 # Checked via the public OpenRouter endpoints API on 2026-10-22. Conservative maximum

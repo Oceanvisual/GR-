@@ -34,7 +34,7 @@ def prepared(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Outcome:
     )
 
     async def documents(
-        cases: list[Case], *, cached: bool, budget: Budget | None = None
+        cases: list[Case], *, cached: bool, budget: Budget | None = None, s6: bool = False
     ) -> dict[str, Outcome | str]:
         return {"toy": outcome}
 
