@@ -839,7 +839,7 @@ UI карты процессов.
     других (FR-061).
   - **Тесты**: `test_scoring.py`.
 
-- [ ] T048 [P] [US5] Группировка — `src/gr/analysis/grouping.py`
+- [X] T048 [P] [US5] Группировка — `src/gr/analysis/grouping.py`
   - **Цель**: FR-064, правила spec.md.
   - **Зависит**: T047
   - **Файлы**: `analysis/grouping.py`, `tests/unit/analysis/test_grouping.py`

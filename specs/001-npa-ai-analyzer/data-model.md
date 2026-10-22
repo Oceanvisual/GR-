@@ -343,7 +343,9 @@ effect_threshold: 0.4
 `100·w·s/Σw` хранится с полной точностью: сумма вкладов — балл до округления. До группировки
 результат — `ScoreCard` (критерии, балл, `ease`, эффект, статус допустимости); группу добавляет
 `grouping.py` (T048). Ранг: округлённый балл по убыванию, затем эффект по убыванию, затем
-`initiative_id` (FR-065); `blocked` без ранга и не занимает место.
+`initiative_id` (FR-065); `blocked` без ранга и не занимает место. `grouping.build_priorities`
+собирает `PriorityResult`: балл, ранг и группу с номером правила и причиной с числами, по
+которым принято решение; порядок — по рангу, `blocked` в конце.
 
 ### `PriorityResult` (вычисляемый)
 `initiative_id`, `criteria: dict[str, {raw, normalized, weight, contribution}]`, `score`,
