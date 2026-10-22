@@ -1,7 +1,7 @@
 """Process flowchart as Mermaid text (api.md § Mermaid-генерация). A pure, deterministic
 function: the same process always gives the same text.
 
-`flowchart TD`; operations are boxes «<seq>. <name> — <performer>», decision points are
+`flowchart TD`; operations are boxes «<seq> · <name> — <performer>», decision points are
 diamonds, a return for rework is a dotted edge. Operations rejected by the expert are left
 out, and the edges through them are bridged so the flow stays connected. Every label is
 escaped with Mermaid entity codes: text from the act or the model can neither break the
@@ -46,7 +46,8 @@ def _node(element_id: str) -> str:
 
 def _operation_label(operation: Operation) -> str:
     performer = operation.performer.value if operation.performer else "исполнитель не указан"
-    return label(f"{operation.seq + 1}. {operation.name} — {performer}")
+    # «1 ·», not «1.»: Mermaid reads a label that starts like «1. » as a Markdown list.
+    return label(f"{operation.seq + 1} · {operation.name} — {performer}")
 
 
 def process_to_mermaid(process: Process) -> str:
@@ -73,9 +74,19 @@ def process_to_mermaid(process: Process) -> str:
     if any(o.ends_process for dp in points for o in dp.outcomes):
         lines.append(f"    {END_NODE}")
 
+    # An operation reached through a decision does not need the direct edge from the step
+    # the decision follows: the path through the diamond already shows it.
+    via_decision = {
+        (dp.after_operation_id, outcome.next_operation_id)
+        for dp in points
+        for outcome in dp.outcomes
+        if outcome.next_operation_id
+    }
     edges: list[str] = []
     for op in shown:
         for dependency in prerequisites(op):
+            if (dependency, op.id) in via_decision:
+                continue
             arrow = "-.->" if by_id[dependency].is_loop_back else "-->"
             edges.append(f"    {_node(dependency)} {arrow} {_node(op.id)}")
     for dp in points:

@@ -204,7 +204,8 @@ cum_net_horizon;roi_horizon;payback_months;in_portfolio;review_status;scenario;a
 legally_significant;fragment_labels;quotes;grounding;confidence;review_status`
 
 ## Mermaid-генерация (детерминированная)
-`flowchart TD`. Узлы `op_<n>["<seq>. <name> — <performer>"]` (кавычки и спецсимволы
+`flowchart TD`. Узлы `op_<n>["<seq> · <name> — <performer>"]` (не «<seq>.»: Mermaid читает
+такую подпись как Markdown-список; кавычки и спецсимволы
 экранируются, длина ≤ 80). Ромбы — для точек решения. Пунктирные рёбра — для
 `is_loop_back`. Отклонённые операции не выводятся. Генерация — чистая функция с
 golden-тестом.

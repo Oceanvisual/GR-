@@ -76,7 +76,22 @@ def test_deterministic() -> None:
 def test_rejected_operation_is_left_out_and_bridged() -> None:
     chart = process_to_mermaid(process())
     assert "op_5" not in chart and "Лишняя" not in chart
-    assert "op_3 --> op_6" in chart  # op_6 depended on the rejected op_5
+    chain = Process(
+        id="proc_1",
+        name=text("x"),
+        operations=[
+            operation(1, "a"),
+            operation(2, "b", depends_on=(1,), status=ReviewStatus.REJECTED),
+            operation(3, "c", depends_on=(2,)),
+        ],
+    )
+    assert "op_1 --> op_3" in process_to_mermaid(chain)  # op_3 depended on the rejected op_2
+
+
+def test_no_direct_edge_beside_a_decision() -> None:
+    chart = process_to_mermaid(process())
+    # op_6 follows op_3 through the decision; no second arrow op_3 → op_6.
+    assert "op_3 --> op_6" not in chart and 'dp_1 -- "нет" --> op_6' in chart
 
 
 def test_loop_back_is_dotted() -> None:

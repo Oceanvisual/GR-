@@ -100,11 +100,9 @@ class ProcessValidator:
             return None, checked
         report.cited.add(checked.citation.fragment_id)
         if checked.relocated:
-            report.issue(
-                "relocated_citation",
-                element_id,
-                f"Ссылка исправлена на фрагмент {checked.citation.fragment_id}.",
-            )
+            target = self.mapper.fragments.get(checked.citation.fragment_id)
+            name = target.label if target else checked.citation.fragment_id
+            report.issue("relocated_citation", element_id, f"Ссылка исправлена на «{name}».")
         return self.mapper.grounded(checked), checked
 
     def _first(
