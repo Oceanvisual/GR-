@@ -1,0 +1,42 @@
+# The gate of the project: scripts/check.sh (ruff, format, mypy strict, pytest without network).
+# It runs in the Debian of the service image with the same tesseract and LibreOffice, so the
+# tests marked `ocr` and `soffice` run too and the DOC/RTF snapshots match (T056).
+# Deliver (deliver.yml) publishes the image after this workflow is green on main.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container: python:3.12-slim-bookworm
+    env:
+      OMP_THREAD_LIMIT: "1"
+      UV_PYTHON_DOWNLOADS: never
+    steps:
+      - name: System packages (as in the Dockerfile)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git \
+            tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng libreoffice-writer-nogui
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.18"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: ./scripts/check.sh
+      - name: The marked tests ran, none skipped
+        run: |
+          uv run pytest -q -m "ocr or soffice" -p no:cacheprovider | tee marked.log
+          ! grep -q "skipped" marked.log

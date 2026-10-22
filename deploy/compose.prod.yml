@@ -1,0 +1,20 @@
+# deploy-kit: прод-стек gr. На сервере лежит в DEPLOY_DIR рядом с remote.sh и .env.
+# Порт слушает только localhost — наружу через reverse proxy (Caddy/nginx), см. runbook.
+# Доп. сервисы проекта (БД, векторка) добавляй сюда же — deploy-kit этот файл не перезаписывает.
+services:
+  app:
+    image: ${IMAGE:?IMAGE}:${TAG:?TAG}
+    env_file: .env
+    ports:
+      - "127.0.0.1:${HOST_PORT:-8000}:8000"
+    volumes:
+      - data:/data            # SQLite and the uploaded files: back it up (docs/deploy.md)
+    restart: unless-stopped
+    # Background analyses and OCR stop cleanly: an analysis becomes «прерван», OCR is queued again.
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  data:

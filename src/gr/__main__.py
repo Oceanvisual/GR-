@@ -21,6 +21,12 @@ def _hash_password(args: argparse.Namespace) -> int:
         return 1
     encoded = hash_password(password)
     print(f"{args.login}:{encoded}" if args.login else encoded)
+    # To stderr, so `$(gr hash-password …)` takes the line alone.
+    print(
+        "В env-файле docker compose значение AUTH_USERS — в одинарных кавычках: "
+        "AUTH_USERS='login:scrypt$…'. Иначе compose примет $… за переменную.",
+        file=sys.stderr,
+    )
     return 0
 
 

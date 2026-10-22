@@ -44,6 +44,17 @@ def verify_password(password: str, encoded: str) -> bool:
     return hmac.compare_digest(_scrypt(password, salt), expected)
 
 
+def _well_formed(encoded: str) -> bool:
+    parts = encoded.split("$")
+    if len(parts) != 3 or parts[0] != "scrypt":
+        return False
+    try:
+        salt, digest = bytes.fromhex(parts[1]), bytes.fromhex(parts[2])
+    except ValueError:
+        return False
+    return len(salt) >= 16 and len(digest) >= 32
+
+
 def parse_users(raw: str) -> dict[str, str]:
     """`login:scrypt$…,login2:scrypt$…` → {login: encoded hash}."""
     users: dict[str, str] = {}
@@ -52,8 +63,13 @@ def parse_users(raw: str) -> dict[str, str]:
         if not entry:
             continue
         login, sep, encoded = entry.partition(":")
-        if not sep or not login or not encoded.startswith("scrypt$"):
-            raise ValueError("AUTH_USERS: expected login:scrypt$<salt>$<hash>")
+        if not sep or not login or not _well_formed(encoded):
+            # Fail at startup, not at every login: a deploy with a broken hash rolls back.
+            raise ValueError(
+                f"AUTH_USERS: {login or '?'}: expected login:scrypt$<salt>$<hash> from "
+                "`gr hash-password`. In a docker compose env file put the value in single "
+                "quotes: compose takes $… for a variable and drops it."
+            )
         users[login] = encoded
     return users
 

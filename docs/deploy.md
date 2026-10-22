@@ -4,10 +4,12 @@
 OCR выполняются внутри него, тяжёлый разбор — в дочерних процессах. Наружу сервис выходит через
 реверс-прокси с TLS.
 
-> **Docker-образ, `docker-compose.yml` и доставка через GitHub Actions** появятся в задаче T056
-> (`/deploy-kit`, изменение CI и деплоя — по согласованию). До неё сервис запускается как
-> обычный процесс: раздел «Без Docker» ниже. Требования, настройки, прокси, бэкап и проверки
-> одинаковы для обоих способов.
+Два способа:
+- **Docker** (основной) — образ с tesseract и LibreOffice, выкладка из GitHub Actions. Подробности
+  выкладки, секреты и откат — [runbooks/deploy.md](runbooks/deploy.md).
+- **Без Docker** — процесс под systemd.
+
+Требования, настройки, прокси, бэкап и проверки одинаковы для обоих способов.
 
 ## Требования
 
@@ -39,14 +41,58 @@ OCR выполняются внутри него, тяжёлый разбор �
 |---|---|
 | `APP_ENV` | `server`: без входа сервис не запускается |
 | `APP_PUBLIC_URL` | внешний адрес, например `https://npa.example.ru`; по нему проверяется `Origin` форм |
-| `AUTH_USERS` | `login:scrypt$…` через запятую; строку даёт `uv run gr hash-password --login <login>` |
-| `DATA_DIR` | каталог данных, например `/var/lib/gr` |
-| `FORWARDED_ALLOW_IPS` | адрес реверс-прокси (`127.0.0.1`, если он на той же машине) — тогда uvicorn верит его `X-Forwarded-*` |
+| `AUTH_USERS` | `login:scrypt$…` через запятую; строку даёт `uv run gr hash-password --login <login>`. В env-файле Docker — **в одинарных кавычках**, см. раздел Docker |
+| `DATA_DIR` | каталог данных, например `/var/lib/gr`; в Docker-образе уже `/data` (том) |
+| `FORWARDED_ALLOW_IPS` | адрес реверс-прокси (`127.0.0.1`, если он на той же машине) — тогда uvicorn верит его `X-Forwarded-*`. В Docker прокси приходит с адреса шлюза сети контейнера: `*` (порт открыт только на `127.0.0.1` хоста) |
 | `LLM_*` | политика, endpoint и модели — см. README, раздел «LLM» |
 | `LOG_FORMAT` | `json` для сборщика логов |
 
 Ключ LLM (`LLM_API_KEY`) и пароли в репозиторий не попадают. Файл с переменными доступен
 только пользователю сервиса.
+
+## Docker
+
+Образ собирает GitHub Actions после зелёного CI на `main`:
+- имя `ghcr.io/<owner>/<repo>:<sha>`;
+- внутри Python 3.12, tesseract 5.3 (`rus`, `eng`) и LibreOffice 7.4 — те же версии, на
+  которых идут тесты CI;
+- размер около 950 МБ;
+- пользователь uid 10001, данные — в томе `/data`;
+- `HEALTHCHECK` на `/healthz`.
+
+Стек — [`deploy/compose.prod.yml`](../deploy/compose.prod.yml):
+- порт `127.0.0.1:8000`;
+- том `data` для SQLite и исходных файлов;
+- `stop_grace_period: 30s`, чтобы фоновые задачи остановились штатно.
+
+Выкладка: `deploy/remote.sh`. Он ждёт `healthy` и при неудаче откатывается на прошлый тег.
+
+Env-файл прода (секрет `APP_ENV` в GitHub или файл `.env` в `DEPLOY_DIR`), пример:
+
+```bash
+APP_ENV=server
+APP_PUBLIC_URL=https://npa.example.ru
+AUTH_USERS='expert:scrypt$6f1c…$9a0b…'
+FORWARDED_ALLOW_IPS=*
+LOG_FORMAT=json
+LLM_DATA_POLICY=external_allowed
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=…
+LLM_MODEL_EXTRACTION=anthropic/claude-sonnet-5.5
+LLM_MODEL_ANALYSIS=anthropic/claude-sonnet-5.5
+```
+
+> **`AUTH_USERS` — только в одинарных кавычках.** Docker Compose подставляет переменные в
+> env-файле. Если соль хэша начинается с буквы, `$6f1c…` пропадает как «переменная», и войти
+> нельзя. Сервис проверяет формат при старте: с испорченным хэшем контейнер не поднимается, и
+> `remote.sh` откатывает выкладку. Проверено на Compose v5.
+
+Ручной запуск на сервере без CI:
+
+```bash
+cd /opt/gr && IMAGE=ghcr.io/<owner>/<repo> TAG=<sha> ./remote.sh
+docker compose -f compose.prod.yml logs -f app
+```
 
 ## Без Docker (systemd)
 
@@ -134,7 +180,8 @@ server {
 
 ## Бэкап и восстановление
 
-Всё состояние — в `DATA_DIR`:
+Всё состояние — в `DATA_DIR` (в Docker — том `data`; путь на хосте покажет
+`docker volume inspect <проект>_data`):
 - `gr.db` — документы, структура, анализы, решения эксперта;
 - `files/` — исходные файлы по sha256.
 
@@ -144,9 +191,22 @@ sqlite3 /var/lib/gr/gr.db ".backup '/backup/gr-$(date +%F).db'"
 rsync -a /var/lib/gr/files/ /backup/files/
 ```
 
+В Docker то же делается из контейнера. Утилиты `sqlite3` в образе нет, но есть модуль
+`sqlite3` в Python:
+
+```bash
+docker compose -f compose.prod.yml exec app python -c \
+  "import sqlite3; s=sqlite3.connect('/data/gr.db'); d=sqlite3.connect('/data/backup.db'); s.backup(d); d.close()"
+docker compose -f compose.prod.yml cp app:/data/backup.db ./gr-$(date +%F).db
+docker compose -f compose.prod.yml cp app:/data/files ./files
+```
+
 Восстановление: остановить сервис, положить `gr.db` и `files/` в `DATA_DIR`, запустить.
 
 ## Обновление
+
+Docker: каждый зелёный CI на `main` выкатывается сам при `DEPLOY_ENABLED=true`. Откат — Actions →
+Deliver → Run workflow → `tag=<sha>`. Без Docker:
 
 ```bash
 cd /opt/gr/app && sudo -u gr git pull && sudo -u gr uv sync --frozen --no-dev
@@ -161,8 +221,8 @@ sudo systemctl restart gr
 ## Ручная проверка Q13: перезапуск во время анализа
 
 1. Загрузить документ и запустить анализ.
-2. Пока идёт этап S4, перезапустить сервис: `sudo systemctl restart gr`, а после T056 —
-   `docker compose restart app`.
+2. Пока идёт этап S4, перезапустить сервис: `docker compose -f compose.prod.yml restart app`
+   или, без Docker, `sudo systemctl restart gr`.
 3. Открыть анализ: статус «прерван», готовые этапы отмечены выполненными.
 4. Нажать «Продолжить»: анализ завершается. Готовые этапы не повторяются: число «Вызовов LLM»
    на экране анализа растёт только на незавершённых этапах.

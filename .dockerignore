@@ -1,0 +1,26 @@
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+.env.*
+!.env.example
+notebooks
+screenshots
+*.png
+.claude
+.playwright-mcp
+deploy
+# not needed at run time: tests and fixtures, evals, specs, spikes, docs, local data
+tests
+evals
+specs
+spikes
+docs
+data
+.specify

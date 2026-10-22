@@ -52,7 +52,8 @@ CASES: dict[str, tuple[str, bytes, set[str]]] = {
     "odt": (
         "text.odt",
         zip_bytes({"mimetype": "application/vnd.oasis.opendocument.text", "content.xml": "<c/>"}),
-        {"unsupported_format"},
+        # Without LibreOffice: «save it as DOCX»; with it, a broken ODT does not convert.
+        {"unsupported_format", "corrupted_file"},
     ),
     "epub": (
         "book.epub",

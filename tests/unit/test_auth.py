@@ -50,8 +50,13 @@ def test_hash_round_trip() -> None:
 
 
 def test_parse_users() -> None:
-    assert parse_users(" a:scrypt$1$2 , b:scrypt$3$4,") == {"a": "scrypt$1$2", "b": "scrypt$3$4"}
-    for bad in ("a", "a:plain", ":scrypt$1$2"):
+    a, b = hash_password("first password"), hash_password("second password")
+    assert parse_users(f" a:{a} , b:{b},") == {"a": a, "b": b}
+    salt = a.split("$")[1]
+    # A docker compose env file without quotes eats `$<salt>` as a variable (T056): what is
+    # left must stop the start, not every login after it.
+    broken = a.replace(f"${salt}", "")
+    for bad in ("a", "a:plain", f":{a}", "a:scrypt$1$2", f"a:{broken}", f"a:{a}x"):
         with pytest.raises(ValueError, match="AUTH_USERS"):
             parse_users(bad)
 
@@ -91,7 +96,9 @@ def test_cli_hash_passes_verification(
 ) -> None:
     monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
     assert main(["hash-password", "--stdin", "--login", "expert"]) == 0
-    line = capsys.readouterr().out.strip()
+    printed = capsys.readouterr()
+    line = printed.out.strip()
+    assert "одинарных кавычках" in printed.err  # the hint stays out of the line
     users = parse_users(line)
     assert verify_password(PASSWORD, users["expert"])
 
