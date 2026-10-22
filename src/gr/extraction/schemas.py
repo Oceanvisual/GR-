@@ -13,9 +13,9 @@ Fragment references are short aliases (`F12`) that the mapper turns back into fr
 The schemas carry no dict fields: strict decoding cannot express them (llm/cache.py).
 """
 
-from typing import Literal
+from typing import Any, Literal, get_origin
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from gr.domain.enums import (
     AutomationLevel,
@@ -34,6 +34,17 @@ NO_NUMBER = -1
 class LLMSchema(BaseModel):
     # Unknown keys from a json_object answer are dropped, not fatal.
     model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_as_list(cls, data: Any) -> Any:
+        """A «0 или 1 элемент» field answered with the element itself rather than a list of
+        it: wrapped, not refused (T059: Haiku does so, and the whole process was lost)."""
+        if not isinstance(data, dict):
+            return data
+        fields = cls.model_fields.items()
+        lists = {name for name, field in fields if get_origin(field.annotation) is list}
+        return {k: [v] if k in lists and isinstance(v, dict) else v for k, v in data.items()}
 
 
 class Fact(LLMSchema):

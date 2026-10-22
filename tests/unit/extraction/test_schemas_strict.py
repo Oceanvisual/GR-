@@ -11,8 +11,10 @@ from gr.extraction.schemas import (
     STAGE_SCHEMAS,
     DetailOut,
     DiscoveryOut,
+    Fact,
     LLMSchema,
     OpportunitiesOut,
+    ProcessOut,
 )
 from gr.llm.cache import strict_json_schema
 
@@ -112,3 +114,11 @@ def test_enum_values_are_validated() -> None:
                 ],
             }
         )
+
+
+def test_one_element_answered_without_its_list_is_wrapped() -> None:
+    # Haiku answers «0 или 1 элемент» fields with the object itself now and then (T059).
+    fact = {"text": "заявление", "ref": "F3", "quote": "поступление заявления"}
+    process = ProcessOut.model_validate({"name": fact, "trigger": fact, "result": [fact]})
+    assert process.trigger == [Fact.model_validate(fact)]
+    assert process.result == [Fact.model_validate(fact)] and process.goal == []

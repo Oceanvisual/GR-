@@ -172,6 +172,29 @@ async def test_auto_falls_back_to_json_object_and_remembers(
     assert system.startswith("system rules") and '"additionalProperties": false' in system
 
 
+class Card(BaseModel):
+    title: str
+
+
+async def test_a_refused_schema_falls_back_alone(llm_settings: Callable[..., Settings]) -> None:
+    # T059: the provider took the S3 schema in json_schema mode and refused the larger S4 one
+    # every time; only that schema goes as json_object, without a refused request each call.
+    recorder = Recorder(
+        error(400, "schema too complex"),  # Answer: refused…
+        completion(json.dumps(VALID)),  # …and asked again as json_object
+        completion(json.dumps(VALID)),  # Answer again: straight to json_object
+        completion(json.dumps({"title": "card"})),  # Card keeps json_schema
+    )
+    llm = make_llm(llm_settings(), recorder)
+    assert (await ask(llm)).value.title == "ok"
+    assert (await ask(llm)).value.title == "ok"
+    card = await llm.generate(schema=Card, system="system rules", user="<document>x</document>",
+                              stage=StageName.DISCOVER, max_tokens=100, run_id="run_1")  # fmt: skip
+    assert card.value.title == "card"
+    formats = [r["response_format"]["type"] for r in recorder.requests]
+    assert formats == ["json_schema", "json_object", "json_object", "json_schema"]
+
+
 async def test_strict_json_schema_mode_does_not_fall_back(
     llm_settings: Callable[..., Settings],
 ) -> None:

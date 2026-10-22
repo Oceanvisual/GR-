@@ -76,6 +76,9 @@ class OpenAICompatibleLLM:
         configured = settings.llm_structured_mode
         self._mode: Mode = "json_object" if configured == "json_object" else "json_schema"
         self._may_fall_back = configured == "auto"
+        # Schemas the endpoint refused in json_schema mode: they go as json_object from then on.
+        # The refusal is per schema (T059: the S3 schema passed, the larger S4 one never did).
+        self._refused: set[str] = set()
         self._semaphore = asyncio.Semaphore(settings.llm_concurrency)
 
     def options_for(self, stage: StageName) -> dict[str, Any]:
@@ -172,11 +175,13 @@ class OpenAICompatibleLLM:
         stage: StageName,
         options: dict[str, Any],
     ) -> _Response:
+        mode: Mode = "json_object" if schema.__name__ in self._refused else self._mode
         try:
-            return await self._request(model, schema, messages, max_tokens, self._mode, options)
-        except openai.BadRequestError:
-            if not (self._may_fall_back and self._mode == "json_schema"):
+            return await self._request(model, schema, messages, max_tokens, mode, options)
+        except openai.BadRequestError as exc:
+            if not (self._may_fall_back and mode == "json_schema"):
                 raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
+            rejected = getattr(exc, "code", None) or type(exc).__name__
             # `auto`: perhaps the endpoint does not take json_schema. Retry once in json_object.
             try:
                 response = await self._request(
@@ -186,8 +191,9 @@ class OpenAICompatibleLLM:
                 # Rejected either way: the request itself is at fault (context length, model
                 # id, max_tokens), not the structured mode, which therefore stays as it was.
                 raise LLMUnavailableError("Сервис LLM отклонил запрос (код 400).") from None
-            log.warning("llm.structured_mode_fallback", stage=stage.value, to="json_object")
-            self._mode = "json_object"
+            log.warning("llm.structured_mode_fallback", stage=stage.value, schema=schema.__name__,
+                        to="json_object", reason=rejected)  # fmt: skip
+            self._refused.add(schema.__name__)
             return response
 
     async def _request(
