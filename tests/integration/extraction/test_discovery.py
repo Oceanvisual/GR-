@@ -5,6 +5,7 @@ Scripted answers live in tests/fixtures/llm/discover_*.json and name fragments b
 do not depend on alias numbering.
 """
 
+import json
 import re
 from dataclasses import replace
 from functools import cache
@@ -15,7 +16,7 @@ import pytest
 
 from gr.domain.document import Fragment
 from gr.domain.enums import Confidence, GroundingStatus, StageName
-from gr.extraction.discovery import DiscoveryResult, discover
+from gr.extraction.discovery import MAX_TOKENS, DiscoveryResult, discover
 from gr.extraction.render import FragmentAliases, load_chunking
 from gr.ingestion.txt import TxtExtractor
 from gr.llm.base import LLMTimeoutError
@@ -72,7 +73,7 @@ async def test_correct_answer() -> None:
     assert result.prompt_version.startswith("discover@")
 
     (call,) = llm.calls
-    assert call.max_tokens == 4000 and call.run_id == "run_T"
+    assert call.max_tokens == MAX_TOKENS == 8000 and call.run_id == "run_T"
     assert call.system.startswith("Общие правила") and "<document>" in call.user
     assert "Это часть" not in call.user
 
@@ -172,3 +173,29 @@ async def test_nested_references_collapse_to_the_topmost() -> None:
     assert process.core_fragment_ids == ids("п. 3.2")
     assert process.related_fragment_ids == ids("п. 2.1")  # п. 3.2.2 is inside the core
     assert result.non_process_fragment_ids == ids("разд. IV")
+
+
+async def test_one_procedure_named_with_two_channels_is_one_process() -> None:
+    # T059: the model listed the same procedure for paper and for the electronic form.
+    aliases = FragmentAliases(document().fragments)
+    alias = {f.label: aliases.alias(f.id) for f in document().fragments if f.parent_id}
+
+    def process(key: str, name: str, label: str) -> dict[str, Any]:
+        return {"key": key, "name": name, "trigger": "", "result": "",
+                "core_refs": [alias[label]], "related_refs": [],
+                "evidence": {"text": "приём", "ref": alias[label], "quote": ""},
+                "parent_key": ""}  # fmt: skip
+
+    reply = json.dumps({
+        "processes": [
+            process("p1", "Приём и регистрация заявления (личное обращение)", "п. 3.2"),
+            process("p2", "Приём и регистрация заявления в электронной форме", "п. 3.4"),
+            process("p3", "Рассмотрение заявления", "п. 3.3"),
+        ],
+        "non_process_refs": [], "notes": "",
+    }, ensure_ascii=False)  # fmt: skip
+    result = await run(FakeLLM({StageName.DISCOVER: [reply]}))
+    names = [p.name for p in result.processes]
+    assert names == ["Приём и регистрация заявления (личное обращение)", "Рассмотрение заявления"]
+    assert result.processes[0].core_fragment_ids == ids("п. 3.2", "п. 3.4")
+    assert "duplicate_merged" in codes(result)

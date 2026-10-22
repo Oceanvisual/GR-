@@ -7,6 +7,7 @@ overlap (Jaccard ≥ 0.5). An empty map is a valid result: «процессы н
 """
 
 import asyncio
+import re
 from collections.abc import Iterable, Sequence
 from typing import Literal
 
@@ -21,8 +22,18 @@ from gr.extraction.render import ChunkingConfig, render_document
 from gr.extraction.schemas import DiscoveryOut, ProcessCandidate
 from gr.llm.base import StructuredLLM
 
-MAX_TOKENS = 4000
+# A list of administrative procedures, each with its fragments, plus the non-process aliases:
+# 4000 cut the answer on regulations of ~15 procedures (T059).
+MAX_TOKENS = 8000
 MERGE_JACCARD = 0.5
+# A channel in a process name does not make another procedure (T059): names equal without
+# it are one process — «Рассмотрение документов в электронной форме», «… (личный прием)».
+_CHANNEL_RE = re.compile(
+    r"\([^)]*\)|\bв\s+электронн\w+\s+(?:форме|виде)\b"
+    r"|\b(?:через|посредством|с\s+использованием)\s+(?:\w+\s+){0,3}"
+    r"(?:портал\w*|многофункциональн\w+\s+центр\w*|мфц)\b",
+    re.IGNORECASE,
+)
 
 IssueCode = Literal[
     "unknown_fragment", "empty_core", "unverified_evidence", "duplicate_merged", "no_processes"
@@ -159,6 +170,19 @@ def _confidence(citation: Citation | None) -> Confidence:
     return Confidence.HIGH if exact else Confidence.MEDIUM
 
 
+def bare_name(name: str) -> str:
+    """The name of a procedure without its channel, for comparison only."""
+    text = _CHANNEL_RE.sub(" ", name.lower().replace("ё", "е"))
+    return " ".join(re.findall(r"\w+", text))
+
+
+def _same(a: "_Candidate", b: "_Candidate") -> bool:
+    if _jaccard(a.core, b.core) >= MERGE_JACCARD:
+        return True
+    name = bare_name(a.name)
+    return bool(name) and name == bare_name(b.name)
+
+
 def _merge(
     candidates: list[_Candidate], issues: list[DiscoveryIssue]
 ) -> tuple[list[_Candidate], dict[str, str]]:
@@ -166,7 +190,7 @@ def _merge(
     merged: list[_Candidate] = []
     alias: dict[str, str] = {}
     for candidate in candidates:
-        overlapping = (m for m in merged if _jaccard(m.core, candidate.core) >= MERGE_JACCARD)
+        overlapping = (m for m in merged if _same(m, candidate))
         target = next(overlapping, None)
         if target is None:
             merged.append(candidate)
