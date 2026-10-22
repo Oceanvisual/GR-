@@ -71,6 +71,7 @@ button { font: inherit; padding: 6px 16px; border: 0; border-radius: 4px; backgr
 .alert-warn { background: var(--warn-bg); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
 .actions form { margin: 0; }
+.actions label { max-width: 100%; }
 .button { display: inline-block; padding: 6px 16px; border-radius: 4px; background: var(--accent); color: #fff; text-decoration: none; }
 button.secondary { background: var(--line); color: var(--fg); }
 .badge-stage-succeeded, .badge-confidence-high { background: var(--ok-bg); }
@@ -100,7 +101,7 @@ pre.mermaid { background: var(--bg); overflow: auto; }
 .field-error { font-size: 13px; margin-top: 4px; }
 .derivation { font-size: 12px; color: var(--muted); margin-top: 2px; }
 label.wide { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; font-size: 13px; color: var(--muted); }
-select, textarea { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); background: var(--bg); }
+select, textarea { max-width: 100%; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); background: var(--bg); }
 textarea { width: 100%; box-sizing: border-box; }
 button.danger { background: #b42318; }
 .badge-review-confirmed { background: var(--ok-bg); }
