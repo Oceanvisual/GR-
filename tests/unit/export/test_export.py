@@ -4,10 +4,16 @@ import csv
 import io
 from decimal import Decimal
 
-from gr.domain.document import Citation, GroundingResult
-from gr.domain.enums import GroundingStatus, KnowledgeLayer, OperationType
+from gr.domain.document import Citation, Fragment, GroundingResult
+from gr.domain.enums import FragmentKind, GroundingStatus, KnowledgeLayer, OperationType, TextSource
 from gr.domain.process import CoverageReport, Grounded, Operation, Process, ProcessModel
-from gr.export.csv_export import OPERATION_COLUMNS, number, operations_csv, text
+from gr.export.csv_export import (
+    OPERATION_COLUMNS,
+    fragment_labels,
+    number,
+    operations_csv,
+    text,
+)
 from gr.export.json_export import SCHEMA_VERSION, AnalysisExport, export_schema
 
 
@@ -53,6 +59,16 @@ def test_operations_csv_is_utf8_with_bom_semicolons_and_crlf() -> None:
     assert found["fragment_labels"] == "п. 3.1" and found["grounding"] == "цитата найдена"
     assert found["legally_significant"] == "нет" and found["review_status"] == "На проверке"
     assert found["performer"] == "" and found["deadline_raw"] == ""
+
+
+def test_recognised_fragments_are_marked_in_the_csv() -> None:
+    def fragment(fid: str, label: str, source: TextSource) -> Fragment:
+        return Fragment(id=fid, doc_id="d", kind=FragmentKind.POINT, label=label, text="x",
+                        start=0, end=1, order=0, text_source=source)  # fmt: skip
+
+    labels = fragment_labels([fragment("body/3.1", "п. 3.1", TextSource.OCR),
+                              fragment("body/3.2", "п. 3.2", TextSource.NATIVE)])  # fmt: skip
+    assert labels == {"body/3.1": "п. 3.1 (OCR)", "body/3.2": "п. 3.2"}  # FR-008
 
 
 def test_the_schema_comes_from_the_model() -> None:

@@ -14,6 +14,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 
+from gr.domain.document import Fragment
+from gr.domain.enums import TextSource
 from gr.domain.process import ProcessModel
 from gr.services.results import InitiativeTable
 from gr.web.labels import LABELS
@@ -96,6 +98,13 @@ def initiatives_csv(table: InitiativeTable) -> bytes:
             ]
         )
     return _file(INITIATIVE_COLUMNS, rows)
+
+
+def fragment_labels(fragments: Iterable[Fragment]) -> dict[str, str]:
+    """Labels of the citations' fragments; recognised text is marked as on screen (FR-008)."""
+    return {
+        f.id: f"{f.label} (OCR)" if f.text_source == TextSource.OCR else f.label for f in fragments
+    }
 
 
 def operations_csv(model: ProcessModel, fragment_labels: Mapping[str, str]) -> bytes:

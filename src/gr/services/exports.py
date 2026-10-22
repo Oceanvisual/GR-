@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from gr.api.deps import AppState
 from gr.domain.enums import Scenario
-from gr.export.csv_export import initiatives_csv, operations_csv
+from gr.export.csv_export import fragment_labels, initiatives_csv, operations_csv
 from gr.export.json_export import AnalysisExport, build_export
 from gr.services.results import ResultsService
 
@@ -50,4 +50,4 @@ class ExportService:
     async def operations_csv(self, run_id: str) -> bytes:
         outputs = await self.results.analyses.outputs(run_id)
         fragments = await self.state.repos.fragments.list_for_document(outputs.run.doc_id)
-        return operations_csv(outputs.effective.model, {f.id: f.label for f in fragments})
+        return operations_csv(outputs.effective.model, fragment_labels(fragments))
