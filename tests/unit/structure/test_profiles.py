@@ -86,6 +86,40 @@ def test_a_chapter_after_articles_returns_to_its_section() -> None:
     assert by_label["гл. 2"].parent_id == section.id  # not the root: the section goes on
 
 
+def test_inserted_decimal_parts_are_siblings_with_their_own_points() -> None:
+    parsed = parse(
+        "Статья 1. Порядок рассмотрения",
+        "1. Орган принимает обращение.",
+        "1.1. Дополнительные основания:",
+        "1) наличие заявления;",
+        "2) наличие документов.",
+        "1.2. Орган уведомляет заявителя.",
+        "2. Обращение регистрируется.",
+        "Статья 2. Вступление в силу",
+        "1. Закон вступает в силу со дня опубликования.",
+    )
+    by_label = {f.label: f for f in parsed.fragments}
+    article = by_label["ст. 1"]
+    parts = [
+        f for f in parsed.fragments if f.kind == FragmentKind.PART and f.parent_id == article.id
+    ]
+    assert [f.number for f in parts] == ["1", "1.1", "1.2", "2"]
+    inserted = by_label["ч. 1.1 ст. 1"]
+    assert inserted.id == "art1/1.1"
+    assert by_label["п. 1 ч. 1.1 ст. 1"].parent_id == inserted.id
+    assert by_label["п. 2 ч. 1.1 ст. 1"].parent_id == inserted.id
+    assert by_label["ч. 1 ст. 2"].parent_id == by_label["ст. 2"].id
+
+
+def test_all_parts_of_the_corpus_law_belong_directly_to_their_article() -> None:
+    parsed = parse_file(str(FIXTURES / "corpus" / "fz_59_2006.docx"), "d", LIMITS)
+    assert isinstance(parsed, ParsedDocument)
+    by_id = {f.id: f for f in parsed.fragments}
+    parts = [f for f in parsed.fragments if f.kind == FragmentKind.PART]
+    assert len(parts) == 50
+    assert all(by_id[f.parent_id or ""].kind == FragmentKind.ARTICLE for f in parts)
+
+
 def test_a_sign_inside_a_sentence_is_no_section() -> None:
     parsed = parse(
         "1. Общие положения.",

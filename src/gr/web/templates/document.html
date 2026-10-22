@@ -103,12 +103,13 @@
       {% endif %}
     </dd>
     {% set noise = diag.removed_noise %}
-    {% if noise.header_footer_lines or noise.spps_lines or noise.editorial_notes %}
+    {% if noise.header_footer_lines or noise.spps_lines or noise.editorial_notes or noise.contents_lines %}
     <dt>Удалённый шум</dt>
     <dd>
       {% if noise.header_footer_lines %}колонтитулы и номера страниц: {{ noise.header_footer_lines }} строк{% endif %}
       {% if noise.spps_lines %}· служебные строки справочной системы: {{ noise.spps_lines }}{% endif %}
       {% if noise.editorial_notes %}· пометки редакции: {{ noise.editorial_notes }}{% endif %}
+      {% if noise.contents_lines %}· строки оглавления: {{ noise.contents_lines }}{% endif %}
     </dd>
     {% endif %}
     {% if diag.columns_pages %}<dt>Колонки</dt><dd>многоколоночная вёрстка на стр. {{ diag.columns_pages | join(", ") }}</dd>{% endif %}

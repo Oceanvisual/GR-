@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from structure_helpers import FIXTURES, extract
 
-from gr.domain.document import Block, Fragment, IngestionDiagnostics, RawDocument
+from gr.domain.document import Block, Fragment, IngestionDiagnostics, RawDocument, TableCell
 from gr.domain.enums import DocFormat, FragmentKind, TextLayerStatus
 from gr.extraction.render import in_force
 from gr.services.parsing import ParseLimits, parse_raw
@@ -238,3 +238,81 @@ def test_notes_with_nothing_before_them_are_the_acts() -> None:
 def test_patterns_are_configuration() -> None:
     source = Path(__file__).resolve().parents[3] / "src" / "gr" / "config" / "noise_patterns.toml"
     assert "КонсультантПлюс" in source.read_text(encoding="utf-8")  # FR-014: configurable
+
+
+@pytest.mark.parametrize("style", ["toc 1", "TOC2", "Оглавление 1", "Содержание 2"])
+def test_generated_contents_do_not_duplicate_sections_or_eat_the_body(style: str) -> None:
+    blocks = [
+        Block(text="Содержание"),
+        Block(text=""),
+        Block(text="I. Общие положения 1", style=style),
+        Block(text="II. Порядок работы 2", style=style),
+        Block(text="I. Общие положения", style="heading 1"),
+        Block(text="1.1. Первый пункт."),
+        Block(text="II. Порядок работы", style="heading 1"),
+        Block(text="2.1. Второй пункт."),
+    ]
+    raw = RawDocument(
+        format=DocFormat.DOCX,
+        blocks=blocks,
+        diagnostics=IngestionDiagnostics(text_layer=TextLayerStatus.OK),
+    )
+    result = build_structure(raw, "d")
+    assert [f.number for f in result.fragments if f.kind == FragmentKind.SECTION] == ["I", "II"]
+    assert [f.number for f in result.fragments if f.kind == FragmentKind.POINT] == ["1.1", "2.1"]
+    assert result.text.text == "\n".join(b.text for b in blocks[4:])
+    assert result.removed.contents_lines == 3
+    assert (result.removed.spps_lines, result.removed.editorial_notes) == (0, 0)
+    assert clean(blocks).dropped == [blocks[i].text for i in (0, 2, 3)]
+
+
+@pytest.mark.parametrize("heading", ["Содержание", "Оглавление", "Contents", "Table of contents"])
+def test_a_contents_heading_without_generated_entries_is_kept(heading: str) -> None:
+    blocks = [Block(text=heading), Block(text="I. Общие положения"), Block(text="1.1. Пункт.")]
+    cleaned = clean(blocks)
+    assert cleaned.blocks == blocks
+    assert cleaned.contents_lines == 0
+
+
+def test_contents_styles_in_table_cells_do_not_remove_table_data() -> None:
+    blocks = [
+        Block(text="Содержание", table=TableCell(table=0, row=0, col=0)),
+        Block(text="I. Работа 1", style="toc 1", table=TableCell(table=0, row=1, col=0)),
+    ]
+    cleaned = clean(blocks)
+    assert cleaned.blocks == blocks
+    assert cleaned.contents_lines == 0
+
+
+def test_the_professional_standard_keeps_only_its_body_sections() -> None:
+    raw = extract(FIXTURES / "corpus" / "mintrud_572n_2020_appendix.docx")
+    parsed = parse_raw(raw, "d", LIMITS)
+    approved = next(f for f in parsed.fragments if f.kind == FragmentKind.APPROVED_DOCUMENT)
+    assert approved.parent_id == "root"
+    assert [f.number for f in parsed.fragments if f.kind == FragmentKind.SECTION] == [
+        "I",
+        "II",
+        "III",
+        "IV",
+    ]
+    assert [f.number for f in parsed.fragments if f.kind == FragmentKind.POINT] == [
+        "3.1",
+        "3.1.1",
+        "3.1.2",
+        "3.1.3",
+        "3.2",
+        "3.2.1",
+        "3.2.2",
+        "3.2.3",
+        "3.3",
+        "3.3.1",
+        "3.3.2",
+        "3.4",
+        "3.4.1",
+        "3.4.2",
+        "3.4.3",
+        "4.1",
+        "4.2",
+    ]
+    assert "Содержание" not in parsed.text
+    assert parsed.diagnostics.removed_noise.contents_lines == 9

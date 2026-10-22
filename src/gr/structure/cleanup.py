@@ -2,6 +2,8 @@
 
 - Service lines of reference systems (a banner, «Документ предоставлен…», «Дата сохранения…»)
   are dropped.
+- Generated contents entries with Word TOC styles, and their immediately preceding heading,
+  are dropped before their duplicate numbers can become structural units.
 - A list of changing documents leaves the text and becomes a note of where it stands: the act
   or the approved document.
 - An editorial note — «(в ред. …)», «(п. 2.6 введён …)», «(Абзац в редакции, введенной …)», a
@@ -54,6 +56,8 @@ _UNIT_KINDS = {
 @dataclass(frozen=True)
 class NoiseConfig:
     service: tuple[re.Pattern[str], ...]
+    contents_style: re.Pattern[str]
+    contents_heading: re.Pattern[str]
     note: re.Pattern[str]
     before: re.Pattern[str]
     before_end: re.Pattern[str]  # a heading of such a note left at the end of a paragraph
@@ -73,6 +77,8 @@ def load_noise() -> NoiseConfig:
     notes, changes = raw["notes"], raw["change_list"]
     return NoiseConfig(
         service=tuple(re.compile(p, _FLAGS) for p in raw["service"]["phrases"]),
+        contents_style=re.compile(raw["contents"]["style"], _FLAGS),
+        contents_heading=re.compile(raw["contents"]["heading"], _FLAGS),
         note=re.compile(rf"^\(\s*{notes['unit']}?{notes['event']}", _FLAGS),
         before=re.compile("^(?:" + "|".join(notes["before"]) + ")", _FLAGS),
         before_end=re.compile(r"\s*(?:" + "|".join(notes["before"]) + r")\.?\s*$", _FLAGS),
@@ -96,12 +102,13 @@ class Note:
 class Cleaned:
     blocks: list[Block]
     notes: list[Note] = field(default_factory=list)
-    dropped: list[str] = field(default_factory=list)  # the service lines taken out
+    dropped: list[str] = field(default_factory=list)  # removed service and contents lines
     editorial_notes: int = 0
+    contents_lines: int = 0
 
     @property
     def spps_lines(self) -> int:
-        return len(self.dropped)
+        return len(self.dropped) - self.contents_lines
 
 
 def _depth(text: str) -> int:
@@ -113,6 +120,20 @@ def _service_only(text: str, config: NoiseConfig) -> bool:
     for pattern in config.service:
         rest = pattern.sub(" ", rest)
     return rest != text and not _PUNCTUATION_RE.sub("", rest)
+
+
+def _contents_entry(block: Block, config: NoiseConfig) -> bool:
+    return block.table is None and bool(
+        config.contents_style.fullmatch((block.style or "").strip())
+    )
+
+
+def _contents_heading(blocks: Sequence[Block], index: int, config: NoiseConfig) -> bool:
+    block = blocks[index]
+    if block.table is not None or not config.contents_heading.fullmatch(block.text.strip()):
+        return False
+    following = next((b for b in blocks[index + 1 :] if b.text.strip()), None)
+    return following is not None and _contents_entry(following, config)
 
 
 def split_trailing(text: str, config: NoiseConfig | None = None) -> tuple[str, str | None]:
@@ -144,6 +165,7 @@ def clean(blocks: Sequence[Block], config: NoiseConfig | None = None) -> Cleaned
     waiting: list[str] = []  # notes that stand before the next provision
     dropped: list[str] = []
     editorial = 0
+    contents = 0
 
     def absorb(start: int) -> tuple[int, str]:
         """A note from `start`, with the following blocks while its parenthesis is open."""
@@ -180,6 +202,11 @@ def clean(blocks: Sequence[Block], config: NoiseConfig | None = None) -> Cleaned
     while i < len(blocks):
         block = blocks[i]
         text = block.text.strip()
+        if _contents_entry(block, config) or _contents_heading(blocks, i, config):
+            dropped.append(text)
+            contents += 1
+            i += 1
+            continue
         if text and _service_only(text, config):
             dropped.append(text)
             i += 1
@@ -227,7 +254,7 @@ def clean(blocks: Sequence[Block], config: NoiseConfig | None = None) -> Cleaned
             waiting.clear()
         i += 1
     notes += [Note(found, previous()) for found in waiting]  # nothing came after them
-    return Cleaned(kept, notes, dropped, editorial)
+    return Cleaned(kept, notes, dropped, editorial, contents)
 
 
 def _number(value: str | None) -> str:

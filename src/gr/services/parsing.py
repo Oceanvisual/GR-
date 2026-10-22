@@ -125,6 +125,7 @@ def parse_raw(raw: RawDocument, doc_id: str, limits: ParseLimits) -> ParsedDocum
         update={
             "spps_lines": structure.removed.spps_lines,
             "editorial_notes": structure.removed.editorial_notes,
+            "contents_lines": structure.removed.contents_lines,
         }
     )
     diagnostics = IngestionDiagnostics.model_validate(

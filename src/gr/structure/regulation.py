@@ -352,8 +352,14 @@ class RegulationBuilder:
         if verdict == Verdict.DUPLICATE:
             self.warnings.append(f"повтор номера пункта {number}{self.scope_root.scope}")
             self.duplicates += 1
-        while self.points and not _is_prefix(parse_number(self.points[-1].number or ""), candidate):
-            self.points.pop()
+        if self.container.kind == _K.ARTICLE:
+            # Inserted parts «3.1», «3.2» are peers of part «3», not its children.
+            self.points.clear()
+        else:
+            while self.points and not _is_prefix(
+                parse_number(self.points[-1].number or ""), candidate
+            ):
+                self.points.pop()
         self.subs.clear()
         parent = self.points[-1] if self.points else self.container
         if self.container.kind == _K.ARTICLE:

@@ -75,6 +75,7 @@ class RemovedNoise(DomainModel):
     spps_lines: int = Field(default=0, ge=0)
     header_footer_lines: int = Field(default=0, ge=0)
     editorial_notes: int = Field(default=0, ge=0)
+    contents_lines: int = Field(default=0, ge=0)
 
 
 class StructureChoice(DomainModel):

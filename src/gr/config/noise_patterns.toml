@@ -14,6 +14,11 @@ phrases = [
     'Страница\s+\d+\s+из\s+\d+',
 ]
 
+[contents]
+# Word TOC styles identify generated entries; the heading alone is not enough to delete text.
+style = '^(?:toc|оглавление|содержание)\s*[1-9]\d*$'
+heading = '^(?:содержание|оглавление|contents|table\s+of\s+contents)$'
+
 [notes]
 # An editorial note in parentheses: an optional unit («п. 2.6», «часть 4», «Абзац десятый»,
 # «Наименование») and what happened to it («в ред.», «введен», «в редакции, введенной …»).

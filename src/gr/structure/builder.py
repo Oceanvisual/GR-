@@ -83,7 +83,9 @@ def build_structure(
             failed_strategies=chosen.failed,
         ),
         removed=RemovedNoise(
-            spps_lines=cleaned.spps_lines, editorial_notes=cleaned.editorial_notes
+            spps_lines=cleaned.spps_lines,
+            editorial_notes=cleaned.editorial_notes,
+            contents_lines=cleaned.contents_lines,
         ),
         profile=numbering_profile(outcome.name, fragments),
     )
