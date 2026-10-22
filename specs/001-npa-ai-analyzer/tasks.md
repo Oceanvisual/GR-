@@ -771,7 +771,7 @@ UI карты процессов.
     `hourly_cost_override` не генерируется: его задаёт пользователь. Ключи и правила —
     data-model §5.
 
-- [ ] T044 [US4] Экономика: автономный эффект — `src/gr/analysis/economics.py`
+- [X] T044 [US4] Экономика: автономный эффект — `src/gr/analysis/economics.py`
   - **Цель**: FR-053, формулы spec.md для автономного (solo) эффекта; шаг 1 порядка вычислений
     (data-model §7).
   - **Зависит**: T043
@@ -786,6 +786,7 @@ UI карты процессов.
     - property-тесты на 200 случайных наборах (seed фиксирован): независимость от порядка,
       идентичность повторов.
   - **Тесты**: `test_economics.py`, `test_economics_properties.py`.
+    Модели результата — `domain/economics.py` (как `PriorityResult` в `domain/priority.py`).
 
 - [ ] T045 [US4] API допущений и экономики — `src/gr/services/results.py`
   - **Цель**: api.md: `GET`/`PATCH /assumptions`, `GET /economics`, solo-экономика в
