@@ -293,6 +293,46 @@ class StageOutputRepository(_Repository):
             return {StageName(stage) for stage in rows}
 
 
+class StageItemStore:
+    """Per-item results of one stage of one run; an item is written once."""
+
+    def __init__(self, database: Database, run_id: str, stage: StageName) -> None:
+        self.db = database
+        self.run_id = run_id
+        self.stage = stage
+
+    async def get(self, item_key: str) -> dict[str, Any] | None:
+        async with self.db.read() as conn:
+            payload: dict[str, Any] | None = await conn.scalar(
+                select(t.stage_items.c.payload).where(
+                    t.stage_items.c.run_id == self.run_id,
+                    t.stage_items.c.stage == self.stage.value,
+                    t.stage_items.c.item_key == item_key,
+                )
+            )
+        return payload
+
+    async def put(self, item_key: str, payload: dict[str, Any]) -> None:
+        try:
+            async with self.db.write() as conn:
+                await conn.execute(
+                    t.stage_items.insert().values(
+                        run_id=self.run_id,
+                        stage=self.stage.value,
+                        item_key=item_key,
+                        payload=payload,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+        except IntegrityError as exc:
+            raise ConflictError(f"{self.stage} item {item_key} of {self.run_id} exists") from exc
+
+
+class StageItemRepository(_Repository):
+    def for_stage(self, run_id: str, stage: StageName) -> StageItemStore:
+        return StageItemStore(self.db, run_id, stage)
+
+
 class LlmCall(BaseModel):
     id: str
     run_id: str | None = None
@@ -476,6 +516,7 @@ class Repositories:
         self.texts = DocumentTextRepository(database)
         self.runs = RunRepository(database)
         self.stage_outputs = StageOutputRepository(database)
+        self.stage_items = StageItemRepository(database)
         self.llm_calls = LlmCallRepository(database)
         self.llm_cache = LlmCacheRepository(database)
         self.reviews = ReviewEventRepository(database)

@@ -546,7 +546,7 @@ UI карты процессов.
     «дубли из двух чанков», «пусто».
   - **Тесты**: `test_discovery.py`.
 
-- [ ] T030 [US2] S4 Detail — `src/gr/extraction/detailing.py`
+- [X] T030 [US2] S4 Detail — `src/gr/extraction/detailing.py`
   - **Цель**: [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций).
     Трассировка: FR-021, FR-023, NFR-004.
   - **Зависит**: T029

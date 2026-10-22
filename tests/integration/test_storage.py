@@ -368,3 +368,14 @@ async def test_file_store_atomic_and_idempotent(tmp_path: Path) -> None:
 def test_file_store_rejects_non_digest(tmp_path: Path, name: str) -> None:
     with pytest.raises(ValueError, match="sha256"):
         FileStore(tmp_path).path_for(name)
+
+
+async def test_stage_items_are_per_run_stage_and_written_once(repos: Repositories) -> None:
+    detail = repos.stage_items.for_stage("run_1", StageName.DETAIL)
+    await detail.put("proc_1", {"windows": 1})
+    assert await detail.get("proc_1") == {"windows": 1}
+    assert await detail.get("proc_2") is None
+    assert await repos.stage_items.for_stage("run_2", StageName.DETAIL).get("proc_1") is None
+    assert await repos.stage_items.for_stage("run_1", StageName.DISCOVER).get("proc_1") is None
+    with pytest.raises(ConflictError):
+        await detail.put("proc_1", {"windows": 2})

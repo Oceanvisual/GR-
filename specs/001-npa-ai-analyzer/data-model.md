@@ -436,6 +436,7 @@ queued|running → cancelled
 | `document_texts` | `doc_id` PK, `full_text`, `page_offsets` JSON | |
 | `analysis_runs` | `id` PK, `doc_id`, `status`, `created_at`, `payload` JSON | |
 | `stage_outputs` | `run_id`, `stage`, `payload` JSON, `created_at`; PK(`run_id`, `stage`) | неизменяемы после `succeeded` |
+| `stage_items` | `run_id`, `stage`, `item_key`, `payload` JSON, `created_at`; PK(`run_id`, `stage`, `item_key`) | результат одного элемента этапа (процесса в S4) для возобновления; пишется один раз |
 | `llm_calls` | `id`, `run_id`, `stage`, `model`, `attempt`, `status`, `in_tokens`, `out_tokens`, `latency_ms`, `request_hash`, `response` JSON (сырой ответ модели; хранится всегда, в логи не пишется), `created_at` | NFR-002/011, FR-030 |
 | `llm_cache` | `request_hash` PK, `response` JSON, `model`, `created_at` | NFR-012; хэш = sha256(model, prompt_version, schema_hash, messages) |
 | `review_events` | `id` PK, `run_id`, `entity_type`, `entity_id`, `created_at`, `payload` JSON | только INSERT |

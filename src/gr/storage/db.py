@@ -76,6 +76,17 @@ stage_outputs = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     PrimaryKeyConstraint("run_id", "stage"),
 )
+# Results of one item of a stage (a process in S4): kept so a resumed run redoes only the rest.
+stage_items = Table(
+    "stage_items",
+    metadata,
+    Column("run_id", String, nullable=False),
+    Column("stage", String, nullable=False),
+    Column("item_key", String, nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    PrimaryKeyConstraint("run_id", "stage", "item_key"),
+)
 llm_calls = Table(
     "llm_calls",
     metadata,
