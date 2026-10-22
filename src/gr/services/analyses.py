@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel
 
+from gr.analysis.mermaid import process_to_mermaid
 from gr.api.deps import AppState
 from gr.domain.enums import RunStatus, StageName, StageStatus
 from gr.domain.ids import new_id
@@ -50,9 +51,9 @@ class AnalysisRunSummary(BaseModel):
 
 
 class ProcessDetail(Process):
-    """A process with its flowchart (T033 fills `mermaid`)."""
+    """A process with its flowchart."""
 
-    mermaid: str | None = None
+    mermaid: str
 
 
 def price(usage: UsageTotals, settings: Settings) -> UsageTotals:
@@ -182,4 +183,6 @@ class AnalysisService:
         found = next((p for p in model.processes if p.id == process_id), None)
         if found is None:
             raise AppError("not_found", "Процесс не найден.")
-        return ProcessDetail.model_validate(found.model_dump())
+        return ProcessDetail.model_validate(
+            {**found.model_dump(), "mermaid": process_to_mermaid(found)}
+        )

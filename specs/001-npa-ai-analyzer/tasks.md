@@ -595,7 +595,7 @@ UI карты процессов.
     вызова) проходят. Число вызовов FakeLLM ожидаемое.
   - **Тесты**: `test_analysis_e2e.py`.
 
-- [ ] T033 [P] [US2] Генерация Mermaid — `src/gr/analysis/mermaid.py`
+- [X] T033 [P] [US2] Генерация Mermaid — `src/gr/analysis/mermaid.py`
   - **Цель**: детерминированная схема процесса (api.md § Mermaid).
   - **Зависит**: T008
   - **Файлы**: `analysis/mermaid.py`, `tests/unit/analysis/test_mermaid.py`

@@ -124,6 +124,7 @@ async def test_upload_analyse_and_read_the_process_map(make_env: Callable[..., A
 
         detail = await env.client.get(f"/api/v1/analyses/{run['id']}/processes/proc_1")
         assert detail.status_code == 200 and detail.json()["name"]["value"]
+        assert detail.json()["mermaid"].startswith("flowchart TD\n    op_1[")
         missing = await env.client.get(f"/api/v1/analyses/{run['id']}/processes/proc_9")
         assert missing.status_code == 404
 
