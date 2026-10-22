@@ -511,7 +511,7 @@ UI карты процессов.
     лицом, ответственным за прием»; «руководитель» не находится в цитате без него.
   - **Тесты**: `test_roles.py`.
 
-- [ ] T027 [P] [US2] LLM-схемы — `src/gr/extraction/schemas.py`
+- [X] T027 [P] [US2] LLM-схемы — `src/gr/extraction/schemas.py`
   - **Цель**: `DiscoveryOut`, `DetailOut`, `OpportunitiesOut` из llm.md.
     Трассировка: FR-046.
   - **Зависит**: T008

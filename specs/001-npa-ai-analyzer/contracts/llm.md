@@ -76,7 +76,8 @@ class LLMResult(Generic[T]):
 2. Каждый факт сопровождается `fragment_id` из данных и дословной цитатой из этого фрагмента
    (минимальный подтверждающий отрывок, не длиннее 250 символов, без перефразирования;
    разрыв отрывка — только через «…»).
-3. Если сведений в документе нет, ставится `null` или пустой список. Додумывать запрещено.
+3. Если сведений в документе нет, ставится пустая строка, `-1` для числа или пустой список.
+   Додумывать запрещено.
 4. Ответ — только JSON по схеме.
 
 Перед вставкой в блок документа строки, совпадающие с `[fragment`, `[/fragment]`, `<document`,
@@ -90,20 +91,24 @@ class LLMResult(Generic[T]):
 **Вход**: оглавление (R-10): для каждого фрагмента `id`, `label`, `heading` и первые 160 знаков.
 Разделы — с заголовками.
 
+Схемы ответов всех этапов — `extraction/schemas.py` (R-08, T074): без nullable (нет значения —
+`""`, `-1`, пустой список; необязательный объект — список из 0–1 элементов), с умолчаниями для
+необязательных полей, без словарей. Цитата обязательна только для фактов.
+
 **Схема ответа** `DiscoveryOut`:
 ```text
 processes: list[{
   key: str                       # "p1", "p2"… (локальный)
   name: str
-  trigger: str | null
-  result: str | null
-  core_fragment_ids: list[str]   # ≥1, где описаны действия процесса
-  related_fragment_ids: list[str]# сроки, перечни документов, основания отказа и пр.
-  evidence: {fragment_id: str, quote: str}   # цитата, подтверждающая наличие процесса
-  is_subprocess_of: str | null   # key родителя, если это вложенная процедура
+  trigger: str = ""
+  result: str = ""
+  core_refs: list[str]           # ≥1 алиас F<n>, где описаны действия процесса
+  related_refs: list[str] = []   # сроки, перечни документов, основания отказа и пр.
+  evidence: Fact                 # цитата, подтверждающая наличие процесса
+  parent_key: str = ""           # key родителя, если это вложенная процедура
 }]
-non_process_fragment_ids: list[str]   # общие положения, требования к помещениям и т. п.
-notes: str | null
+non_process_refs: list[str] = []   # общие положения, требования к помещениям и т. п.
+notes: str = ""
 ```
 
 **Валидация (детерминированная)**:
@@ -128,27 +133,27 @@ notes: str | null
 
 **Схема ответа** `DetailOut` (плоская, совместима со strict-режимом):
 ```text
-GroundedStr = {value: str, fragment_id: str, quote: str}
+Fact = {text: str, ref: str, quote: str}     # ref — алиас фрагмента F<n>
 
 process: {
-  name: GroundedStr, goal: GroundedStr | null, trigger: GroundedStr | null,
-  result: GroundedStr | null,
-  participants: list[GroundedStr],
-  inputs: list[{name: GroundedStr, mandatory: bool | null}],
-  information_systems: list[GroundedStr],
+  name: Fact, goal: list[Fact] (0..1), trigger: list[Fact] (0..1),
+  result: list[Fact] (0..1),
+  participants: list[Fact],
+  inputs: list[{name: Fact, mandatory: "yes" | "no" | "unknown"}],
+  information_systems: list[Fact],
   deadlines: list[DeadlineOut]
 }
 operations: list[{
   key: str,                                  # "o1"…
   name: str,                                 # краткое название (интерпретация)
-  action: GroundedStr,
-  object: str | null,
-  performer: GroundedStr | null,
-  inputs: list[GroundedStr], outputs: list[GroundedStr],
+  action: Fact,
+  object: str = "",
+  performer: list[Fact] (0..1),
+  inputs: list[str], outputs: list[str],     # без цитат: слой «Интерпретация»
   depends_on: list[str],                     # keys
-  deadline: DeadlineOut | null,
-  conditions: list[GroundedStr],
-  information_systems: list[GroundedStr],
+  deadline: list[DeadlineOut] (0..1),
+  conditions: list[Fact],
+  information_systems: list[str],
   operation_type: OperationType,
   legally_significant: bool,
   handles_personal_data: bool,
@@ -156,11 +161,11 @@ operations: list[{
 }]
 decision_points: list[{
   key: str, after_operation: str,
-  condition: GroundedStr,
-  outcomes: list[{label: str, next_operation: str | null, ends_process: bool}],
-  criteria: list[GroundedStr]
+  condition: Fact,
+  outcomes: list[{label: str, next_operation: str = "", ends_process: bool}],
+  criteria: list[Fact]
 }]
-DeadlineOut = {raw: GroundedStr, value: int | null, unit: DeadlineUnit, anchor: str | null}
+DeadlineOut = {raw: Fact, value: int = -1, unit: DeadlineUnit, anchor: str = ""}
 ```
 
 **Валидация** (`validation/process_validator.py`, детерминированная):
@@ -201,7 +206,7 @@ initiatives: list[{
   description, architecture_idea, tech_rationale,
   alternatives_considered: list[{category: SolutionCategory, why_not: str}],
   regulatory_mode: RegulatoryMode,
-  provisions_to_revise: list[{fragment_id: str, change_nature: str}],
+  provisions_to_revise: list[{ref: str, change_nature: str}],
   automation_level: AutomationLevel,
   reduction_potential: list[{operation_id: str, level: Level5, justification: str}],
   ratings: {feasibility, data_availability, integration_complexity,
@@ -209,7 +214,7 @@ initiatives: list[{
             duration: {bucket: DurationBucket, justification: str}},
   risks: list[str], limitations: list[str]
 }]
-no_change: {applies: bool, justification: str | null}   # «оптимизация не требуется»
+no_change: {applies: bool, justification: str = ""}   # «оптимизация не требуется»
 ```
 
 **Валидация** (`analysis/postprocess.py`, детерминированная):
