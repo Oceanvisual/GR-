@@ -53,7 +53,9 @@ class FactMapper:
 
     def check(self, fact: Fact) -> Checked:
         cited = self.resolve(fact.ref)
-        match = self.quotes.verify(fact.quote, cited or "")
+        # A reference that names no fragment stays the model's claim: found elsewhere, the
+        # quote is relocated from it, as from a wrong fragment.
+        match = self.quotes.verify(fact.quote, cited or fact.ref.strip() or None)
         grounding = match.grounding
         fragment_id = match.fragment_id or cited or fact.ref.strip() or UNKNOWN_FRAGMENT
         citation = Citation(

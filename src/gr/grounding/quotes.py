@@ -2,7 +2,8 @@
 
 The cited fragment is checked with its subtree. A quote not found there but found elsewhere
 with the same threshold is `relocated`, and the citation moves to the smallest fragment that
-contains the match. Only `verified` and `relocated` pass.
+contains the match. A quote that names no fragment is looked for in the whole act: found, it
+is `verified` in the smallest fragment that contains it. Only `verified` and `relocated` pass.
 
 The full text is rebuilt from the fragments' own texts (R-22 invariant), so offsets in the
 results are offsets in the stored document text.
@@ -80,25 +81,31 @@ class QuoteIndex:
 
     # --- public --------------------------------------------------------------------------
 
-    def verify(self, quote: str, fragment_id: str) -> QuoteMatch:
+    def verify(self, quote: str, fragment_id: str | None) -> QuoteMatch:
+        """`fragment_id`: the fragment the quote is said to come from; None if none is named."""
         cfg = self.config
+        fragment_id = fragment_id or None
         normalized = normalize_for_match(quote)
         parts = self._parts(normalized)
         length = sum(len(p) for p in parts)
         if not parts or length < cfg.min_chars or len(normalized) > cfg.max_chars:
             too_long = len(normalized) > cfg.max_chars
             reason = "цитата слишком длинная" if too_long else "цитата слишком короткая"
-            return self._result(fragment_id, GroundingStatus.INVALID_QUOTE, 0, None, reason=reason)
+            return self._result(
+                fragment_id or "", GroundingStatus.INVALID_QUOTE, 0, None, reason=reason
+            )
 
-        cited = self.fragments.get(fragment_id)
-        scope = self._norm_span(cited) if cited is not None else None
+        cited = self.fragments.get(fragment_id) if fragment_id else None
         in_scope: _Hit | None = None
-        if scope is not None:
-            in_scope = self._search(parts, *scope)
+        if cited is not None:
+            in_scope = self._search(parts, *self._norm_span(cited))
             if in_scope.score >= cfg.fuzzy_ok:
-                return self._result(fragment_id, GroundingStatus.VERIFIED, in_scope.score, in_scope)
+                return self._result(cited.id, GroundingStatus.VERIFIED, in_scope.score, in_scope)
 
         anywhere = self._search(parts, 0, len(self.norm.text))
+        if anywhere.score >= cfg.fuzzy_ok and fragment_id is None:
+            found = self._smallest_containing(anywhere)
+            return self._result(found.id, GroundingStatus.VERIFIED, anywhere.score, anywhere)
         if anywhere.score >= cfg.fuzzy_ok:
             found = self._smallest_containing(anywhere)
             return self._result(
@@ -109,17 +116,20 @@ class QuoteIndex:
                 original=fragment_id,
                 reason="ссылка исправлена",
             )
-        if in_scope is not None and in_scope.score >= cfg.fuzzy_partial:
+        if cited is not None and in_scope is not None and in_scope.score >= cfg.fuzzy_partial:
             return self._result(
-                fragment_id,
+                cited.id,
                 GroundingStatus.PARTIAL,
                 in_scope.score,
                 in_scope,
                 reason="близкое совпадение, но не дословное",
             )
-        reason = "фрагмент не найден" if cited is None else "цитата не найдена в тексте"
+        unknown = fragment_id is not None and cited is None
+        reason = "фрагмент не найден" if unknown else "цитата не найдена в тексте"
         score = in_scope.score if in_scope is not None else anywhere.score
-        return self._result(fragment_id, GroundingStatus.UNVERIFIED, score, None, reason=reason)
+        return self._result(
+            fragment_id or "", GroundingStatus.UNVERIFIED, score, None, reason=reason
+        )
 
     # --- search ----------------------------------------------------------------------------
 
@@ -228,6 +238,6 @@ class QuoteIndex:
         )
 
 
-def verify_quote(quote: str, fragment_id: str, fragments: Sequence[Fragment]) -> QuoteMatch:
+def verify_quote(quote: str, fragment_id: str | None, fragments: Sequence[Fragment]) -> QuoteMatch:
     """One-off check; for many quotes of one document build a `QuoteIndex` once."""
     return QuoteIndex(fragments).verify(quote, fragment_id)

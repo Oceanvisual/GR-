@@ -9,6 +9,8 @@ import pytest
 
 from gr.domain.document import Fragment
 from gr.domain.enums import GroundingStatus
+from gr.extraction.mapping import FactMapper
+from gr.extraction.schemas import Fact
 from gr.grounding.normalize import normalize_for_match
 from gr.grounding.quotes import QuoteIndex, load_config, verify_quote
 from gr.ingestion.docx import DocxExtractor
@@ -106,6 +108,32 @@ def test_unknown_fragment_id_is_relocated_or_unverified() -> None:
     missing = index.verify("документы хранятся в архиве пятьдесят лет", "body/99")
     assert missing.grounding.status == GroundingStatus.UNVERIFIED
     assert missing.grounding.reason == "фрагмент не найден"
+
+
+def test_a_quote_naming_no_fragment_is_looked_for_in_the_whole_act() -> None:
+    index, by_label, _ = small()
+    for named in (None, ""):
+        found = index.verify("принимается в течение десяти рабочих дней", named)
+        assert found.grounding.status == GroundingStatus.VERIFIED  # nothing to correct
+        assert found.fragment_id == by_label["п. 2.2"].id
+        assert found.grounding.original_fragment_id is None
+    missing = index.verify("документы хранятся в архиве пятьдесят лет", None)
+    assert missing.grounding.status == GroundingStatus.UNVERIFIED
+    assert missing.grounding.reason == "цитата не найдена в тексте"
+
+
+def test_an_unresolved_reference_of_the_model_is_relocated_not_a_crash() -> None:
+    _, by_label, _ = small()
+    fragments = list(by_label.values())
+    mapper = FactMapper(fragments)
+    checked = mapper.check(
+        Fact(text="решение", ref="F999", quote="принимается в течение десяти рабочих дней")
+    )
+    assert checked.passed and checked.relocated
+    assert checked.citation.fragment_id == by_label["п. 2.2"].id
+    assert checked.citation.grounding.original_fragment_id == "F999"
+    nowhere = mapper.check(Fact(text="решение", ref="", quote="хранятся в архиве пятьдесят лет"))
+    assert not nowhere.passed and nowhere.citation.fragment_id == "unknown"
 
 
 def test_close_paraphrase_is_partial_and_does_not_pass() -> None:
