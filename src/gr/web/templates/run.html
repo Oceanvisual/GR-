@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Анализ — {{ document.metadata.title.value or document.filename }}{% endblock %}
+{% block content %}
+<p class="muted small"><a href="/documents/{{ document.id }}#runs">← {{ document.metadata.title.value or document.filename }}</a></p>
+<h1>Анализ документа</h1>
+<p class="muted small">
+  Запуск <code>{{ run.id }}</code> · {{ run.created_at.strftime("%d.%m.%Y %H:%M") }} · {{ run.created_by }}
+  {% if run.config_snapshot.models.extraction %} · модель {{ run.config_snapshot.models.extraction }}{% endif %}
+</p>
+<section class="card">
+  {% include "partials/run_status.html" %}
+</section>
+{% endblock %}

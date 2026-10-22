@@ -21,3 +21,29 @@
 {% if fragment.repealed %}<span class="badge badge-repealed">утратил силу</span>{% endif %}
 {% if fragment.notes %}<span class="badge badge-note" title="{{ fragment.notes | join('; ') }}">ред.</span>{% endif %}
 {%- endmacro %}
+
+{# A citation: the fragment label as a link to the highlighted quote in the document. #}
+{% macro citation(doc_id, c, fragment_labels) -%}
+{%- set g = c.grounding -%}
+{%- set span = "&start=" ~ g.matched_start ~ "&end=" ~ g.matched_end if g.matched_start is not none else "" -%}
+<span class="citation">
+  <a href="/documents/{{ doc_id }}?fragment={{ c.fragment_id | path_quote }}{{ span }}#fragment" target="_blank" rel="noopener">{{ fragment_labels.get(c.fragment_id, c.fragment_id) }}</a>
+  <q>{{ c.quote | truncate(160, true, "…") }}</q>
+  {%- if g.status == "relocated" %} <span class="badge badge-note" title="Модель сослалась на другой фрагмент">ссылка исправлена</span>{% endif %}
+</span>
+{%- endmacro %}
+
+{# A grounded value with its knowledge layer and citations. #}
+{% macro grounded(doc_id, value, fragment_labels, show_layer=true) -%}
+{%- if value -%}
+{{ value.value }}
+{%- if show_layer %} <span class="badge badge-layer-{{ value.layer }}">{{ labels.layer[value.layer] }}</span>{% endif %}
+{%- for c in value.citations %}<div>{{ citation(doc_id, c, fragment_labels) }}</div>{% endfor %}
+{%- else -%}
+<span class="muted">не указано в НПА</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro confidence_badge(value) -%}
+<span class="badge badge-confidence-{{ value }}" title="Уверенность по результатам проверки цитат">{{ labels.confidence[value] }}</span>
+{%- endmacro %}

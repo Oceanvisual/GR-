@@ -24,6 +24,7 @@ from gr.settings import Settings, get_settings
 from gr.storage.db import Database
 from gr.storage.files import FileStore
 from gr.storage.repositories import Repositories
+from gr.web import analyses as web_analyses
 from gr.web import routes as web
 
 log = get_logger(__name__)
@@ -103,5 +104,6 @@ def create_app(
     app.include_router(documents.router)
     app.include_router(analyses.router)
     app.include_router(web.router)
+    app.include_router(web_analyses.router)
     app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")
     return app

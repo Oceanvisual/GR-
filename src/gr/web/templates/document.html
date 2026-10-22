@@ -144,12 +144,23 @@
 
 <section class="card" id="runs">
   <h2>Версии анализа</h2>
+  {% if diag.analyzable %}
+  <form method="post" action="/documents/{{ document.id }}/analyses" class="actions">
+    <button type="submit">Запустить анализ</button>
+    <span class="muted small">Текст документа будет отправлен в LLM по политике «{{ {"disabled": "не настроена", "local_only": "только локальная", "external_allowed": "внешняя разрешена"}[llm_policy] }}».</span>
+  </form>
+  {% endif %}
   {% if runs %}
   <table class="table">
-    <thead><tr><th>Запуск</th><th>Статус</th><th>Создан</th></tr></thead>
+    <thead><tr><th>Запуск</th><th>Статус</th><th>Создан</th><th></th></tr></thead>
     <tbody>
     {% for run in runs %}
-      <tr><td><code>{{ run.id }}</code></td><td>{{ labels.run[run.status] }}</td><td>{{ run.created_at.strftime("%d.%m.%Y %H:%M") }}</td></tr>
+      <tr>
+        <td><a href="/analyses/{{ run.id }}"><code>{{ run.id }}</code></a></td>
+        <td>{{ labels.run[run.status] }}{% if not run.completeness.complete %} <span class="badge badge-note">неполный</span>{% endif %}</td>
+        <td>{{ run.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+        <td>{% if run.status == "succeeded" %}<a href="/analyses/{{ run.id }}/processes">карта процессов</a>{% endif %}</td>
+      </tr>
     {% endfor %}
     </tbody>
   </table>

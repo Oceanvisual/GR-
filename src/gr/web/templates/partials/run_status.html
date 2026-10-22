@@ -1,0 +1,45 @@
+{# Status of a run; polls itself every 2 s while the run is queued or running. #}
+<div id="run-status"
+     {% if run.is_active %}hx-get="/analyses/{{ run.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <p>
+    Статус: <strong>{{ labels.run[run.status] }}</strong>
+    {% if run.is_active %}<span class="muted small">· обновляется автоматически</span>{% endif %}
+  </p>
+  {% if run.error %}
+  <div class="alert alert-error" role="alert">{{ run.error.message }}</div>
+  {% endif %}
+  {% if not run.completeness.complete %}
+  <div class="alert alert-warn" role="status">
+    <strong>Анализ неполный:</strong> не обработано процессов — {{ run.completeness.failed_items | length }}.
+    <ul class="small">{% for item in run.completeness.failed_items %}<li>{{ labels.stage[item.stage] }}: {{ item.process_key }} ({{ item.error_code }})</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <table class="table stages">
+    <thead><tr><th>Этап</th><th>Статус</th><th>Прогресс</th><th>Попыток</th><th>Ошибка</th></tr></thead>
+    <tbody>
+    {% for stage in run.stages %}
+      <tr class="stage-{{ stage.status }}">
+        <td>{{ labels.stage[stage.name] }}</td>
+        <td><span class="badge badge-stage-{{ stage.status }}">{{ labels.stage_status[stage.status] }}</span></td>
+        <td>{% if stage.progress %}{{ stage.progress.done }} из {{ stage.progress.total }}{% endif %}</td>
+        <td>{{ stage.attempts or "" }}</td>
+        <td>{% if stage.error %}{{ stage.error.message }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small">
+    Вызовов LLM: {{ run.usage.calls }} · токенов: {{ run.usage.in_tokens }} на входе, {{ run.usage.out_tokens }} на выходе
+    {%- if run.usage.estimated %} (оценка){% endif %}
+    {%- if run.usage.cost is not none %} · стоимость ≈ ${{ run.usage.cost }}{% endif %}
+  </p>
+  <div class="actions">
+    {% if map_ready %}<a class="button" href="/analyses/{{ run.id }}/processes">Карта процессов →</a>{% endif %}
+    {% if run.status in ("failed", "interrupted") %}
+    <form method="post" action="/analyses/{{ run.id }}/resume"><button type="submit">Продолжить</button></form>
+    {% endif %}
+    {% if run.is_active %}
+    <form method="post" action="/analyses/{{ run.id }}/cancel"><button type="submit" class="secondary">Отменить</button></form>
+    {% endif %}
+  </div>
+</div>

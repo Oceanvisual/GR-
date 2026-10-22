@@ -44,7 +44,7 @@
       <td>{{ doc.format.value | upper }}</td>
       <td><span class="badge badge-layer-{{ doc.text_layer.value }}">{{ labels.text_layer[doc.text_layer] }}</span></td>
       <td>{{ doc.uploaded_at.strftime("%d.%m.%Y %H:%M") }}</td>
-      <td>{% if doc.last_run %}{{ labels.run[doc.last_run.status] }}{% else %}<span class="muted">не запускался</span>{% endif %}</td>
+      <td>{% if doc.last_run %}<a href="/analyses/{{ doc.last_run.id }}">{{ labels.run[doc.last_run.status] }}</a>{% else %}<span class="muted">не запускался</span>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
