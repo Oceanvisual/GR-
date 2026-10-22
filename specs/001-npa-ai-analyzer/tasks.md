@@ -1135,7 +1135,7 @@ UI карты процессов.
     проходит.
   - **Тесты**: `tests/integration/test_container_smoke.sh` (ручной запуск).
 
-- [ ] T057 [US8] Устойчивость к перезапуску — `tests/integration/test_restart_resume.py`
+- [X] T057 [US8] Устойчивость к перезапуску — `tests/integration/test_restart_resume.py`
   - **Цель**: NFR-013, Q13.
   - **Зависит**: T032, T014
   - **Файлы**: `tests/integration/test_restart_resume.py`
@@ -1144,6 +1144,11 @@ UI карты процессов.
   - **Готово, когда**: тест зелёный; ручная проверка `docker compose restart app` описана в
     runbook.
   - **Тесты**: `test_restart_resume.py`.
+  - **Сделано**: два пути остановки посреди S4 — штатная (SIGTERM: shutdown, запуск
+    `interrupted`) и крах (kill -9: запуск остаётся `running`, следующий старт помечает
+    `interrupted`); новый `create_app` на той же БД, «Продолжить» — S3 не повторяется, в S4
+    запрошен только незавершённый процесс. Runbook ещё нет (Docker — T056), ручная проверка
+    `docker compose restart app` перенесена в T058.
 
 - [ ] T058 [P] [US8] README и инструкция развёртывания — `README.md`, `docs/deploy.md`
   - **Цель**: Phase 6 постановки.
@@ -1155,6 +1160,8 @@ UI карты процессов.
     (`gr hash-password`), требования к серверу, TLS через реверс-прокси, обновление, бэкап тома,
     healthcheck, ограничения MVP.
     Пример конфигурации реверс-прокси: `client_max_body_size 25m`, `proxy_read_timeout 120s`, заголовки `X-Forwarded-*`, `APP_PUBLIC_URL`.
+    Ручная проверка Q13 (из T057): `docker compose restart app` во время анализа → запуск
+    «прерван» → «Продолжить» → завершён без повтора готовых этапов.
   - **Готово, когда**: человек, не участвовавший в разработке, разворачивает сервис по
     инструкции на чистой VM (SC-009, [manual]).
   - **Тесты**: —
