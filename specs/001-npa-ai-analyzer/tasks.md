@@ -754,7 +754,7 @@ UI карты процессов.
 
 **Independent Test**: quickstart Q6, SC-005, SC-006.
 
-- [ ] T043 [P] [US4] Профиль и генерация допущений — `src/gr/analysis/defaults.py`
+- [X] T043 [P] [US4] Профиль и генерация допущений — `src/gr/analysis/defaults.py`
   - **Цель**: FR-050…FR-052 (data-model §5).
   - **Зависит**: T008
   - **Файлы**: `config/assumption_profile.toml`, `analysis/defaults.py`,
@@ -766,6 +766,10 @@ UI карты процессов.
   - **Готово, когда**: для каждой операции, процесса и инициативы есть все ключи из
     data-model; источник `default_profile`; повторная генерация сохраняет `user`-значения.
   - **Тесты**: `test_defaults.py`.
+    Сигнатура: `build_assumptions(model, initiatives, profile=None, existing=None, *, run_id,
+    user, now)`; без изменений возвращает тот же набор без новой версии. Необязательный
+    `hourly_cost_override` не генерируется: его задаёт пользователь. Ключи и правила —
+    data-model §5.
 
 - [ ] T044 [US4] Экономика: автономный эффект — `src/gr/analysis/economics.py`
   - **Цель**: FR-053, формулы spec.md для автономного (solo) эффекта; шаг 1 порядка вычислений

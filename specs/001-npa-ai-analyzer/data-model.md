@@ -271,6 +271,12 @@ element_id, message}`. Коды:
 | initiative | `fixed_opex_per_year` | ₽/год |
 | initiative | `adoption_y1`, `adoption_y2`, `adoption_y3` | доля |
 
+Формат ключа: `hourly_cost` (global), `proc.<process_id>.<параметр>`,
+`op.<operation_id>.<параметр>`, `ini.<initiative_id>.<параметр>`,
+`ini.<initiative_id>.<operation_id>.<параметр>`; `target_id` пары инициатива–операция —
+`<initiative_id>/<operation_id>`. Параметр — последний сегмент ключа (в идентификаторе
+операции есть точка). Конструкторы ключей — в `domain/assumptions.py`.
+
 ### `AssumptionSet`
 `run_id`, `version: int` (монотонно), `items: list[Assumption]`, `created_by`, `created_at`.
 Каждое сохранение пользователя создаёт новую версию. Текущая — максимальная.
@@ -291,10 +297,20 @@ element_id, message}`. Коды:
 | `time_hours` по `OperationType` | intake 0,25; registration 0,1; completeness_check 0,5; data_verification 1,0; interagency_request 0,5; document_preparation 2,0; approval 0,5; decision 0,5; signing 0,1; notification 0,25; issuance 0,25; record_keeping 0,1; control 1,0; other 0,5 | ×0,8 / ×1,2 |
 | `reduction_share` по `Level5` | very_low 0,05; low 0,15; medium 0,35; high 0,6; very_high 0,8 | ×0,6 / ×1,2 (≤ 1) |
 | `review_hours` = доля × `time_hours` по категории | classic 0; ai_nlp 0,15; hybrid 0,2; llm_rag 0,25; ai_agent 0,3 | ×1,5 / ×0,7 |
-| `capex` по категории × множитель сложности интеграции | classic 1,5 млн; ai_nlp 3 млн; hybrid 4 млн; llm_rag 4 млн; ai_agent 6 млн; множитель very_low 0,5 … very_high 2,2 | ×1,4 / ×0,8 |
+| `capex` по категории × множитель сложности интеграции | classic 1,5 млн; ai_nlp 3 млн; hybrid 4 млн; llm_rag 4 млн; ai_agent 6 млн; множитель very_low 0,5; low 0,8; medium 1,0; high 1,5; very_high 2,2 | ×1,4 / ×0,8 |
 | `fixed_opex_per_year` | 20 % от `capex` | ×1,3 / ×0,8 |
 | `variable_cost_per_exec` по категории | classic 0; ai_nlp 0,5 ₽; hybrid 2 ₽; llm_rag 5 ₽; ai_agent 15 ₽ | ×1,5 / ×0,7 |
 | `adoption_y1/y2/y3` | 0,5 / 0,9 / 1,0 | ×0,6 / ×1,2 (≤ 1) |
+
+Генерация (`analysis/defaults.py`, T043) заполняет только отсутствующие ключи: значения
+пользователя, из документа и ранее созданные по профилю не меняются. Производное значение
+нового ключа (`review_hours` от `time_hours`, `fixed_opex_per_year` от `capex`) считается от
+текущего значения родителя, в том числе введённого пользователем. Значения по профилю для
+исчезнувших элементов отбрасываются, значения пользователя сохраняются. Если новых ключей
+нет, версия не создаётся. Операция «после точки решения» — последователь операции, за
+которой стоит точка, или цель её исхода (с последователями), позже точки в порядке
+выполнения; зависимость от шага возврата (`is_loop_back`) ветку не продолжает. Инициатива
+`no_change` не несёт затрат и сокращения (нули).
 
 ## 6. Приоритизация (`domain/priority.py`)
 

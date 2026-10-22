@@ -36,6 +36,40 @@ SHARE_PARAMETERS = frozenset(
 )
 
 
+def _checked(parameter: str, scope: AssumptionScope) -> str:
+    if PARAMETER_SCOPES.get(parameter) != scope:
+        raise ValueError(f"{parameter!r} is not an assumption of scope {scope}")
+    return parameter
+
+
+# Keys: `hourly_cost`, `proc.<process>.<p>`, `op.<operation>.<p>`, `ini.<initiative>.<p>`,
+# `ini.<initiative>.<operation>.<p>`. Operation ids contain a dot («proc_1.op_2»); the
+# parameter is always the last segment.
+def global_key(parameter: str) -> str:
+    return _checked(parameter, "global")
+
+
+def process_key(process_id: str, parameter: str) -> str:
+    return f"proc.{process_id}.{_checked(parameter, 'process')}"
+
+
+def operation_key(operation_id: str, parameter: str) -> str:
+    return f"op.{operation_id}.{_checked(parameter, 'operation')}"
+
+
+def initiative_key(initiative_id: str, parameter: str) -> str:
+    return f"ini.{initiative_id}.{_checked(parameter, 'initiative')}"
+
+
+def initiative_operation_key(initiative_id: str, operation_id: str, parameter: str) -> str:
+    return f"ini.{initiative_id}.{operation_id}.{_checked(parameter, 'initiative_operation')}"
+
+
+def initiative_operation_target(initiative_id: str, operation_id: str) -> str:
+    """`target_id` of an initiative_operation assumption."""
+    return f"{initiative_id}/{operation_id}"
+
+
 class Triple(DomainModel):
     conservative: Decimal = Field(ge=0)
     base: Decimal = Field(ge=0)
