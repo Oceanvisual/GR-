@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from gr.logging import get_logger
@@ -32,6 +33,26 @@ ERRORS: dict[str, tuple[int, str]] = {
     "llm_not_configured": (503, "LLM не настроена: задайте LLM_* в конфигурации."),
     "external_llm_not_allowed": (503, "Политика данных запрещает внешний LLM-сервис."),
     "internal_error": (500, "Внутренняя ошибка сервиса."),
+}
+
+
+class ErrorBody(BaseModel):
+    code: str
+    message: str
+    details: dict[str, Any] = {}
+
+
+class ErrorResponse(BaseModel):
+    """The body of every error answer (api.md § Формат ошибки)."""
+
+    error: ErrorBody
+
+
+# OpenAPI of the API routers: errors in the common format. Declared as ranges, so FastAPI does
+# not add its own 422: an invalid request is a 400 validation_error here.
+ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    "4XX": {"model": ErrorResponse, "description": "Ошибка запроса (таблица api.md)"},
+    "5XX": {"model": ErrorResponse, "description": "LLM недоступна по политике или сбой"},
 }
 
 

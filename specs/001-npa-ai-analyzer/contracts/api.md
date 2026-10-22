@@ -16,6 +16,11 @@ REST JSON, префикс `/api/v1`. Все маршруты, кроме `/healt
   `GET` отдаёт `ETag: "<version>"`, изменяющий запрос обязан прислать `If-Match` с этой
   версией (принимаются `"4"`, `4` и `W/"4"`; без заголовка — `400 validation_error`). При
   несовпадении — `409 version_conflict` с `details.current_version`.
+- OpenAPI описывает ошибки диапазонами `4XX` и `5XX` со схемой `ErrorResponse` (формат ниже):
+  невалидный запрос — `400 validation_error`, а не `422` FastAPI. Contract-тест
+  (`tests/contract/test_openapi_contract.py`, T055) сверяет маршруты, методы и первый
+  названный здесь код успеха с OpenAPI и проверяет `401` без входа на каждом маршруте
+  `/api/v1`; маршрут, который появится в будущей задаче, перечислен в нём явно.
 
 ### Формат ошибки
 ```json
@@ -234,6 +239,11 @@ initiatives: InitiativeTable}` с `ETag` новой версии: рейтинг
 | GET | `/api/v1/analyses/{run_id}/export/initiatives.csv?scenario=` | CSV UTF-8 с BOM, разделитель `;` |
 | GET | `/api/v1/analyses/{run_id}/export/operations.csv` | CSV |
 | GET | `/api/v1/schema/analysis-export.json` | JSON Schema `AnalysisExport` (из Pydantic) |
+
+Файлы приходят вложением (T055): `analysis-<run_id>-<scenario>.json`,
+`initiatives-<run_id>-<scenario>.csv`, `operations-<run_id>.csv`; `scenario` по умолчанию
+`base`, неизвестный — `400`; неизвестный запуск — `404`; JSON и CSV инициатив — после S7,
+CSV операций — после S5. Схема — `application/schema+json`. Ни одного вызова LLM.
 
 ### `AnalysisExport` (schema_version `1.0`)
 ```text

@@ -7,15 +7,23 @@ from sqlalchemy import text
 
 import gr
 from gr.api.deps import StateDep, require_user
+from gr.errors import ERROR_RESPONSES
 from gr.llm.base import LLMPolicyError
 from gr.llm.policy import check_data_policy
 
 liveness = APIRouter()
-readiness = APIRouter(prefix="/api/v1", dependencies=[Depends(require_user)])
+readiness = APIRouter(
+    prefix="/api/v1", dependencies=[Depends(require_user)], responses=ERROR_RESPONSES
+)
 
 
-@liveness.api_route("/healthz", methods=["GET", "HEAD"])
+@liveness.get("/healthz")
 async def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@liveness.head("/healthz", include_in_schema=False)  # Docker may probe with HEAD
+async def healthz_head() -> dict[str, str]:
     return {"status": "ok"}
 
 

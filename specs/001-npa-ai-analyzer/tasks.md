@@ -967,6 +967,7 @@ UI карты процессов.
     - ошибка → `failed` → повтор;
     - движок недоступен → `needs_ocr`;
     - запуск анализа во время OCR → `409`.
+    Маршрут `POST /documents/{id}/ocr` убрать из `PENDING` в `test_openapi_contract.py`.
   - **Тесты**: `test_ocr_flow.py`.
 
 - [ ] T075 [US1] Конвертация `.doc`, `.rtf`, `.odt` — `src/gr/ingestion/convert.py`
@@ -1098,7 +1099,7 @@ UI карты процессов.
     повторная сериализация байт в байт (`jsonschema` не подключал: новая зависимость).
     Интеграционные тесты — `tests/integration/test_exports.py`.
 
-- [ ] T055 [US7] API и кнопки экспорта — `src/gr/api/exports.py`
+- [X] T055 [US7] API и кнопки экспорта — `src/gr/api/exports.py`
   - **Цель**: эндпоинты экспорта, схема, кнопки на экране 4.
   - **Зависит**: T054
   - **Файлы**: `api/exports.py`, `templates/initiatives.html`, `tests/integration/test_exports_api.py`,
@@ -1107,6 +1108,11 @@ UI карты процессов.
     маршруты и коды OpenAPI соответствуют contracts/api.md.
   - **Готово, когда**: Q9 автоматизирован; contract-тест зелёный.
   - **Тесты**: `test_exports_api.py`, `test_openapi_contract.py`.
+  - **Сделано**: маршруты экспорта с вложениями и схема; кнопки на экране 4. Contract-тест
+    разбирает api.md (маршруты, методы, первый код успеха) и сверяет с OpenAPI; ошибки в
+    OpenAPI — `4XX`/`5XX` с `ErrorResponse` (422 FastAPI убран: сервис отвечает 400);
+    `401` без входа на каждом `/api/v1`. HEAD `/healthz` вынесен из схемы (повтор
+    operation id). `POST /documents/{id}/ocr` в тесте — `PENDING` до T070.
 
 ---
 

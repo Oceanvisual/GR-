@@ -6,9 +6,12 @@ from fastapi import APIRouter, Depends
 
 from gr.api.deps import StateDep, UserDep, require_user
 from gr.domain.review import EntityType, ReviewEvent
+from gr.errors import ERROR_RESPONSES
 from gr.services.reviews import ReviewIn, ReviewResult, ReviewService
 
-router = APIRouter(prefix="/api/v1/analyses", dependencies=[Depends(require_user)])
+router = APIRouter(
+    prefix="/api/v1/analyses", dependencies=[Depends(require_user)], responses=ERROR_RESPONSES
+)
 
 
 def get_service(state: StateDep) -> ReviewService:

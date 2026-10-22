@@ -14,7 +14,7 @@ from gr.domain.assumptions import AssumptionSet
 from gr.domain.economics import EconomicsResult
 from gr.domain.enums import LegalGate, PriorityGroup, Scenario
 from gr.domain.priority import PriorityConfig
-from gr.errors import AppError
+from gr.errors import ERROR_RESPONSES, AppError
 from gr.services.results import (
     AssumptionsPatch,
     AssumptionsUpdate,
@@ -24,7 +24,9 @@ from gr.services.results import (
     ResultsService,
 )
 
-router = APIRouter(prefix="/api/v1/analyses", dependencies=[Depends(require_user)])
+router = APIRouter(
+    prefix="/api/v1/analyses", dependencies=[Depends(require_user)], responses=ERROR_RESPONSES
+)
 
 
 def get_service(state: StateDep) -> ResultsService:

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Инициативы — AI-анализ НПА{% endblock %}
 {% block content %}
-<p><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a></p>
+<p><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a> · <a href="/analyses/{{ run.id }}/history">История решений</a></p>
 <h1>Возможности оптимизации</h1>
 {% for banner in table.banners %}<div class="alert alert-warn">{{ banner }}</div>{% endfor %}
 
@@ -19,6 +19,14 @@
 <label>Допустимость <select name="gate"><option value="">Все</option>{% for key, text in labels.gate.items() %}<option value="{{ key }}" {% if gate == key %}selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
 <button type="submit">Применить</button>
 </form>
+{% set api = "/api/v1/analyses/" ~ run.id %}
+<div class="actions export" id="export">
+<span class="muted small">Выгрузить (сценарий «{{ labels.scenario[table.scenario] }}», с решениями эксперта):</span>
+<a class="button" href="{{ api }}/export.json?scenario={{ table.scenario }}" download>Полный результат, JSON</a>
+<a class="button" href="{{ api }}/export/initiatives.csv?scenario={{ table.scenario }}" download>Таблица инициатив, CSV</a>
+<a class="button" href="{{ api }}/export/operations.csv" download>Операции, CSV</a>
+<a class="small" href="/api/v1/schema/analysis-export.json">Схема JSON</a>
+</div>
 <table class="table">
 <thead><tr><th>№</th><th>Процесс</th><th>Проблема</th><th>Решение</th><th>Экономия*</th><th>Риск</th><th>Приоритет</th><th>Допустимость</th></tr></thead>
 <tbody>{% for row in table.rows %}{% set i = row.initiative %}{% set p = row.priority %}

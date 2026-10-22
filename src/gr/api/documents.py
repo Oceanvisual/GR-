@@ -9,7 +9,7 @@ from starlette.formparsers import MultiPartException, MultiPartParser
 
 from gr.api.deps import StateDep, UserDep, require_user
 from gr.domain.document import Document
-from gr.errors import AppError
+from gr.errors import ERROR_RESPONSES, AppError
 from gr.services.documents import (
     CHUNK,
     DocumentService,
@@ -23,7 +23,9 @@ from gr.services.documents import (
 
 FORM_OVERHEAD = 64 * 1024  # multipart boundaries, headers and the small text fields
 
-router = APIRouter(prefix="/api/v1/documents", dependencies=[Depends(require_user)])
+router = APIRouter(
+    prefix="/api/v1/documents", dependencies=[Depends(require_user)], responses=ERROR_RESPONSES
+)
 
 
 def get_service(state: StateDep) -> DocumentService:

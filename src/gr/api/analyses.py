@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from gr.api.deps import StateDep, UserDep, require_user
 from gr.domain.process import ProcessModel
 from gr.domain.run import AnalysisRun
+from gr.errors import ERROR_RESPONSES
 from gr.services.analyses import (
     AnalysisRunSummary,
     AnalysisService,
@@ -14,7 +15,9 @@ from gr.services.analyses import (
     ProcessVersion,
 )
 
-router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_user)])
+router = APIRouter(
+    prefix="/api/v1", dependencies=[Depends(require_user)], responses=ERROR_RESPONSES
+)
 
 
 def get_service(state: StateDep) -> AnalysisService:
