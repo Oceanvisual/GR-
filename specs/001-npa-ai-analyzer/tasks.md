@@ -478,7 +478,7 @@ UI карты процессов.
 
 **Independent Test**: quickstart Q4, Q11, Q12, Q14; на FakeLLM — автоматически.
 
-- [ ] T024 [P] [US2] Проверка цитат — `src/gr/grounding/quotes.py`
+- [X] T024 [P] [US2] Проверка цитат — `src/gr/grounding/quotes.py`
   - **Цель**: FR-025, R-11 (статусы `verified`, `relocated`, `partial`, `unverified`,
     `invalid_quote`).
   - **Зависит**: T019, T020
