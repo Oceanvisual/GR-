@@ -13,7 +13,7 @@ ids and verifying quotes is the validator's job (S5).
 
 import asyncio
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, Protocol
 
 from pydantic import BaseModel
@@ -280,20 +280,31 @@ async def detail_processes(
     concurrency: int,
     store: ItemStore | None = None,
     chunking: ChunkingConfig | None = None,
+    progress: Callable[[int, int], Awaitable[None]] | None = None,
 ) -> DetailingResult:
     detailer = Detailer(
         fragments, metadata, llm, run_id=run_id, max_tokens=max_tokens, chunking=chunking
     )
     semaphore = asyncio.Semaphore(concurrency)
+    total = len(discovery.processes)
+    finished = 0
+
+    async def report() -> None:
+        nonlocal finished
+        finished += 1
+        if progress is not None:
+            await progress(finished, total)
 
     async def one(process: DiscoveredProcess) -> DetailedProcess | DetailFailure:
         if store is not None and (saved := await store.get(process.key)) is not None:
+            await report()
             return DetailedProcess.model_validate(saved)
         async with semaphore:
             try:
                 detailed = await detailer.process(process)
             except (LLMError, StageError) as exc:
                 log.warning("detail.process_failed", process=process.key, error_code=exc.code)
+                await report()
                 return DetailFailure(
                     process_key=process.key,
                     name=process.name,
@@ -302,6 +313,7 @@ async def detail_processes(
                 )
         if store is not None:
             await store.put(process.key, detailed.model_dump(mode="json"))
+        await report()
         return detailed
 
     outcomes = await asyncio.gather(*(one(p) for p in discovery.processes))

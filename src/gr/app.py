@@ -7,15 +7,19 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 import gr
-from gr.api import documents, health
+from gr.api import analyses, documents, health
 from gr.api.deps import AppState
 from gr.auth import BasicAuthenticator, SameOriginGuard
 from gr.errors import install_error_handlers
 from gr.ingestion.ocr_probe import probe_tesseract
+from gr.llm.base import StructuredLLM
+from gr.llm.factory import build_llm
 from gr.logging import configure_logging, get_logger
+from gr.pipeline.analysis import AnalysisSettings, analysis_stages
 from gr.pipeline.runner import JobRunner
 from gr.pipeline.stages import Stage
 from gr.pipeline.workers import CpuWorkers
+from gr.services.analyses import price
 from gr.settings import Settings, get_settings
 from gr.storage.db import Database
 from gr.storage.files import FileStore
@@ -25,7 +29,14 @@ from gr.web import routes as web
 log = get_logger(__name__)
 
 
-def create_app(settings: Settings | None = None, *, stages: Sequence[Stage] = ()) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    stages: Sequence[Stage] | None = None,
+    llm: StructuredLLM | None = None,
+) -> FastAPI:
+    """`stages` replaces the pipeline (tests of the runner); `llm` replaces the model client
+    of the default pipeline (FakeLLM in tests)."""
     settings = settings or get_settings()
     configure_logging(settings.log_level, settings.log_format)
 
@@ -36,7 +47,23 @@ def create_app(settings: Settings | None = None, *, stages: Sequence[Stage] = ()
         )
         await db.init()
         repos = Repositories(db)
-        runner = JobRunner(repos, stages, max_concurrent=settings.max_concurrent_analyses)
+        pipeline = (
+            stages
+            if stages is not None
+            else analysis_stages(
+                llm or build_llm(settings, repos),
+                AnalysisSettings(
+                    max_output_tokens=settings.llm_max_output_tokens,
+                    concurrency=settings.llm_concurrency,
+                ),
+            )
+        )
+        runner = JobRunner(
+            repos,
+            pipeline,
+            max_concurrent=settings.max_concurrent_analyses,
+            pricing=lambda usage: price(usage, settings),
+        )
         app.state.gr = AppState(
             settings=settings,
             db=db,
@@ -74,6 +101,7 @@ def create_app(settings: Settings | None = None, *, stages: Sequence[Stage] = ()
     app.include_router(health.liveness)
     app.include_router(health.readiness)
     app.include_router(documents.router)
+    app.include_router(analyses.router)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")
     return app

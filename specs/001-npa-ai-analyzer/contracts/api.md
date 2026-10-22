@@ -91,12 +91,20 @@ last_run?: {id, status}}`.
 Опрос статуса. UI опрашивает его через HTMX каждые 2 с, пока статус `queued` или `running`.
 
 ### `POST /api/v1/analyses/{run_id}/resume` → `202 AnalysisRun`
-Только из `failed` или `interrupted`. Возобновляет с первого незавершённого этапа.
+Только из `failed` или `interrupted` (иначе `400 validation_error`). Возобновляет с первого
+незавершённого этапа; в S4 повторно обрабатываются только процессы без сохранённого результата.
+Политика LLM проверяется заново (`503`).
 
 ### `POST /api/v1/analyses/{run_id}/cancel` → `200 AnalysisRun`
+Завершённый анализ отменить нельзя: `400 validation_error`.
 
 ### `GET /api/v1/documents/{doc_id}/analyses` → `list[AnalysisRunSummary]`
-Версии анализа (FR-084).
+Версии анализа (FR-084), новые сначала: `{id, status, created_at, created_by,
+stages: [{name, status}], usage, completeness}`.
+
+Этапы, которых ещё нет в сборке (S6, S7 до US3), у завершённого запуска получают статус
+`skipped`. Для активного запуска `usage` считается на лету; `usage.cost` — по `LLM_PRICE_*`,
+если обе цены заданы.
 
 ### `GET /api/v1/analyses/{run_id}/processes` → `ProcessMap`
 `{processes: list[Process], coverage: CoverageReport, unverified: list[UnverifiedItem]}`.
@@ -104,7 +112,8 @@ last_run?: {id, status}}`.
 process_id, value, citation, reason}`.
 
 ### `GET /api/v1/analyses/{run_id}/processes/{process_id}` → `Process`
-Плюс `mermaid: str` — детерминированно сгенерированная блок-схема (экранированные подписи).
+Плюс `mermaid: str` — детерминированно сгенерированная блок-схема (экранированные подписи,
+T033). Пока карта не готова (этап S5 не завершён) — `404 not_found`.
 
 ### `POST /api/v1/analyses/{run_id}/processes/{process_id}/regenerate-initiatives` → `202 AnalysisRun`
 Явная перегенерация устаревших (`stale`) инициатив процесса (FR-083). Создаёт новую версию

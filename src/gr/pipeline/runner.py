@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 
 from gr.domain.enums import RunStatus, StageName, StageStatus
-from gr.domain.run import AnalysisRun, Completeness, ErrorInfo, StageProgress
+from gr.domain.run import AnalysisRun, Completeness, ErrorInfo, StageProgress, UsageTotals
 from gr.llm.base import LLMError
 from gr.logging import bind_context, clear_context, get_logger
 from gr.pipeline.stages import Stage, StageContext, StageError
@@ -27,6 +27,7 @@ class JobRunner:
         *,
         max_concurrent: int,
         clock: Callable[[], datetime] = _utcnow,
+        pricing: Callable[[UsageTotals], UsageTotals] = lambda usage: usage,
     ) -> None:
         order = [stage.name for stage in stages]
         if order != sorted(order, key=list(StageName).index) or len(set(order)) != len(order):
@@ -34,6 +35,7 @@ class JobRunner:
         self.repos = repos
         self.stages = list(stages)
         self.clock = clock
+        self.pricing = pricing
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._cancel_requested: set[str] = set()
@@ -203,7 +205,11 @@ class JobRunner:
             )
             log.info("stage.succeeded", failed_items=len(result.failed_items))
 
-        usage = await self.repos.llm_calls.usage_for_run(run.id)
+        usage = self.pricing(await self.repos.llm_calls.usage_for_run(run.id))
+        implemented = {stage.name for stage in self.stages}
+        for state in run.stages:  # stages this build does not have yet (S6, S7 before US3)
+            if state.name not in implemented and state.status == StageStatus.PENDING:
+                run = run.with_stage(state.model_copy(update={"status": StageStatus.SKIPPED}))
         final = run.model_copy(update={"usage": usage}).transition(RunStatus.SUCCEEDED)
         await self.repos.runs.update(final)
         log.info("run.succeeded", llm_calls=usage.calls)
@@ -228,7 +234,7 @@ class JobRunner:
         state = run.stage(stage).model_copy(
             update={"status": StageStatus.FAILED, "finished_at": self.clock(), "error": error}
         )
-        usage = await self.repos.llm_calls.usage_for_run(run.id)
+        usage = self.pricing(await self.repos.llm_calls.usage_for_run(run.id))
         failed = (
             run.with_stage(state)
             .model_copy(update={"usage": usage})

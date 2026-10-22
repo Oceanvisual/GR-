@@ -582,7 +582,7 @@ UI карты процессов.
   - **Тесты**: `test_process_validator.py`, `test_graph.py`, `test_confidence.py`,
     `test_coverage.py`.
 
-- [ ] T032 [US2] Запуск анализа и API процессов — `src/gr/services/analyses.py`, `src/gr/api/analyses.py`
+- [X] T032 [US2] Запуск анализа и API процессов — `src/gr/services/analyses.py`, `src/gr/api/analyses.py`
   - **Цель**: api.md § Анализ (кроме перегенерации); подключение S3–S5 к runner.
   - **Зависит**: T014, T031, T022, T013, T076
   - **Файлы**: `pipeline/stages.py`, `services/analyses.py`, `api/analyses.py`,
