@@ -217,7 +217,10 @@ def _deadline(value: Any) -> dict[str, Any] | None:
         return None
     if not isinstance(value, Mapping) or not set(value) <= {"value", "unit", "anchor", "raw"}:
         raise ReviewError("deadline: ожидается {value, unit, anchor?, raw?}")
-    raw = value.get("raw") or f"{value.get('value')} {value.get('unit')}"
+    # Without the wording of the act: the number and the unit as given («next_working_day»).
+    raw = value.get("raw") or " ".join(
+        str(part) for part in (value.get("value"), value.get("unit")) if part is not None
+    )
     return {
         "raw": _grounded("deadline", raw),
         "value": value.get("value"),

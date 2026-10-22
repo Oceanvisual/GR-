@@ -491,7 +491,8 @@ EffectiveState` (`model`, `findings`, `initiatives`, `excluded`, `stale_initiati
   `{relation: alternative|complementary}`.
 
 Поле с основанием (`name`, `action`, `performer`, `condition`, …) принимает строку или
-`{value, citation}`; цитата проверяется при записи решения (T051). `deadline` —
+`{value, citation}`; цитата проверяется при записи решения (T051), без указания фрагмента — по
+всему акту (T053). `deadline` —
 `{value, unit, anchor?, raw?}` или `null`. `set_gate` — только у инициативы, `patch.status` —
 `LegalGate`; переопределяет только `blocked`. Отклонённый процесс исключает свои операции,
 точки решения и проблемы; инициатива теряет ссылки на отклонённые операции и проблемы, а без

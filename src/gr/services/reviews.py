@@ -5,6 +5,9 @@ log over the stored outputs (overlay.py), so one event it cannot apply would bre
 of the run. Decisions of a run are therefore written one at a time. A quote the expert gives is
 checked against the act like the model's quotes (FR-025) and stored with its result; a quote
 the act does not contain is refused, so an edited value is a fact only with a real basis.
+Without a fragment the quote is looked for in the whole act, and the smallest fragment that
+contains it is its basis. Clearing the legal significance of an operation needs a comment
+(data-model §3), as a rejection does.
 """
 
 from collections.abc import Mapping
@@ -114,6 +117,13 @@ class ReviewService:
         kind = "initiative" if body.entity_type == "relation" else body.entity_type
         if any(state.element(kind, key) is None for key in targets):
             raise AppError("not_found", "Элемент анализа не найден.")
+        operation = state.element(body.entity_type, body.entity_id)
+        cleared = (body.patch or {}).get("legally_significant") is False
+        if cleared and getattr(operation, "legally_significant", False) and comment is None:
+            raise AppError(
+                "validation_error",
+                "Снять юридическую значимость операции можно только с комментарием.",
+            )
         patch = await self._quoted(outputs, body)
         try:
             event = ReviewEvent(
@@ -157,19 +167,21 @@ class ReviewService:
             cited = value["citation"]
             if not (
                 isinstance(cited, Mapping)
-                and set(cited) == {"fragment_id", "quote"}
+                and "quote" in cited
+                and set(cited) <= {"fragment_id", "quote"}
                 and all(isinstance(cited[k], str) and cited[k].strip() for k in cited)
             ):
-                problems[field] = "цитата: ожидается {fragment_id, quote}"
+                problems[field] = "цитата: ожидается {fragment_id?, quote}"
                 continue
-            match = index.verify(cited["quote"], cited["fragment_id"])
-            if not match.grounding.status.passes:
-                problems[field] = match.grounding.reason or "цитата не найдена в тексте акта"
+            match = index.verify(cited["quote"], cited.get("fragment_id"))
+            grounding = match.grounding
+            if not grounding.status.passes:
+                problems[field] = grounding.reason or "цитата не найдена в тексте акта"
             elif match.fragment_id in repealed:
                 problems[field] = "фрагмент утратил силу"
             else:
                 citation = Citation(fragment_id=match.fragment_id, quote=cited["quote"].strip(),
-                                    grounding=match.grounding)  # fmt: skip
+                                    grounding=grounding)  # fmt: skip
                 patch[field] = {**value, "citation": citation.model_dump(mode="json")}
         if problems:
             raise AppError(

@@ -1,29 +1,55 @@
 {% extends "base.html" %}
 {% from "partials/macros.html" import grounded with context %}
+{% from "partials/review_form.html" import review_badge, review_actions, edited, hidden, text_input, choice_input, ratings_input %}
 {% block title %}{{ detail.initiative.title }} — AI-анализ НПА{% endblock %}
 {% block content %}
 {% set i = detail.initiative %}
-<p><a href="/analyses/{{ run.id }}/initiatives">← Инициативы</a> · <a href="/analyses/{{ run.id }}/processes?process={{ i.process_id }}">Процесс</a></p>
-<h1>{{ i.title }}</h1><span class="badge">Гипотеза</span>
+{% set back = "/analyses/" ~ run.id ~ "/initiatives/" ~ i.id %}
+{% set history = "/analyses/" ~ run.id ~ "/history" %}
+{% set reviews = "/analyses/" ~ run.id ~ "/reviews" %}
+<p><a href="/analyses/{{ run.id }}/initiatives">← Инициативы</a> · <a href="/analyses/{{ run.id }}/processes?process={{ i.process_id }}">Процесс</a> · <a href="{{ history }}?entity_id={{ i.id }}">История решений</a></p>
+<h1>{{ i.title }}{{ edited(i, "title") }}</h1><span class="badge">Гипотеза</span> {{ review_badge(i.review) }}
 <div class="alert alert-warn">{{ disclaimer }}</div>
 {% if not run.completeness.complete %}<div class="alert alert-warn">Анализ неполный.</div>{% endif %}
-{% if i.stale %}<div class="alert alert-warn">Требует пересмотра: эксперт изменил процесс, операцию или проблему, на которых построена инициатива.</div>{% endif %}
+{% if i.stale %}<div class="alert alert-warn">Требует пересмотра: эксперт изменил процесс, операцию или проблему, на которых построена инициатива. <a href="/analyses/{{ run.id }}/processes?process={{ i.process_id }}#initiatives">Перегенерировать инициативы процесса</a></div>{% endif %}
+{% call review_actions(run.id, "initiative", i, back, history ~ "?entity_id=" ~ i.id) %}
+  {{ text_input("title", "Название", i.title) }}
+  {{ choice_input("solution_category", "Категория решения", labels.solution, i.solution_category) }}
+  {{ choice_input("automation_level", "Уровень автоматизации (предложение; ограничение применяется заново)", labels.automation, i.automation_level_proposed) }}
+  {{ text_input("description", "Описание", i.description, 3) }}
+  {{ text_input("architecture_idea", "Архитектурная идея", i.architecture_idea, 3) }}
+  {{ text_input("tech_rationale", "Обоснование технологии", i.tech_rationale, 3) }}
+  {{ ratings_input(i.ratings) }}
+  {{ text_input("risks", "Риски — по одному в строке", i.risks | join("\n"), 3) }}
+  {{ text_input("limitations", "Ограничения — по одному в строке", i.limitations | join("\n"), 3) }}
+{% endcall %}
 <p>{{ detail.process.name.value }} · Уверенность модели процесса: {{ labels.confidence[detail.process.confidence] }}</p>
-<h2>Проблемы</h2>{% for finding in detail.findings %}<p><strong>{{ labels.problem[finding.pattern] }}</strong>: {{ finding.description }}</p>{% endfor %}
-<h2>Решение</h2><p>{{ labels.solution[i.solution_category] }}: {{ i.description }}</p>
-<h3>Архитектурная идея</h3><p>{{ i.architecture_idea }}</p>
-<h3>Обоснование технологии</h3><p>{{ i.tech_rationale }}</p>
+<h2>Проблемы</h2>{% for finding in detail.findings %}<div class="finding{% if finding.review.status == 'rejected' %} rejected{% endif %}" id="{{ finding.id }}"><p><strong>{{ labels.problem[finding.pattern] }}</strong>{{ edited(finding, "pattern") }}: {{ finding.description }}{{ edited(finding, "description") }} {{ review_badge(finding.review) }}</p>
+{% call review_actions(run.id, "finding", finding, back ~ "#" ~ finding.id, history ~ "?entity_id=" ~ finding.id) %}
+  {{ choice_input("pattern", "Тип проблемы", labels.problem, finding.pattern) }}
+  {{ text_input("description", "Описание", finding.description, 2) }}
+{% endcall %}</div>{% endfor %}
+<h2>Решение</h2><p>{{ labels.solution[i.solution_category] }}{{ edited(i, "solution_category") }}: {{ i.description }}{{ edited(i, "description") }}</p>
+<h3>Архитектурная идея</h3><p>{{ i.architecture_idea }}{{ edited(i, "architecture_idea") }}</p>
+<h3>Обоснование технологии</h3><p>{{ i.tech_rationale }}{{ edited(i, "tech_rationale") }}</p>
 {% if i.tech_guard and i.tech_guard.requires_justification %}<div class="alert alert-warn">Требует обоснования: минимально достаточный класс — {{ labels.solution[i.tech_guard.min_category] }}.</div>{% endif %}
 <h3>Рассмотренные альтернативы</h3><ul>{% for a in i.alternatives_considered %}<li>{{ labels.solution[a.category] }}: {{ a.why_not }}</li>{% endfor %}</ul>
-<h2>Регулирование и контроль</h2><p>{{ labels.regulatory[i.regulatory_mode] }} · {{ labels.automation[i.automation_level] }}</p>
+<h2>Регулирование и контроль</h2><p>{{ labels.regulatory[i.regulatory_mode] }} · {{ labels.automation[i.automation_level] }}{{ edited(i, "automation_level") }}</p>
 {% if i.requires_legal_review %}<strong>Требуется юридическая экспертиза</strong>{% endif %}
 {% if i.autonomy_capped %}<p>Автономность ограничена: юридически значимое решение подтверждает человек.</p>{% endif %}
 {% if i.gate %}<p>{{ labels.gate[i.gate.status] }}</p><ul>{% for reason in i.gate.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+{% set expert_blocked = i.gate and "Эксперт запретил инициативу." in i.gate.reasons %}
+{% if i.review.status != "rejected" %}<details class="review"><summary>Решение о допустимости</summary>
+{% if expert_blocked %}<form method="post" action="{{ reviews }}" class="grid-form">{{ hidden("initiative", i.id, "set_gate", back) }}<input type="hidden" name="f:status" value="allowed"><label class="wide">Комментарий<textarea name="comment" rows="2" maxlength="2000"></textarea></label><div><button type="submit" class="secondary">Снять запрет эксперта</button></div></form>
+{% else %}<form method="post" action="{{ reviews }}" class="grid-form">{{ hidden("initiative", i.id, "set_gate", back) }}<input type="hidden" name="f:status" value="blocked"><label class="wide">Почему инициатива недопустима (обязательно)<textarea name="comment" rows="2" maxlength="2000" required></textarea></label><div><button type="submit" class="danger">Признать недопустимой</button></div></form>
+<p class="muted small">Автоматические ограничения (юридический риск, изменение НПА, контроль человеком) эксперт снять не может: они следуют из оценок и операций.</p>{% endif %}
+</details>{% endif %}
 <ul>{% for p in i.provisions_to_revise %}<li><a href="/documents/{{ run.doc_id }}?fragment={{ p.fragment_id | path_quote }}#fragment">{{ fragment_labels.get(p.fragment_id, p.fragment_id) }}</a>: {{ p.change_nature }}</li>{% endfor %}</ul>
-<h2>Операции и нормативные основания</h2>{% for op in detail.operations %}<section><h3>{{ op.seq + 1 }} · {{ op.name }}</h3>{{ grounded(run.doc_id, op.action, fragment_labels) }}{% if op.performer %}<p>Исполнитель: {{ grounded(run.doc_id, op.performer, fragment_labels) }}</p>{% endif %}{% if op.deadline %}<p>Срок: {{ grounded(run.doc_id, op.deadline.raw, fragment_labels) }}</p>{% endif %}</section>{% endfor %}
-<h2>Качественные оценки</h2><ul>{% for key, rating in i.ratings.model_dump().items() %}<li>{{ labels.rating[key] }}: {{ labels.duration[rating.bucket] if key == "duration" else labels.level[rating.level] }} — {{ rating.justification }}</li>{% endfor %}</ul>
-<h2>Риски и ограничения</h2><ul>{% for text in i.risks + i.limitations %}<li>{{ text }}</li>{% else %}<li>Нет данных</li>{% endfor %}</ul>
-<h2>Связи</h2><ul>{% for r in i.relations %}<li><a href="/analyses/{{ run.id }}/initiatives/{{ r.initiative_id }}">{{ r.initiative_id }}</a> — {{ "Альтернатива" if r.relation == "alternative" else "Дополняющая инициатива" }}</li>{% else %}<li>Связанных инициатив нет</li>{% endfor %}</ul>
+<h2>Операции и нормативные основания</h2>{% for op in detail.operations %}<section><h3>{{ op.seq + 1 }} · {{ op.name }}{{ edited(op, "name") }} {{ review_badge(op.review) }}</h3>{{ grounded(run.doc_id, op.action, fragment_labels) }}{{ edited(op, "action") }}{% if op.performer %}<p>Исполнитель: {{ grounded(run.doc_id, op.performer, fragment_labels) }}{{ edited(op, "performer") }}</p>{% endif %}{% if op.deadline %}<p>Срок: {{ grounded(run.doc_id, op.deadline.raw, fragment_labels) }}{{ edited(op, "deadline") }}</p>{% endif %}<p class="small"><a href="/analyses/{{ run.id }}/processes?process={{ i.process_id }}#{{ op.id }}">Проверить на карте процессов</a></p></section>{% endfor %}
+<h2>Качественные оценки{{ edited(i, "ratings") }}</h2><ul>{% for key, rating in i.ratings.model_dump().items() %}<li>{{ labels.rating[key] }}: {{ labels.duration[rating.bucket] if key == "duration" else labels.level[rating.level] }} — {{ rating.justification }}</li>{% endfor %}</ul>
+<h2>Риски и ограничения{{ edited(i, "risks") }}{{ edited(i, "limitations") }}</h2><ul>{% for text in i.risks + i.limitations %}<li>{{ text }}</li>{% else %}<li>Нет данных</li>{% endfor %}</ul>
+<h2>Связи</h2><ul>{% for r in i.relations %}<li><a href="/analyses/{{ run.id }}/initiatives/{{ r.initiative_id }}">{{ r.initiative_id }}</a> — {{ labels.relation[r.relation] }}{% if r.source == "expert" %} <span class="badge badge-edited">задано экспертом</span>{% endif %}
+<form method="post" action="{{ reviews }}" class="inline">{{ hidden("relation", ([i.id, r.initiative_id] | sort | join("|")), "edit", back) }}<select name="f:relation" aria-label="Связь с {{ r.initiative_id }}">{% for key, text in labels.relation.items() %}<option value="{{ key }}"{% if key == r.relation %} selected{% endif %}>{{ text }}</option>{% endfor %}</select> <button type="submit" class="secondary">Изменить связь</button></form></li>{% else %}<li>Связанных инициатив нет</li>{% endfor %}</ul>
 <h2>Экономический эффект <span class="badge">Допущение</span></h2>
 <p class="muted">Денежный эквивалент высвобождаемого рабочего времени (модельная оценка) при внедрении инициативы отдельно; по годам горизонта через «·».</p>
 {% if detail.economics %}
@@ -72,8 +98,9 @@
 </table>
 <p class="muted">Лёгкость внедрения {{ p.ease | number(2) }}. Веса и пороги — версия {{ detail.priority_config_version }}: <a href="/analyses/{{ run.id }}/settings#priority">изменить</a>.</p>
 {% else %}<p>{{ detail.excluded_reason or "Инициатива вне расчёта." }} Приоритет не рассчитывается.</p>{% endif %}
-<h2>История решений</h2><ul>{% for event in detail.history %}<li>{{ event.created_at }} · {{ event.user }}: {{ event.action }} — {{ event.comment or "" }}</li>{% else %}<li>Решений эксперта пока нет.</li>{% endfor %}</ul>
+<h2>История решений</h2><ul>{% for event in detail.history %}<li>{{ event.created_at.strftime("%d.%m.%Y %H:%M") }} · {{ event.user }}: {{ labels.review_action[event.action] | lower }}{% if event.comment %} — {{ event.comment }}{% endif %}</li>{% else %}<li>Решений эксперта пока нет.</li>{% endfor %}</ul>
+<p><a href="{{ history }}?entity_id={{ i.id }}">Подробно: было → стало</a></p>
 {% if detail.previous_decisions %}<h3>Решения по предыдущей версии</h3>
 <p class="muted small">Инициативы процесса перегенерированы (сейчас версия {{ detail.version }}): эти решения относятся к прежним инициативам и на текущие не действуют.</p>
-<ul>{% for d in detail.previous_decisions %}<li>Версия {{ d.version }}, «{{ d.title }}»: {{ d.event.created_at }} · {{ d.event.user }}: {{ d.event.action }}{% if d.event.comment %} — {{ d.event.comment }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+<ul>{% for d in detail.previous_decisions %}<li>Версия {{ d.version }}, «{{ d.title }}»: {{ d.event.created_at.strftime("%d.%m.%Y %H:%M") }} · {{ d.event.user }}: {{ labels.review_action[d.event.action] | lower }}{% if d.event.comment %} — {{ d.event.comment }}{% endif %}</li>{% endfor %}</ul>{% endif %}
 {% endblock %}

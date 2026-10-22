@@ -1,6 +1,7 @@
 """US3 end to end: S6/S7, API, HTML evidence, filtering and partial output banners."""
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -76,7 +77,8 @@ async def test_html_table_detail_and_filters_are_safe(make_env: Callable[..., An
         assert "проверяет комплектность документов" in card.text
         assert "Рассмотренные альтернативы" in card.text
         assert "Балл: сумма вкладов" in card.text  # the priority breakdown (FR-070)
-        assert "Срок внедрения: 3–6 месяцев" in card.text and "m3_6" not in card.text
+        visible = re.sub(r"<[^>]+>", "", card.text)  # codes may be option values, not text
+        assert "Срок внедрения: 3–6 месяцев" in card.text and "m3_6" not in visible
         assert "<li>Нет данных</li>" in card.text  # no risks given: FR-071
         assert "Связанных инициатив нет" in card.text
         assert (await env.client.get(f"/analyses/{run_id}/initiatives/unknown")).status_code == 404

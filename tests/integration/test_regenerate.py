@@ -334,3 +334,5 @@ async def test_regeneration_from_the_process_map(make_env: Callable[..., Any]) -
         assert "Решения по предыдущей версии" in card and "«Инициатива i2»" in card
         refused = await env.client.post(f"/analyses/{run_id}/processes/proc_9/regenerate")
         assert refused.status_code == 404 and "Процесс не найден" in refused.text
+        log = (await env.client.get(f"/analyses/{run_id}/history")).text
+        assert "Инициатива i2" in log and "предыдущая версия 1" in log  # the replaced one

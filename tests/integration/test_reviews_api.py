@@ -246,7 +246,7 @@ async def test_quotes_of_the_expert_are_checked_when_saved(make_env: Callable[..
         assert set(invented.json()["error"]["details"]["fields"]) == {"performer"}
         bad_shape = await review(
             env, run_id, entity_type="operation", entity_id="proc_1.op_2", action="edit",
-            patch={"performer": {"value": "x", "citation": {"quote": quote}}},
+            patch={"performer": {"value": "x", "citation": {"page": "3", "quote": quote}}},
         )  # fmt: skip
         assert bad_shape.status_code == 400
 
@@ -255,6 +255,18 @@ async def test_quotes_of_the_expert_are_checked_when_saved(make_env: Callable[..
         assert plain.status_code == 201, plain.text
         assert plain.json()["entity"]["performer"]["layer"] == "interpretation"
         assert plain.json()["event"]["previous"]["performer"] is None
+
+        # No fragment named: the act is searched, the paragraph holding the quote is the basis.
+        anywhere = await review(
+            env, run_id, entity_type="operation", entity_id="proc_1.op_2", action="edit",
+            patch={"performer": {"value": "специалист отдела делопроизводства",
+                                 "citation": {"quote": "Специалист отдела делопроизводства "
+                                                       "проверяет комплектность документов"}}},
+        )  # fmt: skip
+        assert anywhere.status_code == 201, anywhere.text
+        (basis,) = anywhere.json()["entity"]["performer"]["citations"]
+        assert basis["fragment_id"] == "body/III/3.2/3.2.2"
+        assert basis["grounding"]["status"] == "verified"
 
 
 async def test_gate_relation_reopen_and_a_rejected_process(make_env: Callable[..., Any]) -> None:
