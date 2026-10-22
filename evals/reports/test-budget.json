@@ -1,0 +1,11 @@
+{
+  "source_run": "evals/runs/20261022T085118Z.json",
+  "limit_usd": "3",
+  "model": "anthropic/claude-haiku-5.5",
+  "conservative_input_per_mtok": "1.10",
+  "conservative_output_per_mtok": "2.75",
+  "committed_upper_bound_usd": "0.4676667",
+  "reported_actual_usd": "0.0608834",
+  "requests": 35,
+  "remaining_conservative_usd": "2.5323333"
+}

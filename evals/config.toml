@@ -1,0 +1,33 @@
+# Eval of process extraction (R-17). Run: uv run python -m evals.run
+# The model is taken from the environment, as for the service (LLM_MODEL_EXTRACTION ...).
+
+[gate]
+# Quality metrics (mean and min over documents): a drop below baseline by more than this
+# (absolute) is a regression. The eval set is small and the model is not deterministic, so
+# the default leaves room for noise; per-metric overrides below.
+tolerance = 0.05
+
+[gate.tolerances]
+verified_share = 0.02
+# Usage is informational unless given here (relative: 0.5 = +50 % over baseline).
+"out_tokens.sum" = 0.5
+
+[gate.max]
+# SC-004: a deadline shown as a fact must be written in its quote, on every document.
+"deadlines_not_in_text.sum" = 0
+
+[targets]
+# SC-003 and SC-002 (the bar of T059); checked on mean and min with --strict.
+process_recall = 0.85
+process_precision = 0.80
+operation_recall = 0.75
+verified_share = 0.95
+
+[live_budget]
+# Checked via the public OpenRouter endpoints API on 2026-10-22. Conservative maximum
+# across endpoints, long-context overrides and input cache writes; USD per million tokens.
+# Recheck before using with a different model or tariff. No per-request generation fee.
+model = "anthropic/claude-haiku-5.5"
+input_per_mtok = "1.10"
+output_per_mtok = "2.75"
+pricing_source = "https://openrouter.ai/api/v1/models/anthropic/claude-haiku-5.5/endpoints"

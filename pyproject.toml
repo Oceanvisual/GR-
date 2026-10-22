@@ -61,7 +61,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "evals"]
 plugins = ["pydantic.mypy"]
 
 [tool.pydantic-mypy]
@@ -76,6 +76,8 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# evals/ is a top-level package next to src/ (run as `python -m evals.run`).
+pythonpath = ["."]
 markers = [
     "slow: performance checks (SC-001, SC-005)",
     "ocr: requires the tesseract binary with the rus language pack",

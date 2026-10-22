@@ -22,3 +22,7 @@ data/
 # holdout set: only SELECTED.md is tracked (R-21)
 evals/holdout/*
 !evals/holdout/SELECTED.md
+
+# eval: local pipeline data and per-run reports (baseline.json is tracked)
+evals/.data/
+evals/runs/

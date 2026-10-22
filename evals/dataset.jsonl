@@ -1,0 +1,2 @@
+{"id": "reg261", "path": "tests/fixtures/npa/reg261.docx", "golden": "golden/reg261.json", "tags": ["regulation", "federal", "docx"]}
+{"id": "fz59", "path": "tests/fixtures/corpus/fz_59_2006.docx", "golden": "golden/fz59.json", "tags": ["law", "federal", "docx"]}
