@@ -12,12 +12,14 @@ as the model produced them (FR-081: the original value is kept).
   decision points and findings with it; an initiative loses its links to rejected operations
   and findings, and one left with no operation (or no finding) is out too;
 - a change of a process, an operation or a finding marks the initiatives built on it stale,
-  «требует пересмотра»: they are regenerated only on request (T052);
+  «требует пересмотра»: they are regenerated only on request (T052), and initiatives made again
+  count only the decisions made after them (`since`: their model had the earlier ones);
 - what follows from the rules is recomputed: autonomy cap, tech guard, legal gate (with the
   expert's gate) and relations (with the expert's overrides).
 """
 
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -262,7 +264,9 @@ def apply_reviews(
     events: Sequence[ReviewEvent],
     *,
     catalog: ProblemCatalog | None = None,
+    since: Mapping[str, datetime] | None = None,
 ) -> EffectiveState:
+    """`since`: process id → when its initiatives were made again from the effective model."""
     ordered = sorted(
         {e.id: e for e in events if e.entity_type in EDITABLE}.values(),
         key=lambda e: (e.created_at, e.id),
@@ -281,7 +285,7 @@ def apply_reviews(
     }
     expert_gate: dict[str, LegalGate] = {}
     overrides: dict[str, InitiativeRelation] = {}
-    touched: dict[str, set[str]] = {"process": set(), "operation": set(), "finding": set()}
+    changed: dict[str, dict[str, datetime]] = {"process": {}, "operation": {}, "finding": {}}
     for event in ordered:
         check_event(event)
         if event.entity_type == "relation":  # the later decision on a pair wins
@@ -302,7 +306,7 @@ def apply_reviews(
             expert_gate[event.entity_id] = LegalGate((event.patch or {})["status"])
         store[event.entity_id] = item.model_copy(update={"review": state})
         if event.entity_type in UPSTREAM and event.action in CHANGING:
-            touched[event.entity_type].add(event.entity_id)
+            changed[event.entity_type][event.entity_id] = event.created_at  # the latest one
 
     effective_model = model.model_copy(
         update={
@@ -325,13 +329,18 @@ def apply_reviews(
     alive_findings = {
         k: f for k, f in findings.items() if not _rejected(f) and f.process_id not in dead_processes
     }
-    stale = {
-        i.id
-        for i in proposals.values()
-        if i.process_id in touched["process"]
-        or set(i.operation_ids) & touched["operation"]
-        or set(i.finding_ids) & touched["finding"]
-    }
+    made = since or {}
+
+    def changed_after(initiative: Initiative) -> bool:
+        moment = made.get(initiative.process_id)
+        times = [
+            changed["process"].get(initiative.process_id),
+            *(changed["operation"].get(o) for o in initiative.operation_ids),
+            *(changed["finding"].get(f) for f in initiative.finding_ids),
+        ]
+        return any(t is not None and (moment is None or t > moment) for t in times)
+
+    stale = {i.id for i in proposals.values() if changed_after(i)}
     excluded: dict[str, str] = {}
     effective: dict[str, Initiative] = {}
     for key, item in proposals.items():
@@ -386,5 +395,5 @@ def apply_reviews(
             }
         ),
         excluded=excluded,
-        stale_initiative_ids=sorted(stale | {k for k, i in effective.items() if i.stale}),
+        stale_initiative_ids=sorted(k for k, i in effective.items() if i.stale),  # not rejected
     )

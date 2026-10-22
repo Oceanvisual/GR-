@@ -96,7 +96,9 @@ def initial_stages() -> list[StageState]:
 class AnalysisRun(DomainModel):
     id: str = Field(pattern=r"^run_[0-9A-Z]{26}$")
     doc_id: str
+    # A regeneration (FR-083): S6 and S7 again for one process of the analysis `parent_run_id`.
     parent_run_id: str | None = None
+    process_id: str | None = None
     status: RunStatus = RunStatus.QUEUED
     created_by: str
     created_at: datetime
@@ -112,6 +114,8 @@ class AnalysisRun(DomainModel):
             raise ValueError(f"stages must be exactly {[s.value for s in STAGE_ORDER]}")
         if self.status == RunStatus.FAILED and self.error is None:
             raise ValueError("failed run must carry an error")
+        if (self.parent_run_id is None) != (self.process_id is None):
+            raise ValueError("a regeneration names both its analysis and its process")
         return self
 
     @property

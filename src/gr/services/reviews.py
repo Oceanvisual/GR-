@@ -13,14 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from gr.analysis.overlay import (
-    GROUNDED,
-    EffectiveState,
-    ReviewError,
-    apply_reviews,
-    check_event,
-    relation_key,
-)
+from gr.analysis.overlay import GROUNDED, EffectiveState, ReviewError, check_event, relation_key
 from gr.api.deps import AppState
 from gr.domain.document import Citation
 from gr.domain.enums import InitiativeRelation
@@ -98,7 +91,7 @@ class ReviewService:
             outputs = await self.analyses.outputs(run_id)
             event = await self._event(outputs, body, comment, user)
             try:
-                after = apply_reviews(outputs.model, outputs.result, [*outputs.events, event])
+                after = outputs.stored.effective([*outputs.events, event])
             except ReviewError as exc:
                 raise AppError("validation_error", f"Решение не применяется: {exc}.") from None
             await self.state.repos.reviews.add(event)

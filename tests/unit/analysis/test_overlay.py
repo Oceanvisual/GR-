@@ -206,6 +206,28 @@ def test_a_corrected_deadline_is_marked_and_dependent_initiatives_go_stale() -> 
     assert by_id(found, "ini_a").stale and not by_id(found, "ini_c").stale
 
 
+def test_initiatives_made_again_count_only_later_decisions() -> None:
+    edit = event(1, "operation", "proc_1.op_2", "edit", {"name": "Сверка"})
+    made = edit.created_at + timedelta(seconds=30)  # proc_1 regenerated after the edit
+    found = apply_reviews(model(), outputs(), [edit], since={"proc_1": made})
+    assert found.stale_initiative_ids == []
+    later = event(2, "process", "proc_1", "edit", {"goal": "быстрее"})
+    assert apply_reviews(model(), outputs(), [edit, later], since={"proc_1": made}) == state(
+        edit, later
+    )  # a decision after it: stale again, as without the regeneration
+    other = event(3, "operation", "proc_2.op_1", "edit", {"name": "Учёт"})
+    found = apply_reviews(model(), outputs(), [edit, other], since={"proc_1": made})
+    assert found.stale_initiative_ids == ["ini_c"]  # the other process is not regenerated
+
+
+def test_a_rejected_initiative_is_not_marked_for_review() -> None:
+    reject = event(1, "initiative", "ini_a", "reject", comment="не нужна")
+    edit = event(2, "operation", "proc_1.op_2", "edit", {"name": "Сверка"})
+    assert state(reject, edit).stale_initiative_ids == ["ini_b"]
+    reopen = event(3, "initiative", "ini_a", "reopen")  # back in: the change concerns it again
+    assert state(reject, edit, reopen).stale_initiative_ids == ["ini_a", "ini_b"]
+
+
 def test_a_confirmation_changes_nothing_downstream() -> None:
     found = state(event(1, "operation", "proc_1.op_2", "confirm"))
     assert operation(found, "proc_1.op_2").review.status == ReviewStatus.CONFIRMED

@@ -5,20 +5,31 @@ Each stage reads the document and the outputs of earlier stages, and returns its
 which the runner stores once. S4 and S6 also store every finished process, so a resumed run
 redoes only the rest, and report processes they could not handle as failed items of the run.
 S7 also saves the first version of the assumption set, from the profile.
+
+A regeneration run (FR-083, T052) skips S3 and S4: its S5 takes the process as the expert left
+it in the analysis, S6 works from that, and S7 makes the next version of the process's
+initiatives, with ids unlike the replaced ones and the initiatives each new one replaces.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
 from gr.analysis.defaults import build_assumptions
+from gr.analysis.versions import successors
 from gr.domain.document import Document, Fragment
 from gr.domain.enums import StageName
+from gr.domain.initiative import InitiativeSet, InitiativeVersion
 from gr.domain.process import ProcessModel
-from gr.domain.run import FailedItem
+from gr.domain.run import AnalysisRun, FailedItem
 from gr.extraction.detailing import DetailingResult, detail_processes
 from gr.extraction.discovery import DiscoveryResult, discover
-from gr.extraction.opportunities import OpportunitiesResult, extract_opportunities
+from gr.extraction.opportunities import (
+    OpportunitiesResult,
+    effective_process,
+    extract_opportunities,
+)
 from gr.llm.base import StructuredLLM
+from gr.pipeline.outputs import StoredOutputs, load_outputs
 from gr.pipeline.stages import Stage, StageContext, StageError, StageResult
 from gr.validation.postprocess import postprocess
 from gr.validation.process_validator import validate
@@ -41,6 +52,24 @@ async def _document(ctx: StageContext) -> tuple[Document, list[Fragment]]:
 def _output(model: Any) -> dict[str, Any]:
     payload: dict[str, Any] = model.model_dump(mode="json")
     return payload
+
+
+async def _analysis(ctx: StageContext) -> tuple[AnalysisRun, StoredOutputs]:
+    """For a regeneration: the analysis it remakes initiatives of, and what it stored."""
+    assert ctx.run.parent_run_id is not None
+    parent = await ctx.repos.runs.get(ctx.run.parent_run_id)
+    stored = await load_outputs(ctx.repos, parent)
+    if stored.model is None or stored.analysis is None:
+        raise StageError("stage_failed", "Инициативы анализа ещё не готовы.")
+    return parent, stored
+
+
+def _failures(name: StageName, result: InitiativeSet) -> list[FailedItem]:
+    serious = {"no_result", "missing_provision", "invalid_initiative", "empty_initiative"}
+    failures = {(i.process_id, i.code) for i in result.issues if i.code in serious}
+    return [
+        FailedItem(stage=name, process_key=pid, error_code=code) for pid, code in sorted(failures)
+    ]
 
 
 class DiscoverStage:
@@ -87,10 +116,25 @@ class ValidateStage:
     name = StageName.VALIDATE
 
     async def run(self, ctx: StageContext) -> StageResult:
+        if ctx.run.parent_run_id is not None:
+            return await self._snapshot(ctx)
         _, fragments = await _document(ctx)
         found = DiscoveryResult.model_validate(await ctx.output_of(StageName.DISCOVER))
         detailed = DetailingResult.model_validate(await ctx.output_of(StageName.DETAIL))
         return StageResult(output=_output(validate(found, detailed, fragments)))
+
+    async def _snapshot(self, ctx: StageContext) -> StageResult:
+        """A regeneration: the process as the expert left it, the model S6 works from."""
+        parent, stored = await _analysis(ctx)
+        model = stored.effective(await ctx.repos.reviews.list_for_run(parent.id)).model
+        process = next((p for p in model.processes if p.id == ctx.run.process_id), None)
+        if process is None or effective_process(process) is None:
+            raise StageError(
+                "stage_failed", "Процесс или все его операции отклонены: перегенерировать нечего."
+            )
+        unverified = [u for u in model.unverified if u.process_id == process.id]
+        snapshot = model.model_copy(update={"processes": [process], "unverified": unverified})
+        return StageResult(output=_output(snapshot))
 
 
 class OpportunitiesStage:
@@ -126,6 +170,8 @@ class PostprocessStage:
         _, fragments = await _document(ctx)
         model = ProcessModel.model_validate(await ctx.output_of(StageName.VALIDATE))
         drafts = OpportunitiesResult.model_validate(await ctx.output_of(StageName.OPPORTUNITIES))
+        if ctx.run.parent_run_id is not None:
+            return await self._version(ctx, model, drafts, fragments)
         result = postprocess(model, drafts, fragments)
         # Assumption set v1 from the profile (llm.md § S6, validation 7); a resumed run that
         # adds nothing new keeps the stored version.
@@ -135,15 +181,42 @@ class PostprocessStage:
         )
         if assumptions is not existing:
             await ctx.repos.assumptions.add(assumptions)
-        serious = {"no_result", "missing_provision", "invalid_initiative", "empty_initiative"}
-        failures = {(i.process_id, i.code) for i in result.issues if i.code in serious}
-        return StageResult(
-            output=_output(result),
-            failed_items=[
-                FailedItem(stage=self.name, process_key=pid, error_code=code)
-                for pid, code in sorted(failures)
-            ],
+        return StageResult(output=_output(result), failed_items=_failures(self.name, result))
+
+    async def _version(
+        self,
+        ctx: StageContext,
+        model: ProcessModel,
+        drafts: OpportunitiesResult,
+        fragments: list[Fragment],
+    ) -> StageResult:
+        """A regeneration: the next version of the process's initiatives. The assumptions of
+        the analysis are not touched here: a read fills the keys of the new initiatives, the
+        user's values of the replaced ones first (data-model §8)."""
+        parent, stored = await _analysis(ctx)
+        process_id = ctx.run.process_id
+        assert process_id is not None
+        version = stored.version_of(process_id) + 1
+        result = postprocess(model, drafts, fragments, version=version)
+        if not result.initiatives and not result.no_change:
+            # Nothing usable came back: the previous version stays the effective one.
+            raise StageError(
+                "llm_invalid_output",
+                "Модель не дала ни одной допустимой инициативы: действует прежняя версия.",
+            )
+        events = await ctx.repos.reviews.list_for_run(parent.id)
+        previous = [i for i in stored.effective(events).initiatives if i.process_id == process_id]
+        found = successors(previous, result.initiatives)
+        taken_at = ctx.run.stage(StageName.VALIDATE).started_at or ctx.run.created_at
+        output = InitiativeVersion(
+            process_id=process_id,
+            version=version,
+            based_on=taken_at,
+            result=result,
+            predecessors=found,
+            without_successor=sorted({i.id for i in previous} - set(found.values())),
         )
+        return StageResult(output=_output(output), failed_items=_failures(self.name, result))
 
 
 def analysis_stages(

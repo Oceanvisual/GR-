@@ -8,7 +8,9 @@ Generation only fills keys the set does not have yet (llm.md § S6, validation 7
 there — a user value, a value from the document, an earlier default — stays as it is. A
 derived default (review hours from the operation time, fixed opex from capex) is computed
 from the current parent value, the user's when they set one. Defaults of elements that are
-gone are dropped; user values are kept. Nothing new → the same set, no new version.
+gone are dropped; user values are kept. Nothing new → the same set, no new version. A
+regenerated initiative takes the user's values of the one it replaces (`predecessors`, FR-083)
+before the profile's.
 """
 
 import tomllib
@@ -195,12 +197,35 @@ def assumption_unit(parameter: str, profile: AssumptionProfile | None = None) ->
 
 
 class _Builder:
-    def __init__(self, profile: AssumptionProfile, existing: dict[str, Assumption], now: datetime):
+    def __init__(
+        self,
+        profile: AssumptionProfile,
+        existing: dict[str, Assumption],
+        now: datetime,
+        predecessors: Mapping[str, str],
+    ):
         self.profile = profile
         self.existing = existing
         self.now = now
+        self.predecessors = predecessors
         self.units = _units(profile.currency)
         self.items: dict[str, Assumption] = {}
+
+    def inherited(self, key: str, target_id: str | None) -> Assumption | None:
+        """The user's value of the same key of the initiative this one replaces, or of the one
+        before it."""
+        if not key.startswith("ini."):
+            return None
+        _, initiative, rest = key.split(".", 2)
+        previous = self.predecessors.get(initiative)
+        seen: set[str] = set()
+        while previous is not None and previous not in seen:
+            seen.add(previous)
+            found = self.existing.get(f"ini.{previous}.{rest}")
+            if found is not None and found.source == AssumptionSource.USER:
+                return found.model_copy(update={"key": key, "target_id": target_id})
+            previous = self.predecessors.get(previous)
+        return None
 
     def add(
         self,
@@ -212,17 +237,21 @@ class _Builder:
         *,
         requires_input: bool = False,
     ) -> Assumption:
-        item = self.existing.get(key) or Assumption(
-            key=key,
-            scope=scope,
-            target_id=target_id,
-            unit=self.units[key.rsplit(".", 1)[-1]],
-            values=values,
-            source=AssumptionSource.DEFAULT_PROFILE,
-            requires_input=requires_input,
-            note=note,
-            updated_by=SYSTEM_USER,
-            updated_at=self.now,
+        item = (
+            self.existing.get(key)
+            or self.inherited(key, target_id)
+            or Assumption(
+                key=key,
+                scope=scope,
+                target_id=target_id,
+                unit=self.units[key.rsplit(".", 1)[-1]],
+                values=values,
+                source=AssumptionSource.DEFAULT_PROFILE,
+                requires_input=requires_input,
+                note=note,
+                updated_by=SYSTEM_USER,
+                updated_at=self.now,
+            )
         )
         self.items[key] = item
         return item
@@ -358,12 +387,16 @@ def build_assumptions(
     run_id: str,
     user: str = SYSTEM_USER,
     now: datetime | None = None,
+    predecessors: Mapping[str, str] | None = None,
 ) -> AssumptionSet:
-    """The assumption set for the model and its initiatives; `existing` is the current one."""
+    """The assumption set for the model and its initiatives; `existing` is the current one;
+    `predecessors`: regenerated initiative → the one it replaced."""
     if existing is not None and existing.run_id != run_id:
         raise ValueError("existing assumptions belong to another run")
     now = now or datetime.now(UTC)
-    builder = _Builder(profile or load_profile(), existing.by_key() if existing else {}, now)
+    builder = _Builder(
+        profile or load_profile(), existing.by_key() if existing else {}, now, predecessors or {}
+    )
     builder.globals()
     for process in model.processes:
         builder.process(process)

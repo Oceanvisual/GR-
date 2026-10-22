@@ -80,6 +80,14 @@ class InitiativeTable(BaseModel):
     issues: list[PostprocessIssue]
 
 
+class PreviousDecision(BaseModel):
+    """A decision on an initiative or a finding of a replaced version of the process (FR-083)."""
+
+    event: ReviewEvent
+    version: int
+    title: str  # of that initiative, or the description of that finding
+
+
 class InitiativeDetail(BaseModel):
     initiative: Initiative
     process: Process
@@ -95,6 +103,8 @@ class InitiativeDetail(BaseModel):
     assumptions: list[Assumption] = []  # what the effect is computed from
     assumptions_version: int | None = None
     priority_config_version: int | None = None
+    version: int = 1  # of the initiatives of its process (regenerations make the next ones)
+    previous_decisions: list[PreviousDecision] = []  # on the replaced versions, the latest first
 
 
 class PriorityUpdate(BaseModel):
@@ -107,11 +117,15 @@ class PriorityUpdate(BaseModel):
 class Evaluation:
     """Everything computed on read for a run: economics, priorities, portfolio."""
 
-    effective: EffectiveState  # the analysis as the expert left it
+    outputs: Outputs  # with the analysis as the expert left it
     assumptions: AssumptionSet
     config: PriorityConfigVersion
     priorities: dict[str, PriorityResult]  # by initiative id; base scenario (FR-061)
     economics: dict[Scenario, EconomicsResult]  # with the portfolio of the scenario
+
+    @property
+    def effective(self) -> EffectiveState:
+        return self.outputs.effective
 
 
 class TripleIn(BaseModel):
@@ -185,15 +199,23 @@ class ResultsService:
         """What the economics of the run is computed from: the analysis as the expert left it
         and the current assumptions. Their keys follow the stored outputs, so a decision adds or
         drops none (a reopened operation finds its values again)."""
+        outputs, current = await self._inputs(run_id)
+        return outputs.effective, current
+
+    async def _inputs(self, run_id: str) -> tuple[Outputs, AssumptionSet]:
         outputs = await self.analyses.outputs(run_id, initiatives=True)
-        return outputs.effective, await self._current(run_id, outputs)
+        return outputs, await self._current(run_id, outputs)
 
     async def _current(self, run_id: str, outputs: Outputs) -> AssumptionSet:
         """The latest set, created from the profile or completed with keys of new elements."""
         repository = self.state.repos.assumptions
         latest = await repository.latest(run_id)
         built = build_assumptions(
-            outputs.model, outputs.result.initiatives, existing=latest, run_id=run_id
+            outputs.model,
+            outputs.result.initiatives,
+            existing=latest,
+            run_id=run_id,
+            predecessors=outputs.stored.predecessors(),
         )
         if built is latest:
             return built
@@ -236,7 +258,8 @@ class ResultsService:
     ) -> Evaluation:
         """Solo economics of the base scenario → priorities → portfolio of each scenario
         (data-model §7). Nothing is stored, nothing calls the LLM."""
-        effective, assumptions = await self.inputs(run_id)
+        outputs, assumptions = await self._inputs(run_id)
+        effective = outputs.effective
         config = await self.priority_config(run_id)
         model, initiatives = effective.calculation_model(), effective.calculable()
         base = _checked(compute_solo, model, initiatives, assumptions, Scenario.BASE)
@@ -257,7 +280,7 @@ class ResultsService:
                 build_portfolio, initiatives, assumptions, solo, priorities
             )
         return Evaluation(
-            effective=effective,
+            outputs=outputs,
             assumptions=assumptions,
             config=config,
             priorities={p.initiative_id: p for p in priorities},
@@ -346,12 +369,13 @@ class ResultsService:
         }  # all None for an excluded initiative
         base = own[Scenario.BASE]
         items = current.by_key()
+        events = list(reversed(found.outputs.events))  # the latest first
         return InitiativeDetail(
             initiative=item,
             process=process,
             operations=[o for o in process.operations if o.id in item.operation_ids],
             findings=[f for f in effective.findings if f.id in item.finding_ids],
-            history=list(reversed(await self.state.repos.reviews.list_for_run(run_id, item.id))),
+            history=[e for e in events if e.entity_id == item.id],
             issues=[i for i in effective.result.issues if i.process_id == item.process_id],
             economics={s: e.solo for s, e in own.items() if e},
             attributed={s: e.attributed for s, e in own.items() if e and e.attributed},
@@ -361,6 +385,8 @@ class ResultsService:
             assumptions=[items[key] for key in base.assumption_keys] if base else [],
             assumptions_version=current.version,
             priority_config_version=found.config.version,
+            version=found.outputs.stored.version_of(item.process_id),
+            previous_decisions=_previous_decisions(found.outputs, item.process_id, events),
         )
 
     async def update_priority_config(
@@ -539,3 +565,18 @@ def _new_rate(key: str) -> dict[str, Any]:
 
 def _logged(item: Assumption) -> dict[str, Any]:
     return {"values": item.values.model_dump(mode="json"), "note": item.note}
+
+
+def _previous_decisions(
+    outputs: Outputs, process_id: str, events: list[ReviewEvent]
+) -> list[PreviousDecision]:
+    """Decisions on initiatives and findings of the replaced versions of the process."""
+    retired = {k: r for k, r in outputs.stored.retired().items() if r.process_id == process_id}
+    found: list[PreviousDecision] = []
+    for event in events:
+        if event.entity_type not in ("initiative", "finding", "relation"):
+            continue
+        hit = next((retired[k] for k in event.entity_id.split("|") if k in retired), None)
+        if hit is not None:
+            found.append(PreviousDecision(event=event, version=hit.version, title=hit.title))
+    return found

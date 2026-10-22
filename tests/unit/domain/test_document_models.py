@@ -280,6 +280,15 @@ def test_failed_run_requires_error() -> None:
         _run(status=RunStatus.RUNNING).transition(RunStatus.FAILED)
 
 
+def test_a_regeneration_names_its_analysis_and_its_process() -> None:
+    run = _run(parent_run_id=new_id("run"), process_id="proc_1")
+    assert (run.parent_run_id, run.process_id) != (None, None)
+    with pytest.raises(ValidationError, match="regeneration"):
+        _run(parent_run_id=new_id("run"))
+    with pytest.raises(ValidationError, match="regeneration"):
+        _run(process_id="proc_1")
+
+
 def test_resume_starts_from_first_unfinished_stage() -> None:
     run = _run()
     for name in (StageName.DISCOVER, StageName.DETAIL):

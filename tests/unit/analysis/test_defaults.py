@@ -385,6 +385,30 @@ def test_gone_elements_lose_defaults_but_keep_user_values() -> None:
     assert found.version == saved.version + 1
 
 
+def test_a_regenerated_initiative_takes_the_users_values_of_the_one_it_replaces() -> None:
+    capex = initiative_key("ini_proc_1_1", "capex")
+    share = initiative_operation_key("ini_proc_1_1", "proc_1.op_2", "reduction_share")
+    saved = edited(edited(build(), capex, "1", "100", "1"), share, "0.1", "0.2", "0.3")
+    second, third = rag("ini_proc_1_v2_1"), rag("ini_proc_1_v3_1")
+    # v2 was never read before v3 came: the values are found further back the chain.
+    chain = {"ini_proc_1_v2_1": "ini_proc_1_1", "ini_proc_1_v3_1": "ini_proc_1_v2_1"}
+    found = build([third], existing=saved, now=LATER, predecessors=chain).by_key()
+    new_capex = found[initiative_key("ini_proc_1_v3_1", "capex")]
+    assert new_capex.values.base == 100 and new_capex.source == AssumptionSource.USER
+    assert new_capex.target_id == "ini_proc_1_v3_1" and new_capex.updated_by == "expert"
+    new_share = found[initiative_operation_key("ini_proc_1_v3_1", "proc_1.op_2", "reduction_share")]
+    assert new_share.values.base == Decimal("0.2")
+    assert new_share.target_id == "ini_proc_1_v3_1/proc_1.op_2"
+    # Defaults are not inherited: the profile gives them again; derived ones follow the user's.
+    adoption = found[initiative_key("ini_proc_1_v3_1", "adoption_y1")]
+    assert adoption.source == AssumptionSource.DEFAULT_PROFILE
+    assert found[initiative_key("ini_proc_1_v3_1", "fixed_opex_per_year")].values.base == 20
+    assert found[capex].values.base == 100  # the replaced initiative keeps its value
+    # Without the link the new initiative starts from the profile.
+    alone = build([second], existing=saved, now=LATER).by_key()
+    assert alone[initiative_key("ini_proc_1_v2_1", "capex")].source != AssumptionSource.USER
+
+
 def test_key_builders_check_the_scope() -> None:
     with pytest.raises(ValueError, match="not an assumption of scope operation"):
         operation_key("proc_1.op_1", "capex")

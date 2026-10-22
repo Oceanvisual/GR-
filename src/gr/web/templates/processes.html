@@ -43,6 +43,15 @@
       </dl>
     </section>
 
+    {% if initiatives is not none %}
+    <section class="card" id="initiatives">
+      <h2>Инициативы процесса</h2>
+      <p>Версия {{ initiatives.version }} · инициатив: {{ initiatives.count }}{% if initiatives.stale %} · <span class="badge badge-note">требуют пересмотра: {{ initiatives.stale }}</span>{% endif %} · <a href="/analyses/{{ run.id }}/initiatives?process_id={{ p.id }}">открыть</a></p>
+      {% if initiatives.stale %}<p class="small">Эксперт изменил процесс, операции или проблемы, на которых построены инициативы. Перегенерация заново получит инициативы по процессу с учётом решений; прежняя версия и решения по ней сохранятся, введённые допущения перейдут к инициативам с теми же операциями и категорией решения.</p>{% endif %}
+      <form method="post" action="/analyses/{{ run.id }}/processes/{{ p.id }}/regenerate"><button type="submit"{% if not initiatives.stale %} class="secondary"{% endif %}>Перегенерировать инициативы</button></form>
+    </section>
+    {% endif %}
+
     <section class="card" id="diagram">
       <h2>Схема</h2>
       <pre class="mermaid">{{ mermaid }}</pre>

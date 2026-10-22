@@ -1,5 +1,6 @@
 """Findings and optimization initiatives (data-model.md §4)."""
 
+from datetime import datetime
 from typing import Literal, Self
 
 from pydantic import Field, model_validator
@@ -152,3 +153,29 @@ class InitiativeSet(DomainModel):
     initiatives: list[Initiative] = []
     no_change: list[NoChangeDecision] = []
     issues: list[PostprocessIssue] = []
+
+
+class InitiativeVersion(DomainModel):
+    """The initiatives of one process made again on request (FR-083): the output of S7 of a
+    regeneration run. Version 1 is the analysis itself; the latest version is the effective one."""
+
+    process_id: str
+    version: int = Field(ge=2)
+    based_on: datetime  # the expert's decisions made before this moment are in its model
+    result: InitiativeSet  # this process only
+    # New initiative → the one it replaces, with the same operations and solution category:
+    # the user's assumptions of the old one carry over (data-model §8).
+    predecessors: dict[str, str] = {}
+    without_successor: list[str] = []  # replaced initiatives with no such counterpart
+
+    @model_validator(mode="after")
+    def _one_process(self) -> Self:
+        result = self.result
+        found = {f.process_id for f in result.findings} | {i.process_id for i in result.initiatives}
+        found |= {n.process_id for n in result.no_change} | {i.process_id for i in result.issues}
+        if found - {self.process_id}:
+            raise ValueError("a version holds the initiatives of its own process only")
+        ids = {i.id for i in result.initiatives}
+        if set(self.predecessors) - ids:
+            raise ValueError("predecessors name initiatives of this version")
+        return self

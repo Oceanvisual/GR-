@@ -230,19 +230,28 @@ class RunRepository(_Repository):
         return AnalysisRun.model_validate(payload)
 
     async def list_for_document(self, doc_id: str) -> list[AnalysisRun]:
-        return await self._select(t.analysis_runs.c.doc_id == doc_id)
+        """The analyses of a document, newest first; their regenerations are not among them."""
+        runs = await self._select(t.analysis_runs.c.doc_id == doc_id)
+        return [run for run in runs if run.parent_run_id is None]
+
+    async def regenerations(self, run: AnalysisRun) -> list[AnalysisRun]:
+        """Runs that made initiatives of the analysis again (FR-083), oldest first."""
+        runs = await self._select(t.analysis_runs.c.doc_id == run.doc_id)
+        return [found for found in reversed(runs) if found.parent_run_id == run.id]
 
     async def latest_by_document(self) -> dict[str, AnalysisRun]:
-        """The newest run of every document, in one query (the documents list)."""
+        """The newest analysis of every document, in one query (the documents list)."""
         latest: dict[str, AnalysisRun] = {}
         for run in await self._select():
-            latest.setdefault(run.doc_id, run)  # rows come newest first
+            if run.parent_run_id is None:
+                latest.setdefault(run.doc_id, run)  # rows come newest first
         return latest
 
     async def list_by_status(self, statuses: Iterable[RunStatus]) -> list[AnalysisRun]:
         return await self._select(t.analysis_runs.c.status.in_([s.value for s in statuses]))
 
     async def active_for_document(self, doc_id: str) -> AnalysisRun | None:
+        """An analysis or a regeneration in progress: one at a time per document."""
         runs = await self._select(
             t.analysis_runs.c.doc_id == doc_id,
             t.analysis_runs.c.status.in_([s.value for s in ACTIVE_RUN_STATUSES]),

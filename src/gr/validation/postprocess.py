@@ -22,8 +22,13 @@ from gr.extraction.render import FragmentAliases, in_force
 
 
 def postprocess(
-    model: ProcessModel, drafts: OpportunitiesResult, fragments: Sequence[Fragment]
+    model: ProcessModel,
+    drafts: OpportunitiesResult,
+    fragments: Sequence[Fragment],
+    *,
+    version: int = 1,
 ) -> InitiativeSet:
+    """`version` > 1: the initiatives of a regeneration, with ids unlike those they replace."""
     result = InitiativeSet()
     aliases = FragmentAliases(fragments)
     valid_fragments = in_force(fragments)
@@ -47,6 +52,7 @@ def postprocess(
             issue("invalid_process", pid, pid, "Неизвестный или повторный процесс в ответе S6.")
             continue
         seen.add(pid)
+        tag = pid if version == 1 else f"{pid}_v{version}"
         process = effective_process(by_process[pid])
         if process is None:
             continue
@@ -72,7 +78,7 @@ def postprocess(
                     "Проблема без существующих операций исключена.",
                 )
                 continue
-            key = f"fnd_{pid}_{len(finding_ids) + 1}"
+            key = f"fnd_{tag}_{len(finding_ids) + 1}"
             finding_ids[raw_finding.key] = key
             result.findings.append(
                 Finding(
@@ -169,7 +175,7 @@ def postprocess(
             )
             values.update(
                 {
-                    "id": f"ini_{pid}_{len(result.initiatives) - start + 1}",
+                    "id": f"ini_{tag}_{len(result.initiatives) - start + 1}",
                     "process_id": pid,
                     "finding_ids": linked,
                     "operation_ids": ops,

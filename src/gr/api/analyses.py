@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends
 from gr.api.deps import StateDep, UserDep, require_user
 from gr.domain.process import ProcessModel
 from gr.domain.run import AnalysisRun
-from gr.services.analyses import AnalysisRunSummary, AnalysisService, ProcessDetail
+from gr.services.analyses import (
+    AnalysisRunSummary,
+    AnalysisService,
+    ProcessDetail,
+    ProcessVersion,
+)
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_user)])
 
@@ -52,3 +57,24 @@ async def get_processes(run_id: str, service: ServiceDep) -> ProcessModel:
 @router.get("/analyses/{run_id}/processes/{process_id}", response_model=ProcessDetail)
 async def get_process(run_id: str, process_id: str, service: ServiceDep) -> ProcessDetail:
     return await service.process(run_id, process_id)
+
+
+@router.post(
+    "/analyses/{run_id}/processes/{process_id}/regenerate-initiatives",
+    status_code=202,
+    response_model=AnalysisRun,
+)
+async def regenerate_initiatives(
+    run_id: str, process_id: str, service: ServiceDep, user: UserDep
+) -> AnalysisRun:
+    return await service.regenerate(run_id, process_id, user)
+
+
+@router.get(
+    "/analyses/{run_id}/processes/{process_id}/initiative-versions",
+    response_model=list[ProcessVersion],
+)
+async def initiative_versions(
+    run_id: str, process_id: str, service: ServiceDep
+) -> list[ProcessVersion]:
+    return await service.versions(run_id, process_id)

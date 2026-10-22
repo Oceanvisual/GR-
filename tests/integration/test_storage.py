@@ -235,6 +235,26 @@ async def test_runs_crud_and_queries(repos: Repositories) -> None:
     assert await repos.runs.active_for_document("doc_3") is None
 
 
+async def test_regenerations_are_runs_of_their_analysis(repos: Repositories) -> None:
+    analysis = _run("doc_1", NOW)
+    children = [
+        AnalysisRun(id=new_id("run"), doc_id="doc_1", parent_run_id=analysis.id,
+                    process_id="proc_1", created_by="expert", created_at=NOW + timedelta(minutes=n))
+        for n in (2, 1)
+    ]  # fmt: skip
+    other = AnalysisRun(id=new_id("run"), doc_id="doc_1", parent_run_id=new_id("run"),
+                        process_id="proc_1", created_by="expert", created_at=NOW)  # fmt: skip
+    for run in (analysis, *children, other):
+        await repos.runs.add(run)
+    assert [r.id for r in await repos.runs.list_for_document("doc_1")] == [analysis.id]
+    assert (await repos.runs.latest_by_document())["doc_1"].id == analysis.id
+    assert [r.id for r in await repos.runs.regenerations(analysis)] == [
+        children[1].id,
+        children[0].id,
+    ]  # oldest first
+    assert (await repos.runs.active_for_document("doc_1")) is not None  # one at a time
+
+
 async def test_stage_outputs_written_once(repos: Repositories) -> None:
     await repos.stage_outputs.put("run_1", StageName.DISCOVER, {"processes": [1]})
     assert await repos.stage_outputs.get("run_1", StageName.DISCOVER) == {"processes": [1]}

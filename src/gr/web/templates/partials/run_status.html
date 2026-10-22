@@ -19,7 +19,7 @@
     <tbody>
     {% for stage in run.stages %}
       <tr class="stage-{{ stage.status }}">
-        <td>{{ labels.stage[stage.name] }}</td>
+        <td>{% if run.parent_run_id and stage.name == "validate" %}S5 · процесс с решениями эксперта{% else %}{{ labels.stage[stage.name] }}{% endif %}</td>
         <td><span class="badge badge-stage-{{ stage.status }}">{{ labels.stage_status[stage.status] }}</span></td>
         <td>{% if stage.progress %}{{ stage.progress.done }} из {{ stage.progress.total }}{% endif %}</td>
         <td>{{ stage.attempts or "" }}</td>
@@ -34,8 +34,12 @@
     {%- if run.usage.cost is not none %} · стоимость ≈ ${{ run.usage.cost }}{% endif %}
   </p>
   <div class="actions">
-    {% if map_ready %}<a class="button" href="/analyses/{{ run.id }}/processes">Карта процессов →</a>{% endif %}
-    {% if initiatives_ready %}<a class="button" href="/analyses/{{ run.id }}/initiatives">Инициативы →</a>{% endif %}
+    {% if run.parent_run_id %}
+    {% if initiatives_ready %}<a class="button" href="/analyses/{{ results_id }}/initiatives?process_id={{ run.process_id }}">Инициативы процесса →</a>{% endif %}
+    {% else %}
+    {% if map_ready %}<a class="button" href="/analyses/{{ results_id }}/processes">Карта процессов →</a>{% endif %}
+    {% if initiatives_ready %}<a class="button" href="/analyses/{{ results_id }}/initiatives">Инициативы →</a>{% endif %}
+    {% endif %}
     {% if run.status in ("failed", "interrupted") %}
     <form method="post" action="/analyses/{{ run.id }}/resume"><button type="submit">Продолжить</button></form>
     {% endif %}

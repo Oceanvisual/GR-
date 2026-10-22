@@ -21,6 +21,13 @@ def test_valid_draft_obeys_all_domain_invariants_and_does_not_mutate_inputs() ->
     assert before == source.model_dump_json()
 
 
+def test_a_regeneration_gives_ids_unlike_those_it_replaces() -> None:
+    result = postprocess(model(), drafts(), fragments(), version=3)
+    (item,) = result.initiatives
+    assert item.id == "ini_proc_1_v3_1" and item.finding_ids == ["fnd_proc_1_v3_1"]
+    assert [f.id for f in result.findings] == ["fnd_proc_1_v3_1"]
+
+
 def test_unknown_operations_are_not_exposed_as_valid_initiatives() -> None:
     result = postprocess(model(), drafts(answer("opp_unknown_ids")), fragments())
     assert not result.initiatives and not result.findings

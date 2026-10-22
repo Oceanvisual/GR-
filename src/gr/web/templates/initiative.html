@@ -73,4 +73,7 @@
 <p class="muted">Лёгкость внедрения {{ p.ease | number(2) }}. Веса и пороги — версия {{ detail.priority_config_version }}: <a href="/analyses/{{ run.id }}/settings#priority">изменить</a>.</p>
 {% else %}<p>{{ detail.excluded_reason or "Инициатива вне расчёта." }} Приоритет не рассчитывается.</p>{% endif %}
 <h2>История решений</h2><ul>{% for event in detail.history %}<li>{{ event.created_at }} · {{ event.user }}: {{ event.action }} — {{ event.comment or "" }}</li>{% else %}<li>Решений эксперта пока нет.</li>{% endfor %}</ul>
+{% if detail.previous_decisions %}<h3>Решения по предыдущей версии</h3>
+<p class="muted small">Инициативы процесса перегенерированы (сейчас версия {{ detail.version }}): эти решения относятся к прежним инициативам и на текущие не действуют.</p>
+<ul>{% for d in detail.previous_decisions %}<li>Версия {{ d.version }}, «{{ d.title }}»: {{ d.event.created_at }} · {{ d.event.user }}: {{ d.event.action }}{% if d.event.comment %} — {{ d.event.comment }}{% endif %}</li>{% endfor %}</ul>{% endif %}
 {% endblock %}
