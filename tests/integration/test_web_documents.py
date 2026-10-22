@@ -72,9 +72,8 @@ def nodes(client: TestClient, doc_id: str) -> dict[str, str]:
 def test_documents_page_shows_form_limits_and_list(client: TestClient) -> None:
     empty = client.get("/")
     assert empty.status_code == 200
-    assert (
-        'enctype="multipart/form-data"' in empty.text and 'accept=".docx,.pdf,.txt"' in empty.text
-    )
+    assert 'enctype="multipart/form-data"' in empty.text
+    assert 'accept=".docx,.html,.htm,.pdf,.txt"' in empty.text
     assert "До 1 МБ, до 300 страниц" in empty.text and "Документов пока нет" in empty.text
 
     upload(client, NPA / "reg261.docx")
@@ -87,7 +86,7 @@ def test_documents_page_shows_form_limits_and_list(client: TestClient) -> None:
     ("name", "data", "status", "message"),
     [
         ("empty.txt", b"", 422, "Файл пустой."),
-        ("table.xlsx", XLSX, 415, "Поддерживаются: DOCX, PDF, TXT."),
+        ("table.xlsx", XLSX, 415, "Поддерживаются: DOCX, HTML, PDF, TXT."),
         ("broken.pdf", b"%PDF-1.7\n garbage", 422, "PDF не читается"),
         ("big.txt", "а".encode() * (1 << 20), 413, "Файл больше 1 МБ."),
     ],

@@ -53,6 +53,10 @@ def test_reg261_requisites(name: str) -> None:
             {"act_type": "Приказ", "issuer": "УПРАВЛЕНИЕ ОХРАНЫ ОБЪЕКТОВ СЕВЕРНОЙ ОБЛАСТИ",
              "date": "15.01.2024", "number": "15", "edition_date": None},
         ),
+        (  # a web page: the number before the date on the act line
+            "corpus/mintrud_572n_2020.html",
+            {"act_type": "Приказ", "date": "07.09.2020", "number": "572н"},
+        ),
         (
             "synthetic/law_like.txt",
             {"act_type": "Закон", "issuer": "СЕВЕРНОЙ ОБЛАСТИ",

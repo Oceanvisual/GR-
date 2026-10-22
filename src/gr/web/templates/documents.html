@@ -15,7 +15,7 @@
   {% endif %}
   <form class="upload" method="post" action="/documents" enctype="multipart/form-data">
     <label>Файл
-      <input type="file" name="file" required accept="{% for f in formats %}.{{ f }}{% if not loop.last %},{% endif %}{% endfor %}">
+      <input type="file" name="file" required accept="{% for f in formats %}.{{ f }}{% if f == 'html' %},.htm{% endif %}{% if not loop.last %},{% endif %}{% endfor %}">
     </label>
     <label>Источник (необязательно)
       <input type="text" name="source_note" maxlength="2000" placeholder="откуда взят текст, например сайт органа">

@@ -74,10 +74,10 @@ CASES: dict[str, tuple[str, bytes, set[str]]] = {
     "xls_ole": ("old.xls", ole("Workbook"), {"unsupported_format"}),
     "encrypted_ole": ("secret.docx", ole("EncryptionInfo"), {"encrypted_file"}),
     "rtf": ("text.rtf", rb"{\rtf1\ansi Hello}", {"unsupported_format"}),
-    "html": (
+    "html_without_text": (
         "page.html",
-        "<html><body><p>Текст</p></body></html>".encode(),
-        {"unsupported_format"},
+        "<html><body><nav>Меню</nav><script>var x = 1;</script></body></html>".encode(),
+        {"empty_document"},
     ),
     "empty": ("empty.txt", b"", {"empty_document"}),
     "whitespace": ("blank.txt", b" \n\t\r\n  ", {"empty_document"}),
@@ -135,7 +135,7 @@ def test_any_file_gets_a_clear_answer(client: TestClient, case: str) -> None:
     assert_clear_answer(client, response, case)
     assert response.json()["error"]["code"] in codes, response.text
     if response.status_code == 415:
-        assert response.json()["error"]["details"]["supported"] == ["docx", "pdf", "txt"]
+        assert response.json()["error"]["details"]["supported"] == ["docx", "html", "pdf", "txt"]
 
 
 def test_utf16_text_is_accepted(client: TestClient) -> None:

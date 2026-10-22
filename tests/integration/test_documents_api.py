@@ -121,6 +121,18 @@ def test_q3_scan_is_kept_but_not_analyzable(client: TestClient) -> None:
     assert diagnostics["ocr"]["status"] == "unavailable" and diagnostics["ocr"]["error"]
 
 
+def test_an_html_page_is_read_like_its_text(client: TestClient) -> None:
+    response = upload(client, SYNTHETIC / "regulation.html")
+    assert response.status_code == 201, response.text
+    document = response.json()
+    assert document["format"] == "html" and document["diagnostics"]["encoding"] == "windows-1251"
+    assert document["diagnostics"]["analyzable"] is True
+    labels = {
+        node["label"] for node in client.get(f"{URL}/{document['id']}/structure").json()["nodes"]
+    }
+    assert {"разд. I", "п. 2.2", "п. 3.2.1"} <= labels
+
+
 def _xlsx() -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
@@ -145,7 +157,7 @@ def _encrypted_pdf() -> bytes:
     [
         ("corrupted.pdf", (SYNTHETIC / "corrupted.pdf").read_bytes(), 422, "corrupted_file"),
         ("report.txt", _xlsx(), 415, "unsupported_format"),
-        ("page.html", (SYNTHETIC / "regulation.html").read_bytes(), 415, "unsupported_format"),
+        ("old.rtf", rb"{\rtf1\ansi Hello}", 415, "unsupported_format"),
         ("secret.pdf", _encrypted_pdf(), 422, "encrypted_file"),
         ("empty.txt", b"", 422, "empty_document"),
         ("blank.txt", b"   \n\n", 422, "empty_document"),
@@ -156,7 +168,7 @@ def test_q3_refusals(client: TestClient, name: str, data: bytes, status: int, co
     assert response.status_code == status, response.text
     assert error_code(response) == code
     if code == "unsupported_format":
-        assert response.json()["error"]["details"]["supported"] == ["docx", "pdf", "txt"]
+        assert response.json()["error"]["details"]["supported"] == ["docx", "html", "pdf", "txt"]
     assert client.get(URL).json() == []
 
 

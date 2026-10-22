@@ -22,6 +22,9 @@ _YEAR_WORD = r"(?:\s*(?:г\.|года|г\b))?"
 _NUMBER = r"(?:N|№)\s*(?P<number>\d[\w\-/.]*?)(?=[\s,;)(\"«»]|$)"
 DATE_NUMBER_RE = re.compile(rf"\bот\s+(?P<date>{DATE}){_YEAR_WORD}\s*{_NUMBER}", re.I)
 SIGNATURE_RE = re.compile(rf"(?P<date>{DATE}){_YEAR_WORD}\s*\n?\s*{_NUMBER}", re.I)
+# «Приказ Минздрава России № 12н от 3 марта 2021 г.»: the order of web pages; trusted on
+# the act line only, elsewhere it cites another act as often as not.
+NUMBER_DATE_RE = re.compile(rf"{_NUMBER}\s+от\s+(?P<date>{DATE})", re.I)
 LEADING_DATE_NUMBER_RE = re.compile(rf"^(?P<date>{DATE}){_YEAR_WORD}\s*\|?\s*{_NUMBER}", re.I)
 EDITION_RE = re.compile(rf"\(ред\.\s*от\s+(?P<date>{DATE}){_YEAR_WORD}\)", re.I)
 CHANGES_RE = re.compile(rf"с изменениями на\s+(?P<date>{DATE})", re.I)
@@ -203,17 +206,21 @@ class _Extractor:
     def date_number(self, act_index: int | None) -> tuple[MetaField, MetaField]:
         # Near the act line first; then the heading part before the body (later lines cite
         # other acts); then a signature line at the end («5 мая 2005 года N 12-оз»).
-        windows: list[list[Line]] = []
+        windows: list[tuple[list[Line], bool]] = []
         if act_index is not None:
-            windows.append(self.lines[act_index : act_index + 3])
-        windows.append([line for line in self.lines if line.end <= self.body_start])
-        for window in windows:
+            windows.append((self.lines[act_index : act_index + 3], True))
+        windows.append(([line for line in self.lines if line.end <= self.body_start], False))
+        for window, act_lines in windows:
             for line in window:
                 if not self._own_line(line):
                     continue
                 indent = len(line.text) - len(line.text.lstrip())
                 stripped = line.text.strip()
-                match = DATE_NUMBER_RE.search(stripped) or LEADING_DATE_NUMBER_RE.match(stripped)
+                match = (
+                    DATE_NUMBER_RE.search(stripped)
+                    or LEADING_DATE_NUMBER_RE.match(stripped)
+                    or (NUMBER_DATE_RE.search(stripped) if act_lines else None)
+                )
                 if match is None:
                     continue
                 base = line.start + indent

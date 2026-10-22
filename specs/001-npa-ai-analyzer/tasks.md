@@ -891,7 +891,7 @@ UI карты процессов.
 
 **Independent Test**: quickstart Q15–Q17; регрессия dev-корпуса (SC-012); `.doc`, `.rtf`, `.odt`.
 
-- [ ] T018 [P] [US1] HTML (SHOULD) — `src/gr/ingestion/html.py`
+- [X] T018 [P] [US1] HTML (SHOULD) — `src/gr/ingestion/html.py`
   - **Цель**: BR-06, первый шаг расширения форматов.
   - **Зависит**: T015
   - **Файлы**: `ingestion/html.py`, `tests/unit/ingestion/test_html.py`
@@ -1001,7 +1001,7 @@ UI карты процессов.
     помечены маркером `soffice` и пропускаются, если его нет; в Docker-образе и CI выполняются.
   - **Тесты**: `test_convert.py`.
 
-- [ ] T079 [US1] Многоколоночная вёрстка PDF — `src/gr/ingestion/pdf_layout.py`
+- [X] T079 [US1] Многоколоночная вёрстка PDF — `src/gr/ingestion/pdf_layout.py`
   - **Цель**: FR-019 (R-22).
   - **Зависит**: T016, T077
   - **Файлы**: `ingestion/pdf_layout.py`, `tests/fixtures/make_fixtures.py` (`two_columns.pdf`),

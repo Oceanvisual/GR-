@@ -17,6 +17,7 @@ from gr.domain.enums import DocFormat, StructureMode, TextLayerStatus
 from gr.ingestion.base import IngestionError
 from gr.ingestion.detect import detect_format
 from gr.ingestion.docx import DocxExtractor, ZipLimits
+from gr.ingestion.html import HtmlExtractor
 from gr.ingestion.ocr import OcrEngine, OcrPage
 from gr.ingestion.pdf import OcrOptions, PdfExtractor, recognize_file
 from gr.ingestion.registry import ExtractorRegistry
@@ -58,6 +59,7 @@ def registry(limits: ParseLimits, ocr: OcrOptions | None = None) -> ExtractorReg
             TxtExtractor(),
             DocxExtractor(ZipLimits(max_unzipped_bytes=limits.max_unzipped_bytes)),
             PdfExtractor(max_pages=limits.max_pages, ocr=ocr),
+            HtmlExtractor(),
         ]
     )
 

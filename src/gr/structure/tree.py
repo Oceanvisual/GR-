@@ -70,6 +70,9 @@ def normalized_blocks(raw: RawDocument) -> list[Block]:
     return blocks
 
 
+_HTML_HEADINGS = {f"h{n}": n for n in range(1, 7)}  # an HTML heading is a styled one
+
+
 def _style_level(style: str | None) -> int | None:
     if not style:
         return None
@@ -97,7 +100,7 @@ def build_units(blocks: list[Block], ir: IRText) -> list[Unit]:
             previous.text = ir.text[previous.start : previous.end]
             continue
         style = (block.style or "").lower()
-        level = _style_level(block.style)
+        level = _style_level(block.style) or _HTML_HEADINGS.get(block.html_tag or "")
         units.append(
             Unit(
                 blocks=[span.block],

@@ -5,6 +5,7 @@ from pathlib import Path
 from gr.domain.document import RawDocument
 from gr.ingestion.base import Extractor
 from gr.ingestion.docx import DocxExtractor
+from gr.ingestion.html import HtmlExtractor
 from gr.ingestion.pdf import PdfExtractor
 from gr.ingestion.txt import TxtExtractor
 
@@ -13,6 +14,7 @@ EXTRACTORS: dict[str, Extractor] = {
     ".txt": TxtExtractor(),
     ".docx": DocxExtractor(),
     ".pdf": PdfExtractor(),
+    ".html": HtmlExtractor(),
 }
 
 
