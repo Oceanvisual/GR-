@@ -212,7 +212,8 @@ def test_a_run_with_an_s6_regression_exits_1(monkeypatch: pytest.MonkeyPatch,
         return {"toy": outcome}
 
     baseline = tmp_path / "baseline.json"
-    baseline.write_text(json.dumps({"metrics": {"s6_simpler_alternative_share.mean": 1.0}}))
+    baseline.write_text(json.dumps({"metrics": {"s6_simpler_alternative_share.mean": 1.0},
+                                    "documents": {"toy": {}}}))  # fmt: skip
     monkeypatch.setattr(run, "ROOT", tmp_path)
     monkeypatch.setattr(run, "RUNS_DIR", tmp_path / "runs")
     monkeypatch.setattr(run, "BASELINE", baseline)

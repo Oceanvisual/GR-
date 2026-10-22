@@ -241,7 +241,7 @@ def _main(args: argparse.Namespace) -> int:
     print_documents(scores, outcomes)
     print_s6(per_document)
 
-    baseline = None if partial else _load_baseline()
+    baseline = None if partial else _load_baseline([case.id for case in cases])
     problems, rows = gate(summary, baseline, config, strict=args.strict)
     print("\n| метрика | baseline | сейчас | Δ | статус |\n|---|---|---|---|---|")
     for row in rows:
@@ -277,10 +277,17 @@ def _main(args: argparse.Namespace) -> int:
     return 0
 
 
-def _load_baseline() -> dict[str, float | None] | None:
+def _load_baseline(documents: list[str]) -> dict[str, float | None] | None:
+    """The baseline of these documents; one of another eval set compares nothing (a new
+    document shifts every `.min` and `.mean`), and the next full run replaces it."""
     if not BASELINE.exists():
         return None
-    metrics: dict[str, float | None] = json.loads(BASELINE.read_text("utf-8"))["metrics"]
+    stored = json.loads(BASELINE.read_text("utf-8"))
+    if sorted(stored.get("documents", {})) != sorted(documents):
+        print(f"baseline снят на другом наборе ({', '.join(sorted(stored.get('documents', {})))}): "
+              "без сравнения")  # fmt: skip
+        return None
+    metrics: dict[str, float | None] = stored["metrics"]
     return metrics
 
 

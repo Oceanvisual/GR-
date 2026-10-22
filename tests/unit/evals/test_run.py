@@ -1,5 +1,6 @@
 """Baseline must never bless incomplete runs or unreviewed annotations."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,15 @@ def test_complete_reviewed_run_can_be_baseline(prepared: Outcome) -> None:
 def test_incomplete_regular_run_fails(prepared: Outcome) -> None:
     prepared.complete = False
     assert run.main([]) == 1
+
+
+def test_a_baseline_of_another_eval_set_is_not_compared(
+    prepared: Outcome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A new document lowers `.min` without any regression: such a baseline is replaced.
+    run.BASELINE.write_text(
+        json.dumps({"metrics": {"verified_share.min": 1.0}, "documents": {"old": {}}})
+    )
+    monkeypatch.setattr(run, "load_config", lambda: {"gate": {"tolerance": 0.0}})
+    assert run.main(["--update-baseline"]) == 0
+    assert json.loads(run.BASELINE.read_text())["documents"].keys() == {"toy"}
