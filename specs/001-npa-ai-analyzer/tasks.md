@@ -1006,7 +1006,7 @@ UI карты процессов.
 
 **Independent Test**: quickstart Q8.
 
-- [ ] T050 [US6] Наложение решений — `src/gr/analysis/overlay.py`
+- [X] T050 [US6] Наложение решений — `src/gr/analysis/overlay.py`
   - **Цель**: FR-080…FR-083 (data-model §8).
     Трассировка: FR-081.
   - **Зависит**: T008, T041

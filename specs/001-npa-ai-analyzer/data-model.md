@@ -452,6 +452,30 @@ EconomicsResult` дополняет автономный результат сц
   переносятся на новую инициативу при совпадении множества `operation_ids` и
   `solution_category`. Непереносимые перечисляются в отчёте перегенерации.
 
+Реализация — `analysis/overlay.py` (T050): `apply_reviews(model, initiatives, events) ->
+EffectiveState` (`model`, `findings`, `initiatives`, `excluded`, `stale_initiative_ids`;
+`calculable()` и `calculation_model()` — без отклонённого). События — по `created_at`, затем
+`id`; повтор `id` учитывается один раз; события по элементам, которых нет в текущих выходах
+(прежняя версия инициатив), пропускаются. Белые списки `edit`:
+- `process`: `name`, `goal`, `trigger`, `result`;
+- `operation`: `name`, `action`, `performer`, `object`, `deadline`, `operation_type`,
+  `legally_significant`, `handles_personal_data`, `is_loop_back`;
+- `decision_point`: `condition`; `finding`: `pattern`, `description`;
+- `initiative`: `title`, `description`, `architecture_idea`, `tech_rationale`,
+  `solution_category`, `automation_level` (предложенный; ограничение применяется заново),
+  `ratings` (частично: `{критерий: {level|bucket, justification}}`), `risks`, `limitations`;
+- `relation` (`entity_id` = два id инициатив по алфавиту через «|»): только `edit` с
+  `{relation: alternative|complementary}`.
+
+Поле с основанием (`name`, `action`, `performer`, `condition`, …) принимает строку или
+`{value, citation}`; цитата проверяется при записи решения (T051). `deadline` —
+`{value, unit, anchor?, raw?}` или `null`. `set_gate` — только у инициативы, `patch.status` —
+`LegalGate`; переопределяет только `blocked`. Отклонённый процесс исключает свои операции,
+точки решения и проблемы; инициатива теряет ссылки на отклонённые операции и проблемы, а без
+операций (или без проблем, кроме `no_change`) исключается из расчётов с причиной. `stale` —
+после `edit`, `reject`, `reopen` процесса, операции или проблемы, на которые опирается
+инициатива. Пересчитываются ограничение автономности, tech guard, статус допустимости и связи.
+
 ### Переходы статуса
 ```text
 pending ──confirm──▶ confirmed ──edit──▶ edited
