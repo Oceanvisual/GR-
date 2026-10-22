@@ -80,14 +80,16 @@ uv run gr serve         # http://127.0.0.1:8000
 | `external_allowed` | Любой OpenAI-совместимый endpoint, например OpenRouter |
 
 Для анализа нужны `LLM_BASE_URL`, `LLM_MODEL_EXTRACTION` (S3, S4) и `LLM_MODEL_ANALYSIS` (S6).
+Необязательный `LLM_MODEL_DISCOVERY` задаёт отдельную модель только для карты процессов (S3).
 Ключ — в `LLM_API_KEY`. Примеры:
 
 ```bash
-# OpenRouter
+# OpenRouter — конфигурация, на которой снят baseline eval (evals/baseline.json)
 LLM_DATA_POLICY=external_allowed
 LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_MODEL_EXTRACTION=anthropic/claude-sonnet-5.5
-LLM_MODEL_ANALYSIS=anthropic/claude-sonnet-5.5
+LLM_MODEL_EXTRACTION=anthropic/claude-haiku-5.5
+LLM_MODEL_DISCOVERY=anthropic/claude-sonnet-5.5
+LLM_MODEL_ANALYSIS=anthropic/claude-haiku-5.5
 
 # Ollama на этой машине
 LLM_DATA_POLICY=local_only

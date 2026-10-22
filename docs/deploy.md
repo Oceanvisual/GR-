@@ -78,8 +78,9 @@ LOG_FORMAT=json
 LLM_DATA_POLICY=external_allowed
 LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_API_KEY=…
-LLM_MODEL_EXTRACTION=anthropic/claude-sonnet-5.5
-LLM_MODEL_ANALYSIS=anthropic/claude-sonnet-5.5
+LLM_MODEL_EXTRACTION=anthropic/claude-haiku-5.5
+LLM_MODEL_DISCOVERY=anthropic/claude-sonnet-5.5
+LLM_MODEL_ANALYSIS=anthropic/claude-haiku-5.5
 ```
 
 > **`AUTH_USERS` — только в одинарных кавычках.** Docker Compose подставляет переменные в

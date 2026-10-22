@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     llm_local_hosts: Annotated[list[str], NoDecode] = ["localhost", "127.0.0.1", "ollama", "vllm"]
     llm_model_extraction: str | None = None
     llm_model_analysis: str | None = None
+    llm_model_discovery: str | None = None  # S3 only; the extraction model when not set
     llm_structured_mode: StructuredMode = "auto"
     llm_timeout_s: float = Field(default=120.0, gt=0)
     llm_max_retries: int = Field(default=2, ge=0, le=10)

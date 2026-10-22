@@ -13,3 +13,10 @@ discover = { enabled = false }
 detail = { enabled = false }
 validate = { enabled = false }
 opportunities = { effort = "low" }
+
+# Per model, over the stages above. Some models refuse `enabled = false` on OpenRouter
+# («Reasoning is mandatory for this endpoint»): the lowest effort instead.
+[reasoning.models."anthropic/claude-sonnet-5.5"]
+discover = { effort = "low" }
+detail = { effort = "low" }
+validate = { effort = "low" }

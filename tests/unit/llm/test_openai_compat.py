@@ -155,6 +155,13 @@ async def test_analysis_stage_uses_analysis_model(llm_settings: Callable[..., Se
     assert recorder.requests[0]["model"] == "m-analyze"
 
 
+async def test_discovery_model_is_for_s3_only(llm_settings: Callable[..., Settings]) -> None:
+    llm = make_llm(llm_settings(llm_model_discovery="m-discover"), Recorder())
+    assert llm.model_for(StageName.DISCOVER) == "m-discover"
+    assert llm.model_for(StageName.DETAIL) == "m-extract"
+    assert make_llm(llm_settings(), Recorder()).model_for(StageName.DISCOVER) == "m-extract"
+
+
 async def test_auto_falls_back_to_json_object_and_remembers(
     llm_settings: Callable[..., Settings],
 ) -> None:
@@ -351,6 +358,21 @@ async def test_reasoning_options_only_for_openrouter(
                             llm_api_key="k")  # fmt: skip
     await ask(make_llm(settings, recorder), stage=StageName.DISCOVER)
     assert recorder.requests[0].get("reasoning") == sent
+
+
+async def test_a_model_that_cannot_stop_reasoning_gets_low_effort(
+    llm_settings: Callable[..., Settings],
+) -> None:
+    # OpenRouter answers 400 «Reasoning is mandatory» to Sonnet 5.5 with enabled = false.
+    recorder = Recorder(completion(json.dumps(VALID)), completion(json.dumps(VALID)))
+    settings = llm_settings(llm_base_url="https://openrouter.ai/api/v1", llm_api_key="k",
+                            llm_data_policy="external_allowed",
+                            llm_model_discovery="anthropic/claude-sonnet-5.5")  # fmt: skip
+    llm = make_llm(settings, recorder)
+    await ask(llm, stage=StageName.DISCOVER)
+    await ask(llm, stage=StageName.DETAIL)
+    assert recorder.requests[0]["reasoning"] == {"effort": "low"}
+    assert recorder.requests[1]["reasoning"] == {"enabled": False}  # m-extract
 
 
 def test_request_options_change_the_cache_key() -> None:

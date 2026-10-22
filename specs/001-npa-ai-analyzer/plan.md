@@ -165,6 +165,7 @@ Read → overlay(reviews) → [S8 Economics solo] → [S9 Gate + Priority] → [
 | `LLM_BASE_URL`, `LLM_API_KEY` | — | OpenAI-совместимый endpoint |
 | `LLM_LOCAL_HOSTS` | `localhost,127.0.0.1,ollama,vllm` | для `local_only` |
 | `LLM_MODEL_EXTRACTION`, `LLM_MODEL_ANALYSIS` | — (обязательны при политике ≠ `disabled`) | |
+| `LLM_MODEL_DISCOVERY` | — (= `LLM_MODEL_EXTRACTION`) | своя модель для S3 |
 | `LLM_STRUCTURED_MODE` | `auto` | `json_schema` / `json_object` / `auto` |
 | `LLM_TIMEOUT_S` / `LLM_MAX_RETRIES` / `LLM_CONCURRENCY` | 120 / 2 / 4 | |
 | `LLM_CACHE_ENABLED` | `true` | |

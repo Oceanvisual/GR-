@@ -87,9 +87,11 @@ class OpenAICompatibleLLM:
     def options_for(self, stage: StageName) -> dict[str, Any]:
         """Provider-specific fields of this stage's requests (config/llm.toml)."""
         host = self.settings.llm_base_url.host if self.settings.llm_base_url else None
-        return request_options(stage, host)
+        return request_options(stage, host, self.model_for(stage))
 
     def model_for(self, stage: StageName) -> str:
+        if stage == StageName.DISCOVER and self.settings.llm_model_discovery:
+            return self.settings.llm_model_discovery
         model = (
             self.settings.llm_model_extraction
             if stage in EXTRACTION_STAGES

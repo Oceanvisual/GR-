@@ -15,11 +15,13 @@ def _config() -> dict[str, Any]:
     return config
 
 
-def request_options(stage: StageName, host: str | None) -> dict[str, Any]:
-    """Extra request body fields for this stage on this host; empty for other providers."""
+def request_options(stage: StageName, host: str | None, model: str = "") -> dict[str, Any]:
+    """Extra request body fields for this stage and model on this host; empty for other
+    providers."""
     reasoning = _config().get("reasoning", {})
     hosts: list[str] = reasoning.get("hosts", [])
     if not host or not any(host == h or host.endswith(f".{h}") for h in hosts):
         return {}
-    stage_options = reasoning.get("stages", {}).get(stage.value)
+    for_model = reasoning.get("models", {}).get(model, {})
+    stage_options = for_model.get(stage.value) or reasoning.get("stages", {}).get(stage.value)
     return {"reasoning": dict(stage_options)} if stage_options else {}

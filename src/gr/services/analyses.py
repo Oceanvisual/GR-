@@ -119,11 +119,14 @@ def price(usage: UsageTotals, settings: Settings) -> UsageTotals:
 
 def run_config(settings: Settings) -> RunConfig:
     quotes = load_config()
+    models = {
+        "extraction": settings.llm_model_extraction or "",
+        "analysis": settings.llm_model_analysis or "",
+    }
+    if settings.llm_model_discovery:
+        models["discovery"] = settings.llm_model_discovery
     return RunConfig(
-        models={
-            "extraction": settings.llm_model_extraction or "",
-            "analysis": settings.llm_model_analysis or "",
-        },
+        models=models,
         prompt_versions={
             stage: load_prompt(stage).version for stage in ("discover", "detail", "opportunities")
         },
