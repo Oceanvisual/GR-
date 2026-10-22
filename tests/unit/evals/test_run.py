@@ -109,3 +109,33 @@ def test_a_baseline_of_another_eval_set_is_not_compared(
     monkeypatch.setattr(run, "load_config", lambda: {"gate": {"tolerance": 0.0}})
     assert run.main(["--update-baseline"]) == 0
     assert json.loads(run.BASELINE.read_text())["documents"].keys() == {"toy"}
+
+
+def _regressing(monkeypatch: pytest.MonkeyPatch, config: dict[str, object]) -> None:
+    run.BASELINE.write_text(
+        json.dumps({"metrics": {"process_precision.mean": 1.0}, "documents": {"toy": {}}})
+    )
+    monkeypatch.setattr(run, "load_config", lambda: config)
+
+
+def test_a_regression_needs_its_reason_to_become_the_baseline(
+    prepared: Outcome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _regressing(monkeypatch, {"gate": {"tolerance": 0.05}})
+    assert run.main(["--update-baseline"]) == 1
+    assert json.loads(run.BASELINE.read_text())["metrics"] == {"process_precision.mean": 1.0}
+
+    reason = "S3 prompt now lists the act's procedures: fewer duplicate processes"
+    assert run.main(["--update-baseline", "--accept-regressions", reason]) == 0
+    accepted = json.loads(run.BASELINE.read_text())["accepted_regressions"]
+    assert accepted["reason"] == reason
+    assert [r.split(":")[0] for r in accepted["regressions"]] == ["process_precision.mean"]
+
+
+def test_a_ceiling_is_never_accepted(prepared: Outcome, monkeypatch: pytest.MonkeyPatch) -> None:
+    _regressing(monkeypatch, {"gate": {"max": {"calls.sum": 0}}})
+    assert run.main(["--update-baseline", "--accept-regressions", "anything"]) == 1
+
+
+def test_accepting_regressions_only_updates_a_baseline() -> None:
+    assert run.main(["--accept-regressions", "why"]) == 2

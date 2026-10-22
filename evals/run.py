@@ -158,6 +158,8 @@ def print_s6(per_document: dict[str, dict[str, float | None]]) -> None:
 
 def _main(args: argparse.Namespace) -> int:
     try:
+        if args.accept_regressions and not args.update_baseline:
+            raise ConfigError("--accept-regressions работает только с --update-baseline")
         if args.update_baseline and (args.only or args.cached or args.rescore):
             raise ConfigError(
                 "baseline требует полного нового прогона без --only/--cached/--rescore"
@@ -261,10 +263,18 @@ def _main(args: argparse.Namespace) -> int:
     if failed:
         problems.append(f"неполный или неуспешный анализ: {', '.join(failed)}")
     if args.update_baseline:
-        if problems:
-            print("eval: baseline не обновлён: " + "; ".join(problems), file=sys.stderr)
+        # Ceilings, targets and incomplete analyses are never accepted; a regression against the
+        # old baseline is, with --accept-regressions and its reason kept in the new baseline.
+        hard = set(gate(summary, None, config, strict=args.strict)[0])
+        regressions = [p for p in problems if p not in hard and not p.startswith("неполный")]
+        blocking = [p for p in problems if p not in regressions or not args.accept_regressions]
+        if blocking:
+            print("eval: baseline не обновлён: " + "; ".join(blocking), file=sys.stderr)
             return 1
-        _write_baseline(stamp, outcomes, per_document, summary)
+        accepted = (
+            {"reason": args.accept_regressions, "regressions": regressions} if regressions else None
+        )
+        _write_baseline(stamp, outcomes, per_document, summary, accepted)
         print(f"baseline обновлён: {BASELINE.relative_to(ROOT)}")
         return 0
     if partial:
@@ -296,6 +306,7 @@ def _write_baseline(
     outcomes: dict[str, Outcome | str],
     per_document: dict[str, dict[str, float | None]],
     summary: dict[str, float | None],
+    accepted: dict[str, object] | None = None,
 ) -> None:
     first = next(o for o in outcomes.values() if not isinstance(o, str))
     payload = {
@@ -305,6 +316,8 @@ def _write_baseline(
         "metrics": summary,
         "documents": per_document,
     }
+    if accepted:
+        payload["accepted_regressions"] = accepted
     BASELINE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", "utf-8")
 
 
@@ -317,6 +330,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rescore", metavar="RUN", help="пересчитать метрики сохранённого прогона")
     parser.add_argument("--update-baseline", action="store_true")
     parser.add_argument("--strict", action="store_true", help="проверять и цели SC-003")
+    parser.add_argument(
+        "--accept-regressions",
+        metavar="REASON",
+        help="с --update-baseline: принять регрессии к прошлому baseline, причина сохраняется",
+    )
     parser.add_argument("--s6", action="store_true", help="с этапом S6: метрики инициатив")
     parser.add_argument(
         "--judge", action="store_true", help="S6 и LLM-судья (модель [judge]); вердикты в кэше"
