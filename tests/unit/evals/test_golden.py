@@ -33,7 +33,7 @@ def nodes(case_id: str) -> list[FragmentNode]:
 
 
 def test_dataset_lists_the_eval_set() -> None:
-    assert [c.id for c in CASES] == ["reg261", "fz59"]
+    assert [c.id for c in CASES] == ["reg261", "fz59", "berezovsky1073"]  # R-21: three types
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
