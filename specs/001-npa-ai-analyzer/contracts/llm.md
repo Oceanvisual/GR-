@@ -226,7 +226,11 @@ no_change: {applies: bool, justification: str = ""}   # «оптимизация
 1. все `operation_ids` и `fragment_id` существуют и не отклонены. Иначе ссылка удаляется, а
    инициатива без операций отбрасывается (FR-047);
 2. для каждой операции инициативы есть `reduction_potential`. Пропуск → `very_low` с issue;
-3. `requires_change` без `provisions_to_revise` → issue и `requires_legal_review=true`;
+3. `requires_change` без существующего положения к пересмотру (`provisions_to_revise` пуст или все
+   ссылки удалены по п. 1) → инициатива исключается: по инварианту data-model §4 у
+   `requires_change` есть хотя бы одно положение. Пишется issue `missing_provision` («Нет
+   положения к пересмотру. Нужна юридическая экспертиза»), процесс попадает в `failed_items`
+   этапа S7, анализ помечается неполным, замечание видно на экране инициатив;
 4. tech guard (FR-043): категория выше минимальной для паттернов → `requires_justification`;
 5. ограничение автономности и статус допустимости (data-model §6);
 6. связи `alternative`/`complementary` (data-model §6);
