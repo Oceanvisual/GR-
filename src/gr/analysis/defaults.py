@@ -184,6 +184,11 @@ def _units(currency: str) -> dict[str, str]:
     }
 
 
+def _ru(value: Decimal) -> str:
+    """A number inside a note, in the notation of the screens."""
+    return format(value.normalize(), "f").replace(".", ",")
+
+
 def assumption_unit(parameter: str, profile: AssumptionProfile | None = None) -> str:
     """The unit of a parameter, in the currency of the profile."""
     return _units((profile or load_profile()).currency)[parameter]
@@ -258,7 +263,7 @@ class _Builder:
                 "operation",
                 op.id,
                 p.triple("time_hours", p.time_hours[op.operation_type]),
-                f"Профиль по типу операции «{op.operation_type.value}».",
+                "Профиль: время по типу операции.",
             )
             after = op.id in branched
             self.add(
@@ -283,14 +288,14 @@ class _Builder:
             "initiative",
             initiative.id,
             p.triple("capex", _ZERO if none else p.capex[category] * multiplier),
-            f"Категория «{category.value}» × сложность интеграции «{level.value}» ({multiplier}).",
+            f"Профиль: стоимость категории решения × {_ru(multiplier)} за сложность интеграции.",
         )
         self.add(
             initiative_key(initiative.id, "fixed_opex_per_year"),
             "initiative",
             initiative.id,
             p.triple("fixed_opex_per_year", p.fixed_opex_share * capex.values.base),
-            f"{p.fixed_opex_share} × capex в год.",
+            f"Профиль: {_ru(p.fixed_opex_share)} × стоимость внедрения в год.",
         )
         for year, share in enumerate(p.adoption, 1):
             self.add(
@@ -298,7 +303,7 @@ class _Builder:
                 "initiative",
                 initiative.id,
                 p.triple("adoption", share, share=True),
-                f"Доля внедрения в {year}-й год по профилю.",
+                f"Профиль: доля внедрения в {year}-й год.",
             )
         levels = {item.operation_id: item.level for item in initiative.reduction_potential}
         for op_id in initiative.operation_ids:
@@ -314,7 +319,7 @@ class _Builder:
                     _ZERO if none else p.reduction_share[levels[op_id]],
                     share=True,
                 ),
-                f"Потенциал сокращения «{levels[op_id].value}» по профилю.",
+                "Профиль: доля по уровню потенциала сокращения из анализа.",
             )
             time = self.items[operation_key(op_id, "time_hours")].values.base
             review_share = _ZERO if none else p.review_share[category]
@@ -323,7 +328,7 @@ class _Builder:
                 "initiative_operation",
                 target,
                 p.triple("review_hours", review_share * time),
-                f"Проверка человеком: {review_share} × время операции ({category.value}).",
+                f"Профиль: {_ru(review_share)} × время операции на проверку результата.",
             )
             self.add(
                 initiative_operation_key(initiative.id, op_id, "variable_cost_per_exec"),
@@ -332,7 +337,7 @@ class _Builder:
                 p.triple(
                     "variable_cost_per_exec", _ZERO if none else p.variable_cost_per_exec[category]
                 ),
-                f"Переменные расходы на выполнение по категории «{category.value}».",
+                "Профиль: переменные расходы по категории решения.",
             )
 
     def result(self) -> list[Assumption]:

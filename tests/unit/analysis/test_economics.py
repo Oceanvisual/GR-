@@ -344,13 +344,13 @@ def test_warnings_for_inputs_still_required_and_scenarios_out_of_order() -> None
     found_set = found_set.model_copy(update={"items": [*flagged, unused]})
     warnings = compute_solo(model(), [rag()], found_set, Scenario.BASE).warnings
     assert warnings == [
-        "Объём процесса «Выдача разрешения» не задан: используется модельная заглушка.",
+        "Объёмы процессов не заданы: используются заглушки («Выдача разрешения»).",
         "Доля случаев после точек решения не задана (операций: 1): "
         "использовано значение по умолчанию.",
-        f"Сценарии не по порядку: {ini('capex')} — консервативное значение выгоднее "
-        "оптимистичного.",
-        "Сценарии не по порядку: op.proc_1.op_1.time_hours — консервативное значение выгоднее "
-        "оптимистичного.",
+        f"Сценарии не по порядку: {ini('capex')} — значения должны идти от "
+        "консервативного к оптимистичному.",
+        "Сценарии не по порядку: op.proc_1.op_1.time_hours — значения должны идти от "
+        "консервативного к оптимистичному.",
     ]
 
 
@@ -361,7 +361,7 @@ def test_defaults_from_the_profile_are_enough_to_compute() -> None:
     (economics,) = found.per_initiative
     assert len(economics.solo.hours) == 3  # the profile horizon
     assert economics.attributed is None and not economics.in_portfolio  # portfolio: T065
-    assert any("модельная заглушка" in w for w in found.warnings)
+    assert any("используются заглушки" in w for w in found.warnings)
 
 
 def test_assumption_keys_name_exactly_what_the_effect_is_computed_from() -> None:

@@ -7,7 +7,8 @@ from gr.api.deps import StateDep, require_user
 from gr.domain.enums import LegalGate, Scenario
 from gr.errors import AppError
 from gr.services.analyses import AnalysisService
-from gr.services.results import MODEL_DISCLAIMER, ResultsService
+from gr.services.results import MODEL_DISCLAIMER, InitiativeDetail, ResultsService
+from gr.web.labels import LABELS
 from gr.web.routes import templates
 
 router = APIRouter(dependencies=[Depends(require_user)], include_in_schema=False)
@@ -71,5 +72,24 @@ async def initiative_page(
             "run": run,
             "fragment_labels": {f.id: f.label for f in fragments},
             "disclaimer": MODEL_DISCLAIMER,
+            "assumption_labels": assumption_labels(detail),
         },
     )
+
+
+def assumption_labels(detail: InitiativeDetail) -> dict[str, str]:
+    """Readable names of the assumptions on the card: the operation by its name, not its id."""
+    operations = {op.id: f"{op.seq + 1} · {op.name}" for op in detail.process.operations}
+    names: dict[str, str] = {}
+    for item in detail.assumptions:
+        label = LABELS["assumption"][item.parameter]
+        target = item.target_id or ""
+        if item.scope == "operation":
+            label = f"{operations.get(target, target)}: {label.lower()}"
+        elif item.scope == "initiative_operation":
+            op = target.split("/", 1)[-1]
+            label = f"{operations.get(op, op)}: {label.lower()}"
+        elif item.scope == "process":
+            label = f"{label} («{detail.process.name.value}»)"
+        names[item.key] = label
+    return names

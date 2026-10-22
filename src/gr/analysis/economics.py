@@ -137,32 +137,44 @@ def _solo(
 def _warnings(used: dict[str, Assumption], model: ProcessModel) -> list[str]:
     names = {p.id: p.name.value for p in model.processes}
     warnings: list[str] = []
+    volumes: list[str] = []
+    other: list[str] = []
     branched = 0
     for key, item in sorted(used.items()):
         if not item.requires_input:
             continue
         if item.parameter == "volume_per_year":
-            name = names.get(item.target_id or "", item.target_id)
-            warnings.append(f"Объём процесса «{name}» не задан: используется модельная заглушка.")
+            volumes.append(f"«{names.get(item.target_id or '', item.target_id)}»")
         elif item.parameter == "case_share":
             branched += 1
         else:
-            warnings.append(f"Требуется ввод значения: {key}.")
+            other.append(f"Требуется ввод значения: {key}.")
+    if volumes:  # the wording of contracts/ui.md
+        warnings.append(
+            f"Объёмы процессов не заданы: используются заглушки ({', '.join(volumes)})."
+        )
+    warnings += other
     if branched:
         warnings.append(
             f"Доля случаев после точек решения не задана (операций: {branched}): "
             "использовано значение по умолчанию."
         )
-    for key, item in sorted(used.items()):
-        low, base, high = item.values.as_tuple
-        parameter = item.parameter
-        if (parameter in _MORE_IS_BETTER and not low <= base <= high) or (
-            parameter in _LESS_IS_BETTER and not low >= base >= high
-        ):
-            warnings.append(
-                f"Сценарии не по порядку: {key} — консервативное значение выгоднее оптимистичного."
-            )
+    warnings += [
+        f"Сценарии не по порядку: {key} — значения должны идти от консервативного к оптимистичному."
+        for key, item in sorted(used.items())
+        if out_of_order(item)
+    ]
     return warnings
+
+
+def out_of_order(item: Assumption) -> bool:
+    """A scenario better than the next one for the effect (FR-057: a warning, not a refusal)."""
+    low, base, high = item.values.as_tuple
+    if item.parameter in _MORE_IS_BETTER:
+        return not low <= base <= high
+    if item.parameter in _LESS_IS_BETTER:
+        return not low >= base >= high
+    return False
 
 
 def compute_solo(

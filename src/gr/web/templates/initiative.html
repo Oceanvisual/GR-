@@ -19,10 +19,34 @@
 {% if i.autonomy_capped %}<p>Автономность ограничена: юридически значимое решение подтверждает человек.</p>{% endif %}
 {% if i.gate %}<p>{{ labels.gate[i.gate.status] }}</p><ul>{% for reason in i.gate.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
 <ul>{% for p in i.provisions_to_revise %}<li><a href="/documents/{{ run.doc_id }}?fragment={{ p.fragment_id | path_quote }}#fragment">{{ fragment_labels.get(p.fragment_id, p.fragment_id) }}</a>: {{ p.change_nature }}</li>{% endfor %}</ul>
-<h2>Операции и нормативные основания</h2>{% for op in detail.operations %}<section><h3>{{ op.seq }} · {{ op.name }}</h3>{{ grounded(run.doc_id, op.action, fragment_labels) }}{% if op.performer %}<p>Исполнитель: {{ grounded(run.doc_id, op.performer, fragment_labels) }}</p>{% endif %}{% if op.deadline %}<p>Срок: {{ grounded(run.doc_id, op.deadline.raw, fragment_labels) }}</p>{% endif %}</section>{% endfor %}
+<h2>Операции и нормативные основания</h2>{% for op in detail.operations %}<section><h3>{{ op.seq + 1 }} · {{ op.name }}</h3>{{ grounded(run.doc_id, op.action, fragment_labels) }}{% if op.performer %}<p>Исполнитель: {{ grounded(run.doc_id, op.performer, fragment_labels) }}</p>{% endif %}{% if op.deadline %}<p>Срок: {{ grounded(run.doc_id, op.deadline.raw, fragment_labels) }}</p>{% endif %}</section>{% endfor %}
 <h2>Качественные оценки</h2><ul>{% for key, rating in i.ratings.model_dump().items() %}<li>{{ labels.rating[key] }}: {{ labels.duration[rating.bucket] if key == "duration" else labels.level[rating.level] }} — {{ rating.justification }}</li>{% endfor %}</ul>
 <h2>Риски и ограничения</h2><ul>{% for text in i.risks + i.limitations %}<li>{{ text }}</li>{% else %}<li>Нет данных</li>{% endfor %}</ul>
 <h2>Связи</h2><ul>{% for r in i.relations %}<li><a href="/analyses/{{ run.id }}/initiatives/{{ r.initiative_id }}">{{ r.initiative_id }}</a> — {{ "Альтернатива" if r.relation == "alternative" else "Дополняющая инициатива" }}</li>{% else %}<li>Связанных инициатив нет</li>{% endfor %}</ul>
-<h2>Экономика и приоритет</h2><p>Будет рассчитано. Экономические параметры и оценки приоритета пока не заданы.</p>
+<h2>Экономический эффект <span class="badge">Допущение</span></h2>
+<p class="muted">Денежный эквивалент высвобождаемого рабочего времени (модельная оценка) при внедрении инициативы отдельно; по годам горизонта через «·».</p>
+{% if detail.economics %}
+<table class="table">
+<thead><tr><th>Показатель</th>{% for s in detail.economics %}<th>{{ labels.scenario[s] }}</th>{% endfor %}</tr></thead>
+<tbody>
+<tr><th>Высвобождаемые часы в год</th>{% for e in detail.economics.values() %}<td>{% for v in e.hours %}{{ v | number }}{% if not loop.last %} · {% endif %}{% endfor %}</td>{% endfor %}</tr>
+<tr><th>FTE-эквивалент</th>{% for e in detail.economics.values() %}<td>{% for v in e.fte %}{{ v | number(2) }}{% if not loop.last %} · {% endif %}{% endfor %}</td>{% endfor %}</tr>
+<tr><th>Денежный эквивалент в год</th>{% for e in detail.economics.values() %}<td>{% for v in e.money %}{{ v | money }}{% if not loop.last %} · {% endif %}{% endfor %}</td>{% endfor %}</tr>
+<tr><th>Эксплуатационные расходы в год</th>{% for e in detail.economics.values() %}<td>{% for v in e.opex %}{{ v | money }}{% if not loop.last %} · {% endif %}{% endfor %}</td>{% endfor %}</tr>
+<tr><th>Стоимость внедрения</th>{% for e in detail.economics.values() %}<td>{{ e.capex | money }}</td>{% endfor %}</tr>
+<tr><th>Чистый эффект по годам</th>{% for e in detail.economics.values() %}<td>{% for v in e.net %}{{ v | money }}{% if not loop.last %} · {% endif %}{% endfor %}</td>{% endfor %}</tr>
+<tr><th>Накопленный чистый эффект</th>{% for e in detail.economics.values() %}<td><strong>{{ e.cum_net | money }}</strong></td>{% endfor %}</tr>
+<tr><th>ROI за горизонт</th>{% for e in detail.economics.values() %}<td>{{ e.roi | percent }}</td>{% endfor %}</tr>
+<tr><th>Окупаемость</th>{% for e in detail.economics.values() %}<td>{{ (e.payback_months ~ " мес.") if e.payback_months else "не окупается за горизонт" }}</td>{% endfor %}</tr>
+</tbody>
+</table>
+<h3>Использованные допущения (версия {{ detail.assumptions_version }})</h3>
+<table class="table">
+<thead><tr><th>Параметр</th>{% for s in detail.economics %}<th>{{ labels.scenario[s] }}</th>{% endfor %}<th>Ед.</th><th>Источник</th><th>Комментарий</th></tr></thead>
+<tbody>{% for a in detail.assumptions %}<tr><td>{{ assumption_labels[a.key] }}{% if a.requires_input %} <span class="badge badge-note">требует ввода</span>{% endif %}</td>{% for v in a.values.as_tuple %}<td>{{ v | plain }}</td>{% endfor %}<td>{{ a.unit }}</td><td>{{ labels.source[a.source] }}</td><td>{{ a.note or "" }}</td></tr>{% endfor %}</tbody>
+</table>
+<p><a href="/analyses/{{ run.id }}/settings">Изменить допущения</a></p>
+{% else %}<p>Инициатива отклонена экспертом: эффект не рассчитывается.</p>{% endif %}
+<h2>Приоритет</h2><p>Будет рассчитано вместе с рейтингом инициатив.</p>
 <h2>История решений</h2><ul>{% for event in detail.history %}<li>{{ event.created_at }} · {{ event.user }}: {{ event.action }} — {{ event.comment or "" }}</li>{% else %}<li>Решений эксперта пока нет.</li>{% endfor %}</ul>
 {% endblock %}

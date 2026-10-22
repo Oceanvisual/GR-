@@ -24,6 +24,7 @@ from gr.services.documents import (
 )
 from gr.services.parsing import registry
 from gr.structure.scoring import MIN_CONFIDENCE
+from gr.web.format import money, number, percent, plain
 from gr.web.labels import LABELS
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -35,6 +36,10 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)  # autoescape is on for .ht
 templates.env.globals["labels"] = LABELS
 templates.env.globals["min_confidence"] = MIN_CONFIDENCE
 templates.env.filters["path_quote"] = lambda value: quote(str(value), safe="/")
+templates.env.filters["money"] = money
+templates.env.filters["number"] = number
+templates.env.filters["percent"] = percent
+templates.env.filters["plain"] = plain
 router = APIRouter(dependencies=[Depends(require_user)], include_in_schema=False)
 
 

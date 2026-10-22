@@ -77,7 +77,7 @@ async def test_s7_creates_the_first_version_and_reading_needs_no_llm(
         assert base["assumptions_version"] == 1
         assert len(hours(base)) == 3  # the profile horizon
         assert DEFAULTS_BANNER in base["banners"]
-        assert any("Объём процесса" in b for b in base["banners"])
+        assert any("Объёмы процессов не заданы" in b for b in base["banners"])
         assert hours(await table(env, run_id, "conservative")) != hours(base)
 
         economics = (
@@ -121,7 +121,7 @@ async def test_patch_saves_a_version_logs_it_and_returns_the_recomputed_table(
         # Hours are proportional to the volume: 1 000 → 2 000 doubles them.
         assert hours(update["initiatives"]) == [h * 2 for h in hours(before)]
         assert update["initiatives"]["assumptions_version"] == 2
-        assert not any("Объём процесса" in b for b in update["initiatives"]["banners"])
+        assert not any("Объёмы процессов не заданы" in b for b in update["initiatives"]["banners"])
         assert len(env.llm.calls) == calls
 
         (event,) = await env.state.repos.reviews.list_for_run(run_id, ASSUMPTIONS_ENTITY)
@@ -143,7 +143,10 @@ async def test_a_stale_version_is_a_conflict(make_env: Callable[..., Any]) -> No
     async for env in make_env():
         run_id = await analyse(env)
         change = [{"key": "hourly_cost", "values": triple("1300", "1300", "1300")}]
-        assert (await patch(env, run_id, change, '"1"')).status_code == 200
+        saved = await patch(env, run_id, change, '"1"')
+        assert saved.status_code == 200
+        (rate,) = [i for i in saved.json()["assumption_set"]["items"] if i["key"] == "hourly_cost"]
+        assert rate["note"] is None  # the profile's explanation went with its number
         stale = await patch(env, run_id, change, '"1"')  # another tab, based on version 1
         assert stale.status_code == 409
         error = stale.json()["error"]

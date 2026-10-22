@@ -152,7 +152,8 @@ class ResultsService:
             raise AppError("not_found", "Инициативы ещё не готовы.")
         return InitiativeSet.model_validate(output)
 
-    async def _inputs(self, run_id: str) -> tuple[ProcessModel, InitiativeSet, AssumptionSet]:
+    async def inputs(self, run_id: str) -> tuple[ProcessModel, InitiativeSet, AssumptionSet]:
+        """What the economics of the run is computed from: processes, initiatives, assumptions."""
         result = await self.initiative_set(run_id)
         model = await self.analyses.processes(run_id)
         return model, result, await self._current(run_id, model, result)
@@ -175,11 +176,11 @@ class ResultsService:
         return built
 
     async def assumptions(self, run_id: str) -> AssumptionSet:
-        _, _, current = await self._inputs(run_id)
+        _, _, current = await self.inputs(run_id)
         return current
 
     async def economics(self, run_id: str, scenario: Scenario = Scenario.BASE) -> EconomicsResult:
-        model, result, current = await self._inputs(run_id)
+        model, result, current = await self.inputs(run_id)
         return _compute(model, result.initiatives, current, scenario)
 
     async def table(
@@ -192,7 +193,7 @@ class ResultsService:
         include_rejected: bool = False,
     ) -> InitiativeTable:
         run = await self.analyses.get(run_id)
-        model, result, current = await self._inputs(run_id)
+        model, result, current = await self.inputs(run_id)
         economics = _compute(model, result.initiatives, current, scenario)
         solo = {e.initiative_id: e for e in economics.per_initiative}
         names = {p.id: p.name.value for p in model.processes}
@@ -237,7 +238,7 @@ class ResultsService:
         )
 
     async def detail(self, run_id: str, initiative_id: str) -> InitiativeDetail:
-        model, result, current = await self._inputs(run_id)
+        model, result, current = await self.inputs(run_id)
         item = next((i for i in result.initiatives if i.id == initiative_id), None)
         if item is None:
             raise AppError("not_found", "Инициатива не найдена.")
@@ -269,7 +270,7 @@ class ResultsService:
         scenario: Scenario = Scenario.BASE,
     ) -> AssumptionsUpdate:
         """Save the changes as the next version, if `version` is still the current one."""
-        model, result, current = await self._inputs(run_id)
+        model, result, current = await self.inputs(run_id)
         if version != current.version:
             raise AppError("version_conflict", details={"current_version": current.version})
         now = datetime.now(UTC)
@@ -296,10 +297,13 @@ class ResultsService:
                 update |= {
                     "values": change.values.model_dump(),
                     "source": AssumptionSource.USER,
+                    "source_citation": None,  # a quote of the act backs its number, not this one
                     "requires_input": False,
                 }
             if change.note is not None:
                 update["note"] = change.note.strip() or None
+            elif change.values is not None and old and old.source != AssumptionSource.USER:
+                update["note"] = None  # how the profile got its number says nothing of this one
             base = old.model_dump() if old else _new_rate(key)
             try:
                 changed[key] = Assumption.model_validate(base | update)
