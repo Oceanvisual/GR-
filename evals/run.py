@@ -59,11 +59,18 @@ def checked_golden(case: Case) -> Golden:
 
 
 async def run_documents(
-    cases: list[Case], *, cached: bool, budget: Budget | None = None, s6: bool = False
+    cases: list[Case],
+    *,
+    cached: bool,
+    budget: Budget | None = None,
+    s6: bool = False,
+    discovery_model: str | None = None,
 ) -> dict[str, Outcome | str]:
     """Outcome per document, or the reason it could not be analysed."""
     results: dict[str, Outcome | str] = {}
-    async with pipeline(cached=cached, budget=budget, s6=s6) as state:
+    async with pipeline(
+        cached=cached, budget=budget, s6=s6, discovery_model=discovery_model
+    ) as state:
         for case in cases:
             print(f"… {case.id}: анализ", flush=True)
             try:
@@ -175,7 +182,14 @@ def _main(args: argparse.Namespace) -> int:
                 Decimal(rates["input_per_mtok"]),
                 Decimal(rates["output_per_mtok"]),
                 rates["model"],
+                {
+                    model: (Decimal(r["input_per_mtok"]), Decimal(r["output_per_mtok"]))
+                    for model, r in rates.get("models", {}).items()
+                },
             )
+            known = {rates["model"], *budget.other_models}
+            if args.discovery_model and args.discovery_model not in known:
+                raise ConfigError(f"нет тарифа {args.discovery_model} в [live_budget.models]")
         cases = load_cases()
         if args.only:
             cases = [c for c in cases if c.id in args.only]
@@ -190,7 +204,15 @@ def _main(args: argparse.Namespace) -> int:
             outcomes = stored_outcomes(Path(args.rescore), cases)
         else:
             s6 = args.s6 or args.judge
-            outcomes = asyncio.run(run_documents(cases, cached=args.cached, budget=budget, s6=s6))
+            outcomes = asyncio.run(
+                run_documents(
+                    cases,
+                    cached=args.cached,
+                    budget=budget,
+                    s6=s6,
+                    discovery_model=args.discovery_model,
+                )
+            )
         judged: dict[str, dict[str, float | None]] = {}
         if args.judge:
             model = str(config.get("judge", {}).get("model", ""))
@@ -341,6 +363,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--budget-usd", type=Decimal, help="лимит живого прогона; тарифы live_budget"
+    )
+    parser.add_argument(
+        "--discovery-model", metavar="MODEL", help="своя модель для S3 (LLM_MODEL_DISCOVERY)"
     )
     return _main(parser.parse_args(argv))
 

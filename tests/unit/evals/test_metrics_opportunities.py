@@ -207,7 +207,8 @@ def test_a_run_with_an_s6_regression_exits_1(monkeypatch: pytest.MonkeyPatch,
     )  # fmt: skip
 
     async def documents(cases: list[Case], *, cached: bool, budget: object = None,
-                        s6: bool = False) -> dict[str, Outcome | str]:  # fmt: skip
+                        s6: bool = False, discovery_model: str | None = None,
+                        ) -> dict[str, Outcome | str]:  # fmt: skip
         assert s6  # --s6 reaches the pipeline
         return {"toy": outcome}
 

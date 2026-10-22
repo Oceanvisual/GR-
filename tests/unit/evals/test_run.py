@@ -35,7 +35,12 @@ def prepared(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Outcome:
     )
 
     async def documents(
-        cases: list[Case], *, cached: bool, budget: Budget | None = None, s6: bool = False
+        cases: list[Case],
+        *,
+        cached: bool,
+        budget: Budget | None = None,
+        s6: bool = False,
+        discovery_model: str | None = None,
     ) -> dict[str, Outcome | str]:
         return {"toy": outcome}
 
@@ -139,3 +144,12 @@ def test_a_ceiling_is_never_accepted(prepared: Outcome, monkeypatch: pytest.Monk
 
 def test_accepting_regressions_only_updates_a_baseline() -> None:
     assert run.main(["--accept-regressions", "why"]) == 2
+
+
+def test_a_discovery_model_without_tariff_fails_before_llm(
+    prepared: Outcome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rates = {"model": "cheap", "input_per_mtok": "1", "output_per_mtok": "1"}
+    monkeypatch.setattr(run, "load_config", lambda: {"live_budget": rates})
+    monkeypatch.setattr(run, "run_documents", lambda *a, **kw: pytest.fail("LLM invoked"))
+    assert run.main(["--budget-usd", "1", "--discovery-model", "unpriced"]) == 2

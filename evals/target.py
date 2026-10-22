@@ -129,20 +129,33 @@ def to_prediction(model: ProcessModel, fragments: Sequence[Fragment], full_text:
 # --- running the pipeline ------------------------------------------------------------------
 
 
-@asynccontextmanager
-async def pipeline(
-    *, cached: bool, budget: Budget | None = None, s6: bool = False
-) -> AsyncIterator[AppState]:
+def llm_overrides(
+    budget: Budget | None, *, s6: bool, discovery_model: str | None
+) -> dict[str, Any]:
+    """Settings over the environment: a budget pins its default model; S3 may have its own."""
     overrides: dict[str, Any] = {}
     if budget is not None:
         overrides = {"llm_model_extraction": budget.allowed_model, "llm_max_retries": 0}
-        if s6:  # S6 runs on the analysis model: the budget allows one model only
+        if s6:  # S6 runs on the analysis model: the budget's default model
             overrides["llm_model_analysis"] = budget.allowed_model
+    if discovery_model:  # LLM_MODEL_DISCOVERY, the rest unchanged
+        overrides["llm_model_discovery"] = discovery_model
+    return overrides
+
+
+@asynccontextmanager
+async def pipeline(
+    *,
+    cached: bool,
+    budget: Budget | None = None,
+    s6: bool = False,
+    discovery_model: str | None = None,
+) -> AsyncIterator[AppState]:
     settings = Settings(  # LLM_* from the environment, like the service itself
         data_dir=DATA_DIR,
         llm_cache_enabled=cached,
         log_level="WARNING",
-        **overrides,
+        **llm_overrides(budget, s6=s6, discovery_model=discovery_model),
     )
     # A separate handle to the same DB stores raw calls for exact provider billing.
     db = Database(settings.resolved_database_url)

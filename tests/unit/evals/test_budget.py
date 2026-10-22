@@ -131,3 +131,22 @@ async def test_a_provider_failure_is_tried_again_within_the_budget(
         await client.client.close()
     assert response.content == '{"text": "ok"}'
     assert client.budget.requests == 3  # every try reserved, as any request
+
+
+def test_a_second_model_is_reserved_at_its_own_price() -> None:
+    big = {"big": (Decimal("4"), Decimal("10"))}
+    b = Budget(Decimal("3"), Decimal("1"), Decimal("1"), "m", big)
+    cheap, dear = b.reserve("m", 1000, 1000), b.reserve("big", 1000, 1000)
+    assert dear == (Decimal(5096) * 4 + Decimal(1000) * 10) / 1_000_000 > cheap
+    with pytest.raises(BudgetExceeded):
+        b.reserve("other", 1000, 1000)
+
+
+def test_a_budget_keeps_the_discovery_model() -> None:
+    # T059 follow-up: the budget's overrides once replaced --discovery-model, S3 ran on Haiku.
+    from evals.target import llm_overrides
+
+    overrides = llm_overrides(budget(), s6=True, discovery_model="big")
+    assert overrides["llm_model_discovery"] == "big"
+    assert overrides["llm_model_extraction"] == overrides["llm_model_analysis"] == "m"
+    assert "llm_model_discovery" not in llm_overrides(budget(), s6=False, discovery_model=None)

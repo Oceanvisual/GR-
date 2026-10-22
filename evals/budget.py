@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -23,26 +23,34 @@ class Budget:
     limit_usd: Decimal
     input_per_mtok: Decimal
     output_per_mtok: Decimal
-    allowed_model: str
+    allowed_model: str  # every budgeted stage, unless a stage has its own model below
+    # Other models a stage may use (--discovery-model): model → (input, output) per Mtok.
+    other_models: dict[str, tuple[Decimal, Decimal]] = field(default_factory=dict)
     committed_usd: Decimal = Decimal(0)
     actual_usd: Decimal = Decimal(0)
     requests: int = 0
 
     def __post_init__(self) -> None:
-        for value in (self.limit_usd, self.input_per_mtok, self.output_per_mtok):
+        prices = [p for pair in self.other_models.values() for p in pair]
+        for value in (self.limit_usd, self.input_per_mtok, self.output_per_mtok, *prices):
             if not value.is_finite() or value <= 0:
                 raise ValueError("Budget and conservative prices must be finite and positive")
+
+    def prices(self, model: str) -> tuple[Decimal, Decimal]:
+        if model == self.allowed_model:
+            return self.input_per_mtok, self.output_per_mtok
+        if model in self.other_models:
+            return self.other_models[model]
+        raise BudgetExceeded("Модель отсутствует в тарифном снимке eval.")
 
     def reserve(self, model: str, input_bytes: int, output_tokens: int) -> Decimal:
         if input_bytes < 0 or output_tokens <= 0:
             raise ValueError("request size must be nonnegative and output limit positive")
-        if model != self.allowed_model:
-            raise BudgetExceeded("Модель отсутствует в тарифном снимке eval.")
+        input_per_mtok, output_per_mtok = self.prices(model)
         # One token per UTF-8 byte plus 4096 tokens for protocol overhead. Prices must
         # include the highest applicable endpoint/context/cache-write tariff.
         bound = (
-            Decimal(input_bytes + 4096) * self.input_per_mtok
-            + Decimal(output_tokens) * self.output_per_mtok
+            Decimal(input_bytes + 4096) * input_per_mtok + Decimal(output_tokens) * output_per_mtok
         ) / 1_000_000
         if self.committed_usd + bound > self.limit_usd:
             raise BudgetExceeded()
@@ -72,6 +80,10 @@ class Budget:
             "model": self.allowed_model,
             "conservative_input_per_mtok": str(self.input_per_mtok),
             "conservative_output_per_mtok": str(self.output_per_mtok),
+            **{
+                f"{model} (input/output per Mtok)": f"{i}/{o}"
+                for model, (i, o) in self.other_models.items()
+            },
             "committed_upper_bound_usd": str(self.committed_usd),
             "reported_actual_usd": str(self.actual_usd),
             "requests": self.requests,
