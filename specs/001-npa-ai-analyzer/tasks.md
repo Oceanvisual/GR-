@@ -521,7 +521,7 @@ UI карты процессов.
     все поля в `required`, отсутствие `oneOf`, `anyOf` (кроме `null`), `minLength`, `pattern`.
   - **Тесты**: `test_schemas_strict.py`.
 
-- [ ] T028 [P] [US2] Рендер документа для LLM и оглавление — `src/gr/extraction/render.py`
+- [X] T028 [P] [US2] Рендер документа для LLM и оглавление — `src/gr/extraction/render.py`
   - **Цель**: блок `<document>`, экранирование (R-12), оглавление и разбиение (R-10).
     Трассировка: NFR-004.
   - **Зависит**: T020

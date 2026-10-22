@@ -1,0 +1,9 @@
+# How the document is cut for the LLM (R-10). Sizes are characters of rendered text.
+
+[outline]
+snippet_chars = 160      # the start of each fragment's own text in the S3 outline
+minor_snippet_chars = 60 # paragraphs and list items: continuations of a point or form text
+max_chars = 40000        # a larger outline is split by top-level sections, one S3 call each
+
+[detail]
+max_chars = 60000        # S4 text of one process above this is cut into windows (T030)
