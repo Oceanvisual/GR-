@@ -199,3 +199,25 @@ async def test_one_procedure_named_with_two_channels_is_one_process() -> None:
     assert names == ["Приём и регистрация заявления (личное обращение)", "Рассмотрение заявления"]
     assert result.processes[0].core_fragment_ids == ids("п. 3.2", "п. 3.4")
     assert "duplicate_merged" in codes(result)
+
+
+async def test_a_fragment_holding_a_process_is_not_outside_processes() -> None:
+    # reg261 (T062): «body» answered as non-process took the whole act out of coverage.
+    fragments = document().fragments
+    aliases = FragmentAliases(fragments)
+    a = {label: aliases.alias(i) for label, i in zip(
+        ("п. 3.2", "разд. III", "разд. IV"), ids("п. 3.2", "разд. III", "разд. IV"), strict=True
+    )}  # fmt: skip
+    reply = {
+        "processes": [
+            {
+                "key": "p1",
+                "name": "Приём заявления",
+                "core_refs": [a["п. 3.2"]],
+                "evidence": {"text": "x", "ref": a["п. 3.2"], "quote": "принимает заявление"},
+            }
+        ],
+        "non_process_refs": [a["разд. III"], a["разд. IV"]],
+    }
+    result = await run(FakeLLM({StageName.DISCOVER: [reply]}))
+    assert result.non_process_fragment_ids == ids("разд. IV")

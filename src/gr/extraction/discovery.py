@@ -8,7 +8,7 @@ overlap (Jaccard ≥ 0.5). An empty map is a valid result: «процессы н
 
 import asyncio
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Literal
 
 from pydantic import BaseModel
@@ -105,6 +105,12 @@ class _Mapper:
             if parent is None:
                 kept.append(fragment_id)
         return kept
+
+    def ancestors(self, fragment_id: str) -> Iterator[str]:
+        parent = self.parent.get(fragment_id)
+        while parent is not None:
+            yield parent
+            parent = self.parent.get(parent)
 
     def ids(self, refs: list[str], element: str) -> list[str]:
         resolved: list[str] = []
@@ -298,8 +304,14 @@ async def discover(
                 message="Процессы не найдены: акт не описывает административных процедур.",
             )
         )
-    used = {i for p in processes for i in p.core_fragment_ids}
-    outside = sorted({i for i in non_process if i not in used}, key=mapper.order.__getitem__)
+    used = {i for p in processes for i in (*p.core_fragment_ids, *p.related_fragment_ids)}
+    # A non-process fragment takes its subtree (coverage, FR-028): one that holds a process —
+    # «body» was answered on reg261 — would hide every gap in the act.
+    holding = {a for i in used for a in mapper.ancestors(i)}
+    outside = sorted(
+        {i for i in non_process if i not in used and i not in holding},
+        key=mapper.order.__getitem__,
+    )
     return DiscoveryResult(
         processes=processes,
         non_process_fragment_ids=mapper.topmost(outside),

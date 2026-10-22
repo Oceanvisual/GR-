@@ -34,3 +34,12 @@ def test_repealed_fragments_are_not_counted() -> None:
     report = coverage_report(frags, [fid("п. 3.2")], [], [])
     assert fid("п. 3.4.1") not in report.uncovered_action_fragments
     assert report.fragments_total == coverage_report(fragments(), [], [], []).fragments_total - 1
+
+
+def test_a_bare_heading_is_not_a_gap() -> None:
+    # reg261 (T062): «Рассмотрение Заявительных документов» over points already in processes.
+    title = "Специалист регистрирует заявление"
+    heading = fragments(**{"разд. III": {"heading": title, "text": title}})
+    lead_in = fragments(**{"разд. III": {"heading": None, "text": title}})
+    assert fid("разд. III") not in coverage_report(heading, [], [], []).uncovered_action_fragments
+    assert fid("разд. III") in coverage_report(lead_in, [], [], []).uncovered_action_fragments

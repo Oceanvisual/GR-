@@ -3,7 +3,8 @@ belong to no process.
 
 A fragment is used when it lies in the text of a process (action or related fragments with
 their subtrees) or is cited by any verified fact. Fragments marked by discovery as not
-describing processes, with their subtrees, are not counted as gaps.
+describing processes, with their subtrees, are not counted as gaps; nor is a bare heading —
+its actions are in its subtree, which is checked point by point.
 """
 
 import re
@@ -31,6 +32,10 @@ def describes_action(text: str) -> bool:
     return any(word.startswith(stems) for word in _WORD_RE.findall(text.lower()))
 
 
+def _bare_heading(fragment: Fragment) -> bool:
+    return bool(fragment.heading) and fragment.text.split() == (fragment.heading or "").split()
+
+
 def coverage_report(
     fragments: Sequence[Fragment],
     process_fragment_ids: Iterable[str],
@@ -44,7 +49,10 @@ def coverage_report(
     uncovered = [
         f.id
         for f in counted
-        if f.id not in used and f.id not in non_process and describes_action(f.text)
+        if f.id not in used
+        and f.id not in non_process
+        and not _bare_heading(f)
+        and describes_action(f.text)
     ]
     return CoverageReport(
         fragments_total=len(counted),
