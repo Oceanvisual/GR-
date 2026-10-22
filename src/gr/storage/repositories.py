@@ -232,6 +232,13 @@ class RunRepository(_Repository):
     async def list_for_document(self, doc_id: str) -> list[AnalysisRun]:
         return await self._select(t.analysis_runs.c.doc_id == doc_id)
 
+    async def latest_by_document(self) -> dict[str, AnalysisRun]:
+        """The newest run of every document, in one query (the documents list)."""
+        latest: dict[str, AnalysisRun] = {}
+        for run in await self._select():
+            latest.setdefault(run.doc_id, run)  # rows come newest first
+        return latest
+
     async def list_by_status(self, statuses: Iterable[RunStatus]) -> list[AnalysisRun]:
         return await self._select(t.analysis_runs.c.status.in_([s.value for s in statuses]))
 

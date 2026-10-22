@@ -16,6 +16,7 @@ from gr.api.documents import read_upload
 from gr.domain.document import Document, DocumentMetadata, Fragment
 from gr.errors import AppError
 from gr.services.documents import (
+    MAX_META_CHARS,
     DocumentService,
     FragmentWithContext,
     MetadataPatch,
@@ -28,7 +29,7 @@ from gr.web.labels import LABELS
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 TREE_OPEN_DEPTH = 1  # tree levels expanded on page load
-FORM_TEXT_LIMIT = 2000
+FORM_TEXT_LIMIT = MAX_META_CHARS
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)  # autoescape is on for .html
 templates.env.globals["labels"] = LABELS
@@ -63,6 +64,11 @@ def highlight(fragment: Fragment, start: int | None, end: int | None) -> Highlig
     if lo >= hi:
         return Highlight(text, "", "")
     return Highlight(text[:lo], text[lo:hi], text[hi:])
+
+
+def _offset(raw: str | None) -> int | None:
+    """A highlight offset from the URL; anything odd just means no highlight on a screen."""
+    return int(raw) if raw and raw.isascii() and raw.isdigit() and len(raw) < 12 else None
 
 
 def _clean(value: str | None) -> str | None:
@@ -126,7 +132,7 @@ async def _documents_page(
     )
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def documents_page(request: Request, state: StateDep, service: ServiceDep) -> HTMLResponse:
     return await _documents_page(request, state, service)
 
@@ -160,14 +166,12 @@ async def document_page(
     state: StateDep,
     service: ServiceDep,
     fragment: Annotated[str | None, Query()] = None,
-    start: Annotated[int | None, Query(ge=0)] = None,
-    end: Annotated[int | None, Query(ge=0)] = None,
-    duplicate: Annotated[bool, Query()] = False,
+    start: Annotated[str | None, Query()] = None,
+    end: Annotated[str | None, Query()] = None,
+    duplicate: Annotated[str | None, Query()] = None,
 ) -> HTMLResponse:
     try:
-        document = await service.get(doc_id)
-        tree = await service.structure(doc_id)
-        selected = await service.fragment(doc_id, fragment, True) if fragment else None
+        document, tree, selected = await service.page(doc_id, fragment)
     except AppError as error:
         return _error_page(request, error)
     runs = await state.repos.runs.list_for_document(doc_id)
@@ -182,8 +186,10 @@ async def document_page(
             "open_depth": TREE_OPEN_DEPTH,
             "runs": runs,
             "selected": selected,
-            "highlight": highlight(selected.fragment, start, end) if selected else None,
-            "duplicate": duplicate,
+            "highlight": (
+                highlight(selected.fragment, _offset(start), _offset(end)) if selected else None
+            ),
+            "duplicate": duplicate == "1",
             "llm_policy": state.settings.llm_data_policy,
         },
     )
@@ -214,8 +220,8 @@ async def fragment_partial(
     doc_id: str,
     fragment_id: str,
     service: ServiceDep,
-    start: Annotated[int | None, Query(ge=0)] = None,
-    end: Annotated[int | None, Query(ge=0)] = None,
+    start: Annotated[str | None, Query()] = None,
+    end: Annotated[str | None, Query()] = None,
 ) -> HTMLResponse:
     try:
         selected: FragmentWithContext = await service.fragment(doc_id, fragment_id, True)
@@ -227,6 +233,6 @@ async def fragment_partial(
         {
             "doc_id": doc_id,
             "selected": selected,
-            "highlight": highlight(selected.fragment, start, end),
+            "highlight": highlight(selected.fragment, _offset(start), _offset(end)),
         },
     )

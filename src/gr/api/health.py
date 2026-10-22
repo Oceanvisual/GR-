@@ -14,7 +14,7 @@ liveness = APIRouter()
 readiness = APIRouter(prefix="/api/v1", dependencies=[Depends(require_user)])
 
 
-@liveness.get("/healthz")
+@liveness.api_route("/healthz", methods=["GET", "HEAD"])
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 

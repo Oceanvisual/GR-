@@ -215,3 +215,31 @@ def test_document_text_is_never_rendered_as_markup(client: TestClient) -> None:
     client.post(f"/documents/{doc_id}/metadata", data={"title": "<script>alert('t')</script>"})
     html = client.get(f"/documents/{doc_id}").text
     assert "<script>alert" not in html and "&lt;script&gt;alert(&#39;t&#39;)" in html
+
+
+def test_odd_query_parameters_still_render_the_page(client: TestClient) -> None:
+    doc_id = upload(client, NPA / "reg261.docx")
+    fragment_id = nodes(client, doc_id)["п. 2.6"]
+    for params in (
+        {"start": "-1", "end": "5", "fragment": fragment_id},
+        {"start": "abc", "end": "9" * 40, "fragment": fragment_id},
+        {"duplicate": "maybe"},
+    ):
+        page = client.get(f"/documents/{doc_id}", params=params)
+        assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+        assert "<mark>" not in page.text
+    partial = client.get(f"/fragments/{doc_id}/{quote(fragment_id)}", params={"start": "x"})
+    assert partial.status_code == 200
+
+
+def test_head_requests(client: TestClient) -> None:
+    assert client.head("/").status_code == 200
+    assert client.head("/healthz").status_code == 200
+
+
+def test_metadata_values_are_capped_in_the_api(client: TestClient) -> None:
+    doc_id = upload(client, NPA / "reg261.docx")
+    url = f"/api/v1/documents/{doc_id}/metadata"
+    too_long = client.patch(url, json={"fields": {"number": "x" * 2001}})
+    assert too_long.status_code == 400
+    assert client.patch(url, json={"fields": {"number": "x" * 2000}}).status_code == 200

@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,8 @@ log = get_logger(__name__)
 CHUNK = 1 << 16
 PREVIEW_CHARS = 160
 _UNSAFE_FILENAME = re.compile(r"[\x00-\x1f\x7f]")
+MAX_META_CHARS = 2000
+MetaValue = Annotated[str, Field(max_length=MAX_META_CHARS)]
 MetaName = Literal[
     "act_type", "issuer", "date", "number", "title", "edition_date", "minjust_registration"
 ]
@@ -97,7 +99,7 @@ class FragmentWithContext(BaseModel):
 
 
 class MetadataPatch(BaseModel):
-    fields: dict[MetaName, str | None] = Field(default_factory=dict)
+    fields: dict[MetaName, MetaValue | None] = Field(default_factory=dict)
     user_source: str | None = Field(default=None, max_length=2000)
     relevance_checked_at: date | None = None
     relevance_note: str | None = Field(default=None, max_length=2000)
@@ -262,8 +264,9 @@ class DocumentService:
 
     async def list(self) -> list[DocumentSummary]:
         summaries = []
+        latest = await self.repos.runs.latest_by_document()
         for document in await self.repos.documents.list():
-            runs = await self.repos.runs.list_for_document(document.id)
+            run = latest.get(document.id)
             summaries.append(
                 DocumentSummary(
                     id=document.id,
@@ -272,7 +275,7 @@ class DocumentService:
                     uploaded_at=document.uploaded_at,
                     title=document.metadata.title.value,
                     text_layer=document.diagnostics.text_layer,
-                    last_run=LastRun(id=runs[0].id, status=runs[0].status) if runs else None,
+                    last_run=LastRun(id=run.id, status=run.status) if run else None,
                 )
             )
         return summaries
@@ -301,53 +304,76 @@ class DocumentService:
 
     async def structure(self, doc_id: str) -> StructureTree:
         document = await self.get(doc_id)
+        return _tree(document, await self.repos.fragments.list_for_document(doc_id))
+
+    async def page(
+        self, doc_id: str, fragment_id: str | None
+    ) -> tuple[Document, StructureTree, FragmentWithContext | None]:
+        """Everything the document screen shows, reading the document and its fragments once."""
+        document = await self.get(doc_id)
         fragments = await self.repos.fragments.list_for_document(doc_id)
-        children: dict[str, list[str]] = {}
-        for fragment in fragments:
-            if fragment.parent_id:
-                children.setdefault(fragment.parent_id, []).append(fragment.id)
-        nodes = [
-            FragmentNode(
-                **fragment.model_dump(exclude={"text", "doc_id"}, mode="json"),
-                children=children.get(fragment.id, []),
-                text_preview=fragment.text[:PREVIEW_CHARS],
-            )
-            for fragment in fragments
-        ]
-        stats = {
-            "sections": sum(1 for f in fragments if f.kind.value in ("section", "chapter")),
-            "articles": sum(1 for f in fragments if f.kind.value == "article"),
-            "points": sum(1 for f in fragments if f.kind.value in ("point", "part")),
-            "subpoints": sum(1 for f in fragments if f.kind.value == "subpoint"),
-            "pages": document.page_count or 0,
-            "chars": document.char_count,
-        }
-        return StructureTree(mode=document.structure_mode.value, stats=stats, nodes=nodes)
+        selected = _with_context(_find(fragments, fragment_id), fragments) if fragment_id else None
+        return document, _tree(document, fragments), selected
 
     async def fragment(
         self, doc_id: str, fragment_id: str, with_context: bool
     ) -> FragmentWithContext:
         await self.get(doc_id)
-        try:
-            fragment = await self.repos.fragments.get(doc_id, fragment_id)
-        except NotFoundError:
-            raise AppError("not_found", "Фрагмент не найден.") from None
         if not with_context:
+            try:
+                fragment = await self.repos.fragments.get(doc_id, fragment_id)
+            except NotFoundError:
+                raise AppError("not_found", "Фрагмент не найден.") from None
             return FragmentWithContext(fragment=fragment)
         fragments = await self.repos.fragments.list_for_document(doc_id)
-        by_id = {f.id: f for f in fragments}
-        siblings = [f for f in fragments if f.parent_id == fragment.parent_id]
-        index = next(i for i, f in enumerate(siblings) if f.id == fragment.id)
-        path: list[FragmentRef] = []
-        ancestor = by_id.get(fragment.parent_id or "")
-        while ancestor is not None and ancestor.parent_id is not None:
-            ref = FragmentRef(id=ancestor.id, label=ancestor.label, heading=ancestor.heading)
-            path.insert(0, ref)
-            ancestor = by_id.get(ancestor.parent_id)
-        return FragmentWithContext(
-            fragment=fragment,
-            path=path,
-            parent=by_id.get(fragment.parent_id or ""),
-            previous=siblings[index - 1] if index > 0 else None,
-            next=siblings[index + 1] if index + 1 < len(siblings) else None,
+        return _with_context(_find(fragments, fragment_id), fragments)
+
+
+def _find(fragments: list[Fragment], fragment_id: str) -> Fragment:
+    found = next((f for f in fragments if f.id == fragment_id), None)
+    if found is None:
+        raise AppError("not_found", "Фрагмент не найден.")
+    return found
+
+
+def _tree(document: Document, fragments: list[Fragment]) -> StructureTree:
+    children: dict[str, list[str]] = {}
+    for fragment in fragments:
+        if fragment.parent_id:
+            children.setdefault(fragment.parent_id, []).append(fragment.id)
+    nodes = [
+        FragmentNode(
+            **fragment.model_dump(exclude={"text", "doc_id"}, mode="json"),
+            children=children.get(fragment.id, []),
+            text_preview=fragment.text[:PREVIEW_CHARS],
         )
+        for fragment in fragments
+    ]
+    stats = {
+        "sections": sum(1 for f in fragments if f.kind.value in ("section", "chapter")),
+        "articles": sum(1 for f in fragments if f.kind.value == "article"),
+        "points": sum(1 for f in fragments if f.kind.value in ("point", "part")),
+        "subpoints": sum(1 for f in fragments if f.kind.value == "subpoint"),
+        "pages": document.page_count or 0,
+        "chars": document.char_count,
+    }
+    return StructureTree(mode=document.structure_mode.value, stats=stats, nodes=nodes)
+
+
+def _with_context(fragment: Fragment, fragments: list[Fragment]) -> FragmentWithContext:
+    """The fragment with its heading path, parent and neighbours among its siblings."""
+    by_id = {f.id: f for f in fragments}
+    siblings = [f for f in fragments if f.parent_id == fragment.parent_id]
+    index = next(i for i, f in enumerate(siblings) if f.id == fragment.id)
+    path: list[FragmentRef] = []
+    ancestor = by_id.get(fragment.parent_id or "")
+    while ancestor is not None and ancestor.parent_id is not None:
+        path.insert(0, FragmentRef(id=ancestor.id, label=ancestor.label, heading=ancestor.heading))
+        ancestor = by_id.get(ancestor.parent_id)
+    return FragmentWithContext(
+        fragment=fragment,
+        path=path,
+        parent=by_id.get(fragment.parent_id or ""),
+        previous=siblings[index - 1] if index > 0 else None,
+        next=siblings[index + 1] if index + 1 < len(siblings) else None,
+    )
