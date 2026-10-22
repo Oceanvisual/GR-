@@ -1,0 +1,39 @@
+# What is not the text of the act (FR-014, R-20, T067): service lines of reference systems,
+# editorial notes and lists of changing documents. Regular expressions, matched regardless of
+# case. They describe how the systems mark their additions, never a particular document (R-21).
+
+[service]
+# A block made only of these, spaces and punctuation is dropped: a banner, a footer line.
+phrases = [
+    'Документ\s+предоставлен\s+(?:КонсультантПлюс|ГАРАНТ\w*)',
+    'КонсультантПлюс\s+надежная\s+правовая\s+поддержка',
+    '(?:https?://)?(?:www\.)?(?:consultant|garant|kodeks)\.ru\S*',
+    'Дата\s+сохранения:?\s*\d{1,2}\.\d{1,2}\.\d{4}',
+    'Система\s+ГАРАНТ',
+    'Актуально\s+на:?\s*\d{1,2}\.\d{1,2}\.\d{4}',
+    'Страница\s+\d+\s+из\s+\d+',
+]
+
+[notes]
+# An editorial note in parentheses: an optional unit («п. 2.6», «часть 4», «Абзац десятый»,
+# «Наименование») and what happened to it («в ред.», «введен», «в редакции, введенной …»).
+unit = '(?:(?:п|пп|подп|ч|ст|абз)\.\s*[\w.]+\s+|(?:пункт|подпункт|часть|абзац|абзацы|статья|раздел|глава|наименование|преамбула|примечание|приложение)(?:\s+[\w.]+)?\s+)'
+# Whole words: «введение», «изменение», «исключение» are not notes.
+event = '(?:в\s+ред\.|в\s+редакции|введ[её]н[аоы]?\b|дополнительно\s+включен[аоы]?\b|утратил[аио]?\s+силу|исключ[её]н[аоы]?\b|изменен[аоы]?\b|с\s+изм\.)'
+# Notes that stand before the provision they are about.
+before = ['КонсультантПлюс:\s*примечание', 'Информация\s+об\s+изменениях:']
+# A note that a whole unit lost force; it follows that unit's heading or text. An абзац is not
+# among them: its note would follow the абзац before it.
+repeals = '^\(\s*(?:раздел|глава|статья|пункт|подпункт|часть)\s+(?:[\w.]+\s+)?(?:утратил[аио]?\s+силу|исключ[её]н[аоы]?\b)'
+
+[change_list]
+# The documents that changed the act: one block (КонсультантПлюс) or lines between separators
+# under a heading (Кодекс).
+single = '^Список\s+изменяющих\s+документов'
+start = '^(?:Информация\s+об\s+изменяющих\s+документах|Документ\s+с\s+изменениями,\s+внесенными)'
+entry = '^(?:(?:Федеральным|Областным|Конституционным)\s+)?(?:закон|постановлени|приказ|указ|распоряжени|решени|определени)\w*\s'
+separator = '^[_\-–—=*]{3,}$'
+
+[repealed]
+# A unit whose own text after its number says it is no longer in force.
+own_text = '^(?:(?:пункт|подпункт|абзац|часть|статья|глава|раздел)\s+(?:[\w.]+\s+)?)?(?:утратил[аио]?\s+силу|исключ[её]н[аоы]?\b)'

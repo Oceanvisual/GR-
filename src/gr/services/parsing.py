@@ -117,11 +117,18 @@ def parse_raw(raw: RawDocument, doc_id: str, limits: ParseLimits) -> ParsedDocum
             {"chars": len(structure.text.text), "max_chars": limits.max_chars},
         )
     warnings = [*diagnostics.warnings, *structure.warnings]
+    removed = diagnostics.removed_noise.model_copy(
+        update={
+            "spps_lines": structure.removed.spps_lines,
+            "editorial_notes": structure.removed.editorial_notes,
+        }
+    )
     diagnostics = IngestionDiagnostics.model_validate(
         {
             **diagnostics.model_dump(),
             "warnings": warnings,
             "structure": StructureChoice.model_validate(structure.choice.model_dump()),
+            "removed_noise": removed.model_dump(),
         }
     )
     return ParsedDocument(

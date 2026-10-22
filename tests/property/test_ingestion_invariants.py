@@ -22,7 +22,9 @@ from gr.ingestion.docx import DocxExtractor
 from gr.ingestion.pdf import PdfExtractor
 from gr.ingestion.txt import TxtExtractor
 from gr.services.parsing import ParsedDocument, ParseFailure, ParseLimits, parse_file, parse_raw
+from gr.structure.cleanup import clean
 from gr.structure.invariants import check_invariants
+from gr.structure.tree import normalized_blocks
 
 LIMITS = ParseLimits(max_pages=300, max_chars=1_000_000, max_unzipped_bytes=100 << 20)
 EXTRACTORS: dict[str, Extractor] = {
@@ -59,6 +61,12 @@ def letters_and_digits(text: str) -> list[str]:
     return [char for char in unicodedata.normalize("NFC", text) if char.isalnum()]
 
 
+def in_order(part: list[str], whole: list[str]) -> bool:
+    """`part` is `whole` with some characters left out, nothing moved."""
+    rest = iter(whole)
+    return all(char in rest for char in part)
+
+
 def assert_sound(raw: RawDocument | None, parsed: ParsedDocument, context: str) -> None:
     fragments, text = parsed.fragments, parsed.text
     if not fragments:
@@ -67,10 +75,18 @@ def assert_sound(raw: RawDocument | None, parsed: ParsedDocument, context: str) 
     problems = check_invariants(fragments, text)
     assert not problems, f"{context}: {problems[:5]}"
     if raw is not None:
-        # Nothing lost: every letter and digit of the extracted blocks is in the text, in order
-        # (cleaning drops only invisible marks, control characters and extra whitespace).
-        expected = [c for block in raw.blocks for c in letters_and_digits(block.text)]
+        # Nothing lost: normalisation drops only invisible marks, control characters and extra
+        # whitespace; cleaning takes out service lines and editorial notes (T067), and every
+        # note lands on a fragment. Every other letter and digit is in the text, in order.
+        cleaned = clean(normalized_blocks(raw))
+        expected = [c for block in cleaned.blocks for c in letters_and_digits(block.text)]
         assert letters_and_digits(text) == expected, f"{context}: text lost or altered"
+        placed = sorted(note for fragment in fragments for note in fragment.notes)
+        assert placed == sorted(n.text for n in cleaned.notes), f"{context}: a note is lost"
+        source = [c for block in raw.blocks for c in letters_and_digits(block.text)]
+        taken = [c for part in [*placed, *cleaned.dropped] for c in letters_and_digits(part)]
+        assert sorted(source) == sorted(expected + taken), f"{context}: text lost or invented"
+        assert in_order(expected, source), f"{context}: text reordered"
     for fragment in fragments:
         assert fragment.label.strip(), f"{context}: {fragment.id} has no label"
         assert fragment.id.strip() == fragment.id and "//" not in fragment.id, context

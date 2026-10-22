@@ -25,7 +25,6 @@ SIGNATURE_RE = re.compile(rf"(?P<date>{DATE}){_YEAR_WORD}\s*\n?\s*{_NUMBER}", re
 LEADING_DATE_NUMBER_RE = re.compile(rf"^(?P<date>{DATE}){_YEAR_WORD}\s*\|?\s*{_NUMBER}", re.I)
 EDITION_RE = re.compile(rf"\(ред\.\s*от\s+(?P<date>{DATE}){_YEAR_WORD}\)", re.I)
 CHANGES_RE = re.compile(rf"с изменениями на\s+(?P<date>{DATE})", re.I)
-CHANGE_LIST_RE = re.compile(r"Список изменяющих документов\s*\((?P<body>[^)]*)\)", re.I)
 MINJUST_RE = re.compile(
     rf"Зарегистрирован\w*\s+в\s+(?:Минюсте(?:\s+России)?|Министерстве\s+юстиции\s+"
     rf"Российской\s+Федерации)\s+(?P<date>{DATE}){_YEAR_WORD}\s*,?\s*"
@@ -74,11 +73,6 @@ def normalize_date(value: str) -> str:
         return f"{int(parts[0]):02d}.{MONTHS[parts[1].lower()]:02d}.{parts[2]}"
     day, month, year = value.split(".")
     return f"{int(day):02d}.{int(month):02d}.{year}"
-
-
-def _date_key(value: str) -> tuple[int, int, int]:
-    day, month, year = normalize_date(value).split(".")
-    return int(year), int(month), int(day)
 
 
 def _capitals(text: str) -> bool:
@@ -266,16 +260,7 @@ class _Extractor:
                 return self.cite(
                     match.start("date"), match.end("date"), normalize_date(match.group("date"))
                 )
-        if match := CHANGE_LIST_RE.search(head):
-            body_start = match.start("body")
-            dates = list(re.finditer(DATE, match.group("body")))
-            if dates:
-                latest = max(dates, key=lambda d: _date_key(d.group(0)))
-                return self.cite(
-                    body_start + latest.start(),
-                    body_start + latest.end(),
-                    normalize_date(latest.group(0)),
-                )
+        # The list of changing documents is a note, not text (cleanup.py): nothing to quote.
         return MetaField()
 
     def minjust(self) -> MetaField:

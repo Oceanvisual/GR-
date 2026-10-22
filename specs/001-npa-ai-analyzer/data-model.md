@@ -82,7 +82,8 @@ IngestionDiagnostics}`.
 `numbering_restored: bool` (DOCX, R-05), `numbering_profile: NumberingProfile`,
 `ocr: {status: OcrStatus, pages: list[int], mean_confidence?: float,
 low_confidence_pages: list[int], engine_version?: str, error?: str}`,
-`removed_noise: {spps_lines: int, header_footer_lines: int, editorial_notes: int}`,
+`removed_noise: {spps_lines: int, header_footer_lines: int, editorial_notes: int}` — служебные
+строки справочных систем и пометки (`structure/cleanup.py`, T067), колонтитулы PDF (адаптер),
 `analyzable: bool` — ложно при `needs_ocr` или `empty` без успешного OCR и пока OCR не завершён.
 `structure: {strategy: str, confidence: float, scores: dict[str, float], failed_strategies:
 dict[str, str]}` (R-22), `columns_pages: list[int]` — страницы с многоколоночной вёрсткой.
@@ -106,8 +107,8 @@ dict[str, str]}` (R-22), `columns_pages: list[int]` — страницы с мн
 | `parent_id?` | `str` | |
 | `order` | `int` | порядок в документе (обход в глубину) |
 | `text_source` | `TextSource` | `ocr` — текст получен распознаванием (FR-008) |
-| `repealed` | `bool` | «утратил силу» / «исключён»: в анализ не идёт (FR-014) |
-| `notes` | `list[str]` | редакционные пометки, вырезанные из текста (FR-014) |
+| `repealed` | `bool` | «утратил силу» / «исключён»: в анализ не идёт (FR-014); по собственному тексту единицы после номера или по пометке «(Раздел/Статья/Пункт … утратил силу …)» после неё (T067) |
+| `notes` | `list[str]` | редакционные пометки, вырезанные из текста (FR-014): у единицы, после которой пометка стоит, или у названной в ней («(п. 2.6 в ред. …)», «(Статья в редакции …)»); примечание системы — у следующей единицы; список изменяющих документов — у фрагмента, после которого стоит (акт, утверждаемый документ) |
 | `approved_doc?` | `str` | короткое название утверждаемого документа, если их несколько |
 
 Инвариант: интервалы потомков вложены в интервал родителя, `order` монотонен по `start`.
