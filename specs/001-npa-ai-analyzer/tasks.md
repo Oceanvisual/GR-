@@ -534,7 +534,7 @@ UI карты процессов.
     больше бюджета режется без потери фрагментов; результат детерминирован.
   - **Тесты**: `test_render.py`.
 
-- [ ] T029 [US2] S3 Discover — `src/gr/extraction/discovery.py`
+- [X] T029 [US2] S3 Discover — `src/gr/extraction/discovery.py`
   - **Цель**: [llm.md § S3](./contracts/llm.md#s3--discover--карта-процессов).
   - **Зависит**: T024, T027, T028, T012
   - **Файлы**: `extraction/discovery.py`, `extraction/prompts/discover.md`,
