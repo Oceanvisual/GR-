@@ -381,7 +381,7 @@ EconomicsResult
   layer: assumption            # производные от допущений (принцип III)
   assumptions_version: int
   per_initiative: list[InitiativeEconomics]
-  portfolio: {hours_per_year[y], fte[y], money[y], opex[y], capex, cum_net, roi, payback_months?}
+  portfolio: {initiative_ids, total: Effect | None}   # сумма атрибутированных; None — пуст
   overlaps: list[{operation_id, initiative_ids, combined_reduction[y]}]
   warnings: list[str]       # requires_input, сценарии не по порядку и т. п.
 
@@ -413,7 +413,13 @@ Effect = {hours[y], fte[y], money[y], opex[y], capex, net[y], cum_net, roi?, pay
 3. `build_portfolio` (`analysis/portfolio.py`) — состав портфеля, комбинирование, атрибуция.
 
 **Портфель** = не отклонены экспертом, `gate ≠ blocked`, не `excluded_as_alternative`,
-группа ≠ `not_recommended`.
+группа ≠ `not_recommended`. Состав один во всех сценариях: он берётся из приоритетов
+базового сценария. Из компоненты альтернатив входит лучшая по рангу из ещё допустимых
+(недопустимая или Not Recommended альтернатива не оставляет компоненту пустой); остальные
+получают `excluded_reason` «Альтернатива инициативе … с лучшим баллом». Реализация —
+`analysis/portfolio.py`: `build_portfolio(initiatives, assumptions, solo, priorities) ->
+EconomicsResult` дополняет автономный результат сценария составом, `attributed`,
+итогом и `overlaps`; входы по операциям читаются тем же `economics.read_terms`.
 
 Формулы — в [spec.md → Экономические формулы](./spec.md#экономические-формулы). Свойства,
 которые проверяются тестами (property-based на случайных портфелях):

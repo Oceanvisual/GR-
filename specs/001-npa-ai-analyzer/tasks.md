@@ -848,7 +848,7 @@ UI карты процессов.
     каждая инициатива получает ровно одну группу.
   - **Тесты**: `test_grouping.py`.
 
-- [ ] T065 [US5] Портфель и атрибуция — `src/gr/analysis/portfolio.py`
+- [X] T065 [US5] Портфель и атрибуция — `src/gr/analysis/portfolio.py`
   - **Цель**: FR-054, FR-055, определение портфеля; шаг 3 порядка вычислений (data-model §7).
   - **Зависит**: T047, T048, T039
   - **Файлы**: `analysis/portfolio.py`, `tests/unit/analysis/test_portfolio.py`,

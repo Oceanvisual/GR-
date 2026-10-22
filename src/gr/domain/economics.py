@@ -42,9 +42,24 @@ class InitiativeEconomics(DomainModel):
     excluded_reason: str | None = None
 
 
+class Overlap(DomainModel):
+    """An operation that several initiatives of the portfolio change (FR-054)."""
+
+    operation_id: str
+    initiative_ids: list[str] = Field(min_length=2)
+    combined_reduction: list[Decimal]  # R_y = 1 − Π (1 − g_i), one per year, ≤ 1
+
+
+class PortfolioEconomics(DomainModel):
+    initiative_ids: list[str]  # the members, by id
+    total: Effect | None = None  # the sum of attributed effects; None for an empty portfolio
+
+
 class EconomicsResult(DomainModel):
     scenario: Scenario
     layer: Literal[KnowledgeLayer.ASSUMPTION] = KnowledgeLayer.ASSUMPTION
     assumptions_version: int = Field(ge=1)
     per_initiative: list[InitiativeEconomics] = []
+    portfolio: PortfolioEconomics | None = None  # None until build_portfolio (T065)
+    overlaps: list[Overlap] = []
     warnings: list[str] = []
