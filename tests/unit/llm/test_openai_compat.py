@@ -321,3 +321,39 @@ def test_request_options_change_the_cache_key() -> None:
     plain = request_hash("m", Answer, "s", "u")
     assert plain == request_hash("m", Answer, "s", "u", {})
     assert plain != request_hash("m", Answer, "s", "u", {"reasoning": {"enabled": False}})
+
+
+@pytest.mark.parametrize("opening", ["```json", "```", "```JSON"])
+async def test_complete_json_fence_needs_no_repair(
+    llm_settings: Callable[..., Settings], calls: LlmCallRepository, opening: str
+) -> None:
+    content = f"  \n{opening}\n{json.dumps(VALID)}\n```\n "
+    recorder = Recorder(completion(content))
+    result = await ask(make_llm(llm_settings(), recorder, calls))
+    assert result.value == Answer.model_validate(VALID)
+    assert result.attempts == 1
+    assert len(recorder.requests) == 1
+    stored = await calls.list_for_run("run_1")
+    assert stored[0].status == "ok"
+    assert stored[0].response is not None
+    assert stored[0].response["choices"][0]["message"]["content"] == content
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '```json\n{"title":"x"}\n```',
+        '```json\n{"title":\n```',
+        f"Пояснение\n```json\n{json.dumps(VALID)}\n```",
+        f"```json\n{json.dumps(VALID)}\n```\nПояснение",
+        f"```json\n{json.dumps(VALID)}",
+        f"```json\n{json.dumps(VALID)}\n```\n```json\n{{}}\n```",
+    ],
+)
+async def test_fence_does_not_hide_schema_errors_or_extra_content(
+    llm_settings: Callable[..., Settings], content: str
+) -> None:
+    recorder = Recorder(completion(content), completion(content))
+    with pytest.raises(LLMInvalidOutputError):
+        await ask(make_llm(llm_settings(), recorder))
+    assert len(recorder.requests) == 2

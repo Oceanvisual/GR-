@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -37,6 +38,13 @@ Mode = Literal["json_schema", "json_object"]
 EXTRACTION_STAGES = frozenset({StageName.DISCOVER, StageName.DETAIL, StageName.VALIDATE})
 _CHARS_PER_TOKEN = 3  # rough for Russian text; used only when the provider omits `usage`
 _ERROR_DETAIL_LIMIT = 20
+_JSON_FENCE = re.compile(r"\A```(?:json)?[ \t]*\r?\n(?P<body>[\s\S]*?)\r?\n```\Z", re.IGNORECASE)
+
+
+def unwrap_json_fence(content: str) -> str:
+    """Remove one complete Markdown wrapper, never prose or malformed JSON content."""
+    match = _JSON_FENCE.fullmatch(content.strip())
+    return match["body"] if match else content
 
 
 class _Response(BaseModel):
@@ -129,7 +137,7 @@ class OpenAICompatibleLLM:
                 status, error = "truncated", LLMOutputTruncatedError()
             else:
                 try:
-                    value = schema.model_validate_json(response.content or "")
+                    value = schema.model_validate_json(unwrap_json_fence(response.content or ""))
                 except ValidationError as exc:
                     status = "invalid"
                     error = LLMInvalidOutputError()
