@@ -13,3 +13,7 @@ rare_ngrams = 32             # the quote's rarest n-grams that vote for candidat
 bucket_chars = 256           # granularity of candidate windows
 candidates = 6               # windows compared with rapidfuzz per quote and region
 direct_max_chars = 6000      # regions up to this size are compared directly, without the index
+
+[role]
+stem_chars = 5          # words are compared by their first characters: case endings differ
+min_share = 0.75        # share of the role's words that must appear in the quote

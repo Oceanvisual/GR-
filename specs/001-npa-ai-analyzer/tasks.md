@@ -502,7 +502,7 @@ UI карты процессов.
     одного месяца»; рассогласование значения → `deadline_not_in_quote`.
   - **Тесты**: `test_deadlines.py`.
 
-- [ ] T026 [P] [US2] Проверка исполнителя — `src/gr/grounding/roles.py`
+- [X] T026 [P] [US2] Проверка исполнителя — `src/gr/grounding/roles.py`
   - **Цель**: FR-025 для ролей.
   - **Зависит**: T019
   - **Файлы**: `grounding/roles.py`, `tests/unit/grounding/test_roles.py`
