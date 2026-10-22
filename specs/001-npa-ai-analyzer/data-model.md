@@ -142,6 +142,7 @@ matched_end?: int, original_fragment_id?: str (если relocated), reason?: str
 | `related_process_ids` | `list[str]` | interpretation |
 | `validation` | `ValidationReport` | |
 | `confidence` | `Confidence` | вычисляется |
+| `layer` | `interpretation` | сам процесс — факты акта, сведённые в модель (FR-093, T054); поля с основанием несут свой слой |
 | `review` | `ReviewState` | |
 
 `Role = {id, name: Grounded[str]}`. `DocumentRef = {name: Grounded[str], mandatory?: bool}`.
@@ -165,6 +166,7 @@ matched_end?: int, original_fragment_id?: str (если relocated), reason?: str
 | `handles_personal_data` | `bool` | interpretation |
 | `is_loop_back` | `bool` | возврат на доработку (разрешённый цикл) |
 | `confidence`, `review` | | |
+| `layer` | `interpretation` | как у процесса |
 
 ### `Deadline`
 `raw: Grounded[str]` (дословная формулировка), `value?: int`, `unit: DeadlineUnit`,
@@ -174,7 +176,7 @@ matched_end?: int, original_fragment_id?: str (если relocated), reason?: str
 ### `DecisionPoint`
 `id`, `after_operation_id`, `condition: Grounded[str]`,
 `outcomes: list[{label: str, next_operation_id?: str, ends_process: bool}]` (≥ 2),
-`criteria: list[Grounded[str]]` (например, основания отказа).
+`criteria: list[Grounded[str]]` (например, основания отказа), `layer = interpretation`.
 
 ### `ValidationReport`
 `issues: list[ValidationIssue]`, где `ValidationIssue = {code, severity: "error" | "warning",
@@ -256,7 +258,7 @@ element_id, message}`. Коды:
 `key: str` (например `op.proc_3.op_5.time_hours`), `scope: "global" | "process" | "operation" |
 "initiative" | "initiative_operation"`, `target_id?: str`, `unit: str`, `values: Triple`,
 `source: AssumptionSource`, `source_citation?: Citation`, `requires_input: bool`, `note?: str`,
-`updated_by`, `updated_at`.
+`updated_by`, `updated_at`, `layer = assumption` (при любом источнике: параметр модели, FR-093).
 
 ### Ключи
 | Scope | Ключ | Единица |

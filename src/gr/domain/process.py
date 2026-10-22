@@ -10,6 +10,9 @@ from gr.domain.enums import Confidence, DeadlineUnit, KnowledgeLayer, OperationT
 from gr.domain.review import ReviewState
 
 LEGALLY_SIGNIFICANT_TYPES = frozenset({OperationType.DECISION, OperationType.SIGNING})
+# A process, an operation, a decision point: the act's facts put into a model, an
+# interpretation (FR-093); each value with a basis carries its own layer.
+Interpretation = Literal[KnowledgeLayer.INTERPRETATION]
 
 
 class Grounded[T](DomainModel):
@@ -63,6 +66,7 @@ class Operation(DomainModel):
     handles_personal_data: bool = False
     is_loop_back: bool = False
     confidence: Confidence = Confidence.MEDIUM
+    layer: Interpretation = KnowledgeLayer.INTERPRETATION
     review: ReviewState = ReviewState()
 
     @model_validator(mode="after")
@@ -89,6 +93,7 @@ class DecisionPoint(DomainModel):
     condition: Grounded[str]
     outcomes: list[DecisionOutcome] = Field(min_length=2)
     criteria: list[Grounded[str]] = []
+    layer: Interpretation = KnowledgeLayer.INTERPRETATION
     review: ReviewState = ReviewState()
 
 
@@ -138,6 +143,7 @@ class Process(DomainModel):
     related_process_ids: list[str] = []
     validation: ValidationReport = ValidationReport()
     confidence: Confidence = Confidence.MEDIUM
+    layer: Interpretation = KnowledgeLayer.INTERPRETATION
     review: ReviewState = ReviewState()
 
     @model_validator(mode="after")

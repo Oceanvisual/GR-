@@ -241,23 +241,40 @@ initiatives: InitiativeTable}` с `ETag` новой версии: рейтинг
  document: Document, structure: list[Fragment],
  run: AnalysisRun (config_snapshot, usage),
  processes: list[Process], coverage, unverified,
- findings: list[Finding], initiatives: list[Initiative],
- assumptions: AssumptionSet, priority_config: PriorityConfig,
+ findings: list[Finding], initiatives: list[Initiative], no_change: list[NoChangeDecision],
+ excluded: dict[initiative_id, причина],          # вне расчёта по решениям эксперта
+ initiative_versions: dict[process_id, int],      # действующая версия инициатив (T052)
+ assumptions: AssumptionSet, priority_config: PriorityConfig, priority_config_version,
  economics: {conservative, base, optimistic: EconomicsResult},
  priority: list[PriorityResult],
- reviews: list[ReviewEvent],
- disclaimers: list[str]}
+ reviews: list[ReviewEvent],                      # весь журнал в порядке решений
+ disclaimers: list[str]}                          # баннеры таблицы сценария `scenario`
 ```
-У каждого элемента есть `layer` и `review.status` (FR-093).
+У каждого элемента есть `layer` и `review.status` (FR-093): процесс, операция и точка решения —
+`interpretation` (поля с основанием — свой слой), проблема и инициатива — `hypothesis`;
+`layer` есть также у допущений (`assumption`), экономики (`assumption`) и приоритета
+(`hypothesis`). Всё — с решениями эксперта и действующими версиями инициатив, как на экранах;
+выходы этапов не меняются. Схема генерируется из модели (`export/json_export.py`).
 
 ### `initiatives.csv` — колонки
 `rank;group;gate;score;initiative_id;title;process;operations;problem_patterns;solution_category;
 regulatory_mode;automation_level;hours_per_year_y1;fte_y1;money_equiv_y1;capex;opex_y1;net_y1;
 cum_net_horizon;roi_horizon;payback_months;in_portfolio;review_status;scenario;assumptions_version`
 
+Строки — строки таблицы `/initiatives` того же сценария с `include_rejected=true`, в её
+порядке; экономика — автономный эффект. Для людей и таблиц (T054): значения — подписи экрана
+(«Классическая автоматизация», «Отклонено», «да»/«нет»), а не коды; числа с десятичной
+запятой, округление только здесь (ROUND_HALF_EVEN): деньги — до копеек, часы — до десятых,
+FTE — до сотых, ROI (доля) — до десятитысячных, балл — до десятых; у инициативы вне расчёта
+числа пустые. Списки в ячейке — через «, »; строка с CRLF. Текст, который таблица приняла бы
+за формулу (начинается с `=`, `+`, `-`, `@`), записывается с апострофом.
+
 ### `operations.csv` — колонки
 `process_id;process_name;operation_id;seq;name;performer;action;operation_type;deadline_raw;
 legally_significant;fragment_labels;quotes;grounding;confidence;review_status`
+
+Все операции карты процессов с решениями эксперта (отклонённые — со статусом); `seq` — с 1,
+как на карте; основание — цитаты действия, несколько — через « | ».
 
 ## Mermaid-генерация (детерминированная)
 `flowchart TD`. Узлы `op_<n>["<seq> · <name> — <performer>"]` (не «<seq>.»: Mermaid читает

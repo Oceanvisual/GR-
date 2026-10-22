@@ -1081,7 +1081,7 @@ UI карты процессов.
 
 **Independent Test**: quickstart Q9.
 
-- [ ] T054 [P] [US7] Экспорт JSON и CSV — `src/gr/export/`
+- [X] T054 [P] [US7] Экспорт JSON и CSV — `src/gr/export/`
   - **Цель**: FR-092, FR-093, api.md § Экспорт.
   - **Зависит**: T051
   - **Файлы**: `export/json_export.py`, `csv_export.py`, `tests/unit/export/test_export.py`
@@ -1090,6 +1090,13 @@ UI карты процессов.
   - **Готово, когда**: JSON валиден по схеме из Pydantic; у каждого элемента есть `layer` и
     `review.status`; числа CSV равны таблице `/initiatives` для того же сценария.
   - **Тесты**: `test_export.py`.
+  - **Сделано**: `export/json_export.py` (`AnalysisExport`, `export_schema`),
+    `export/csv_export.py`, `services/exports.py` (данные — те же чтения, что у экранов).
+    У процесса, операции и точки решения появился `layer = interpretation`, у допущения —
+    `assumption`; в запрос S6 слой не попадает (промпт прежний). CSV — подписи экрана, запятая,
+    округление только при выгрузке, защита от формул. Валидность JSON — разбор моделью и
+    повторная сериализация байт в байт (`jsonschema` не подключал: новая зависимость).
+    Интеграционные тесты — `tests/integration/test_exports.py`.
 
 - [ ] T055 [US7] API и кнопки экспорта — `src/gr/api/exports.py`
   - **Цель**: эндпоинты экспорта, схема, кнопки на экране 4.

@@ -8,7 +8,7 @@ from pydantic import Field, model_validator
 
 from gr.domain.base import DomainModel, VersionedRecord
 from gr.domain.document import Citation
-from gr.domain.enums import AssumptionSource, Scenario
+from gr.domain.enums import AssumptionSource, KnowledgeLayer, Scenario
 
 AssumptionScope = Literal["global", "process", "operation", "initiative", "initiative_operation"]
 
@@ -96,6 +96,8 @@ class Assumption(DomainModel):
     note: str | None = None
     updated_by: str
     updated_at: datetime
+    # A parameter of the financial model, whatever its source (FR-093).
+    layer: Literal[KnowledgeLayer.ASSUMPTION] = KnowledgeLayer.ASSUMPTION
 
     @property
     def parameter(self) -> str:

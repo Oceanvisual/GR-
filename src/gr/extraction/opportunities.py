@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -15,6 +16,24 @@ from gr.extraction.render import escape, render_document
 from gr.extraction.schemas import OpportunitiesOut
 from gr.llm.base import LLMError, StructuredLLM
 from gr.pipeline.stages import StageError
+
+# The layer of the model's elements is for the reader (FR-093): the prompt stays as it was.
+_NOT_FOR_S6: dict[str, Any] = {
+    "layer": True,
+    "operations": {"__all__": {"layer"}},
+    "decision_points": {"__all__": {"layer"}},
+}
+
+
+def s6_payload(process: Process, catalog: ProblemCatalog) -> str:
+    """The process and the problem catalog, as S6 receives them."""
+    return json.dumps(
+        {
+            "process": process.model_dump(mode="json", exclude=_NOT_FOR_S6),
+            "problem_catalog": catalog.model_dump(mode="json"),
+        },
+        ensure_ascii=False,
+    )
 
 
 class OpportunityDraft(BaseModel):
@@ -80,13 +99,7 @@ async def extract_opportunities(
             if store is not None and (saved := await store.get(process.id)) is not None:
                 return OpportunityDraft.model_validate(saved)
             async with semaphore:
-                payload = json.dumps(
-                    {
-                        "process": process.model_dump(mode="json"),
-                        "problem_catalog": catalog.model_dump(mode="json"),
-                    },
-                    ensure_ascii=False,
-                )
+                payload = s6_payload(process, catalog)
                 # Quotes in the model are document text: a tag in them must not close the block.
                 answer = await llm.generate(
                     schema=OpportunitiesOut,

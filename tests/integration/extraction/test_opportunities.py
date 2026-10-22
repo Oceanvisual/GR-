@@ -1,13 +1,15 @@
 """S6 on a scripted LLM: only effective model data, explicit no-change and resumable items."""
 
+import json
 from typing import Any
 
 import pytest
 
+from gr.analysis.tech_guard import load_catalog
 from gr.domain.enums import KnowledgeLayer, OperationType, ReviewStatus, StageName
 from gr.domain.process import CoverageReport, Grounded, Operation, Process, ProcessModel
 from gr.domain.review import ReviewState
-from gr.extraction.opportunities import extract_opportunities
+from gr.extraction.opportunities import extract_opportunities, s6_payload
 from gr.llm.base import LLMTimeoutError
 from gr.llm.fake import FakeLLM
 from gr.pipeline.stages import StageError
@@ -70,6 +72,16 @@ async def test_model_is_delimited_and_rejected_operations_never_reach_s6() -> No
     assert "proc_2.op_1" not in call.user
     assert "problem_catalog" in call.user
     assert result.prompt_version.startswith("opportunities@")
+
+
+def test_the_layers_of_the_elements_do_not_reach_the_prompt() -> None:
+    # The elements' own layer (FR-093) is new; without it the prompt is as it was.
+    process = model(1).processes[0]
+    sent = json.loads(s6_payload(process, load_catalog()))["process"]
+    assert "layer" not in sent and process.layer == KnowledgeLayer.INTERPRETATION
+    assert all("layer" not in o for o in sent["operations"])
+    assert all("layer" not in d for d in sent["decision_points"])
+    assert sent["name"]["layer"] == process.name.layer  # the layer of a grounded value stays
 
 
 async def test_saved_items_skip_calls_and_only_failed_process_is_retried() -> None:
