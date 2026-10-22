@@ -193,7 +193,8 @@ async def test_screens_4_and_5_show_the_economics_with_its_wording(
         assert MODEL_DISCLAIMER in table.text and FR_058 in table.text and STUBS in table.text
         assert "₽" in table.text and "ч в 1-й год" in table.text
         assert 'value="conservative"' in table.text  # the scenario switch
-        assert "Будет рассчитано" in table.text  # the priority, until US5
+        groups = ("Quick Wins", "Strategic Projects", "Complex Initiatives", "Not Recommended")
+        assert any(g in table.text for g in groups)  # the priority column (T049)
         conservative = await env.client.get(f"/analyses/{run_id}/initiatives?scenario=conservative")
         assert "сценарий «Консервативный»" in conservative.text
 
@@ -211,7 +212,7 @@ async def test_screens_4_and_5_show_the_economics_with_its_wording(
             "Изменить допущения",
         ):
             assert text in card.text, text  # fmt: skip
-        assert "Будет рассчитано вместе с рейтингом" in card.text
+        assert "Балл: сумма вкладов" in card.text and "правило" in card.text
 
 
 async def test_scenarios_out_of_order_are_saved_and_marked(make_env: Callable[..., Any]) -> None:

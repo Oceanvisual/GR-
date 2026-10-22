@@ -1,0 +1,25 @@
+<div id="priority">
+<h2>Веса и пороги приоритизации</h2>
+{% if priority_message %}<div class="alert alert-info" role="status">{{ priority_message }}</div>{% endif %}
+{% if priority_problem %}<div class="alert alert-error" role="alert">{{ priority_problem }}</div>{% endif %}
+<form method="post" action="/analyses/{{ run.id }}/settings/priority" hx-post="/analyses/{{ run.id }}/settings/priority" hx-target="#priority" hx-swap="outerHTML show:#priority:top">
+<input type="hidden" name="priority_version" value="{{ priority_version }}">
+<p class="muted">Версия конфигурации {{ priority_version }}. Балл = 100 × Σ (вес × нормированное значение) / Σ весов, округление до 0,1. Значения по умолчанию — модельные. Дробные числа — через запятую или точку.</p>
+{% for group in priority_groups %}
+<h3>{{ group.title }}</h3>
+{% if group.error %}<div class="field-error" role="alert">{{ group.error }}</div>{% endif %}
+<div class="grid-form">
+{% for f in group.fields %}<label>{{ f.label }}<input name="{{ f.name }}" value="{{ f.value }}" inputmode="decimal">{% if f.error %}<span class="field-error" role="alert">{{ f.error }}</span>{% endif %}</label>{% endfor %}
+</div>
+{% endfor %}
+<div class="actions"><button type="submit">Сохранить и пересчитать рейтинг</button></div>
+</form>
+
+<h3>Рейтинг (сценарий «Базовый»)</h3>
+<table class="table">
+<thead><tr><th>№</th><th>Инициатива</th><th>Балл</th><th>Группа</th><th>Почему</th></tr></thead>
+<tbody>{% for row in ranking if row.priority %}{% set p = row.priority %}
+<tr><td>{{ p.rank or "—" }}</td><td><a href="/analyses/{{ run.id }}/initiatives/{{ row.initiative.id }}">{{ row.initiative.title }}</a></td><td>{{ p.score | number }}</td><td>{{ labels.group[p.group] }}</td><td>{{ p.group_reason }}</td></tr>
+{% else %}<tr><td colspan="5">Инициатив для рейтинга нет.</td></tr>{% endfor %}</tbody>
+</table>
+</div>

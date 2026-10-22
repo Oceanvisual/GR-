@@ -6,20 +6,26 @@ lost updates), logs the change for history and returns the recomputed table, wit
 call. Keys of elements that appeared later are filled from the profile when the set is read.
 """
 
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from gr.analysis.defaults import assumption_unit, build_assumptions
+from gr.analysis.defaults import SYSTEM_USER, assumption_unit, build_assumptions
 from gr.analysis.economics import AssumptionValidationError, compute_solo
+from gr.analysis.grouping import build_priorities
+from gr.analysis.portfolio import build_portfolio
+from gr.analysis.scoring import load_priority_config, score_initiatives
 from gr.api.deps import AppState
 from gr.domain.assumptions import Assumption, AssumptionSet, process_key
-from gr.domain.economics import EconomicsResult, Effect, InitiativeEconomics
+from gr.domain.economics import EconomicsResult, Effect, InitiativeEconomics, PortfolioEconomics
 from gr.domain.enums import (
     AssumptionSource,
     LegalGate,
+    PriorityGroup,
     ProblemPattern,
     ReviewStatus,
     Scenario,
@@ -33,6 +39,7 @@ from gr.domain.initiative import (
     NoChangeDecision,
     PostprocessIssue,
 )
+from gr.domain.priority import PriorityConfig, PriorityConfigVersion, PriorityResult
 from gr.domain.process import Operation, Process, ProcessModel
 from gr.domain.review import ReviewEvent
 from gr.errors import AppError
@@ -48,24 +55,25 @@ DEFAULTS_BANNER = (
     "организации на экране «Настройки модели»."
 )
 INCOMPLETE_BANNER = "Анализ неполный: часть процессов или инициатив не обработана."
-# entity_id of assumption-set events: a run has one set, whatever its version.
+# entity_id of assumption-set and priority-config events: one of each per run, any version.
 ASSUMPTIONS_ENTITY = "assumptions"
+PRIORITY_ENTITY = "priority_config"
 
 
 class InitiativeRow(BaseModel):
     initiative: Initiative
     process_name: str
     finding_patterns: list[ProblemPattern]
-    economics: InitiativeEconomics | None = None  # solo; None for a rejected initiative
-    priority: None = None
+    economics: InitiativeEconomics | None = None  # solo and attributed; None if rejected
+    priority: PriorityResult | None = None  # None for a rejected initiative
 
 
 class InitiativeTable(BaseModel):
     scenario: Scenario = Scenario.BASE
     assumptions_version: int | None = None
     priority_config_version: int | None = None
-    rows: list[InitiativeRow]
-    portfolio: None = None
+    rows: list[InitiativeRow]  # by rank, blocked last
+    portfolio: PortfolioEconomics | None = None
     banners: list[str]
     no_change: list[NoChangeDecision]
     issues: list[PostprocessIssue]
@@ -79,8 +87,31 @@ class InitiativeDetail(BaseModel):
     history: list[ReviewEvent]
     issues: list[PostprocessIssue]
     economics: dict[Scenario, Effect] = {}  # solo effect in each scenario
+    attributed: dict[Scenario, Effect] = {}  # its share of the portfolio, if in it
+    in_portfolio: bool = False
+    excluded_reason: str | None = None
+    priority: PriorityResult | None = None  # breakdown, rank, group and its rule
     assumptions: list[Assumption] = []  # what the effect is computed from
     assumptions_version: int | None = None
+    priority_config_version: int | None = None
+
+
+class PriorityUpdate(BaseModel):
+    config: PriorityConfig
+    version: int
+    initiatives: InitiativeTable
+
+
+@dataclass(frozen=True)
+class Evaluation:
+    """Everything computed on read for a run: economics, priorities, portfolio."""
+
+    model: ProcessModel
+    result: InitiativeSet
+    assumptions: AssumptionSet
+    config: PriorityConfigVersion
+    priorities: dict[str, PriorityResult]  # by initiative id; base scenario (FR-061)
+    economics: dict[Scenario, EconomicsResult]  # with the portfolio of the scenario
 
 
 class TripleIn(BaseModel):
@@ -126,18 +157,23 @@ def _reason(error: ValidationError) -> str:
     return "некорректное значение"
 
 
-def _compute(
-    model: ProcessModel,
-    initiatives: list[Initiative],
-    assumptions: AssumptionSet,
-    scenario: Scenario,
-) -> EconomicsResult:
+def _checked[T](compute: Callable[..., T], *args: Any) -> T:
+    """Run a calculation; assumptions it cannot use are a 400 with the keys."""
     try:
-        return compute_solo(model, initiatives, assumptions, scenario)
+        return compute(*args)
     except AssumptionValidationError as exc:
         raise AppError(
             "validation_error", "Допущения не позволяют выполнить расчёт.", {"keys": exc.problems}
         ) from None
+
+
+def _row_order(row: InitiativeRow) -> tuple[int, int, str]:
+    """By rank; blocked ones (no rank) after them, rejected ones (no priority) last."""
+    if row.priority is None:
+        return (2, 0, row.initiative.id)
+    if row.priority.rank is None:
+        return (1, 0, row.initiative.id)
+    return (0, row.priority.rank, row.initiative.id)
 
 
 class ResultsService:
@@ -179,9 +215,64 @@ class ResultsService:
         _, _, current = await self.inputs(run_id)
         return current
 
+    async def priority_config(self, run_id: str) -> PriorityConfigVersion:
+        """The latest version; version 1 comes from config/priority_default.toml."""
+        await self.analyses.get(run_id)
+        repository = self.state.repos.priority_configs
+        latest = await repository.latest(run_id)
+        if latest is not None:
+            return latest
+        first = PriorityConfigVersion(
+            run_id=run_id,
+            version=1,
+            config=load_priority_config(),
+            created_by=SYSTEM_USER,
+            created_at=datetime.now(UTC),
+        )
+        try:
+            await repository.add(first)
+        except ConflictError:
+            stored = await repository.latest(run_id)
+            assert stored is not None
+            return stored
+        return first
+
+    async def evaluate(
+        self, run_id: str, scenarios: Sequence[Scenario] = (Scenario.BASE,)
+    ) -> Evaluation:
+        """Solo economics of the base scenario → priorities → portfolio of each scenario
+        (data-model §7). Nothing is stored, nothing calls the LLM."""
+        model, result, assumptions = await self.inputs(run_id)
+        config = await self.priority_config(run_id)
+        initiatives = result.initiatives
+        base = _checked(compute_solo, model, initiatives, assumptions, Scenario.BASE)
+        priorities = build_priorities(
+            score_initiatives(initiatives, base, config.config),
+            config.config,
+            assumptions_version=assumptions.version,
+            config_version=config.version,
+        )
+        economics: dict[Scenario, EconomicsResult] = {}
+        for scenario in scenarios:
+            solo = (
+                base
+                if scenario == Scenario.BASE
+                else _checked(compute_solo, model, initiatives, assumptions, scenario)
+            )
+            economics[scenario] = _checked(
+                build_portfolio, initiatives, assumptions, solo, priorities
+            )
+        return Evaluation(
+            model=model,
+            result=result,
+            assumptions=assumptions,
+            config=config,
+            priorities={p.initiative_id: p for p in priorities},
+            economics=economics,
+        )
+
     async def economics(self, run_id: str, scenario: Scenario = Scenario.BASE) -> EconomicsResult:
-        model, result, current = await self.inputs(run_id)
-        return _compute(model, result.initiatives, current, scenario)
+        return (await self.evaluate(run_id, [scenario])).economics[scenario]
 
     async def table(
         self,
@@ -190,12 +281,14 @@ class ResultsService:
         scenario: Scenario = Scenario.BASE,
         process_id: str | None = None,
         gate: LegalGate | None = None,
+        group: PriorityGroup | None = None,
         include_rejected: bool = False,
     ) -> InitiativeTable:
         run = await self.analyses.get(run_id)
-        model, result, current = await self.inputs(run_id)
-        economics = _compute(model, result.initiatives, current, scenario)
-        solo = {e.initiative_id: e for e in economics.per_initiative}
+        found = await self.evaluate(run_id, [scenario])
+        model, result, current = found.model, found.result, found.assumptions
+        economics = found.economics[scenario]
+        by_id = {e.initiative_id: e for e in economics.per_initiative}
         names = {p.id: p.name.value for p in model.processes}
         finding_patterns = {f.id: f.pattern for f in result.findings}
         rows = [
@@ -205,19 +298,19 @@ class ResultsService:
                 finding_patterns=sorted(
                     {finding_patterns[k] for k in i.finding_ids if k in finding_patterns}
                 ),
-                economics=solo.get(i.id),
+                economics=by_id.get(i.id),
+                priority=found.priorities.get(i.id),
             )
             for i in result.initiatives
             if (process_id is None or i.process_id == process_id)
             and (gate is None or (i.gate and i.gate.status == gate))
             and (include_rejected or i.review.status != ReviewStatus.REJECTED)
-        ]
-        rows.sort(
-            key=lambda r: (
-                bool(r.initiative.gate and r.initiative.gate.status == LegalGate.BLOCKED),
-                r.initiative.id,
+            and (
+                group is None
+                or (i.id in found.priorities and found.priorities[i.id].group == group)
             )
-        )
+        ]
+        rows.sort(key=_row_order)
         items = current.by_key()
         used = {key for e in economics.per_initiative for key in e.assumption_keys}
         banners = [MODEL_DISCLAIMER]
@@ -229,7 +322,9 @@ class ResultsService:
         return InitiativeTable(
             scenario=scenario,
             assumptions_version=current.version,
+            priority_config_version=found.config.version,
             rows=rows,
+            portfolio=economics.portfolio,
             banners=banners,
             issues=result.issues,
             no_change=[
@@ -238,15 +333,21 @@ class ResultsService:
         )
 
     async def detail(self, run_id: str, initiative_id: str) -> InitiativeDetail:
-        model, result, current = await self.inputs(run_id)
+        found = await self.evaluate(run_id, list(Scenario))
+        model, result, current = found.model, found.result, found.assumptions
         item = next((i for i in result.initiatives if i.id == initiative_id), None)
         if item is None:
             raise AppError("not_found", "Инициатива не найдена.")
         process = next((p for p in model.processes if p.id == item.process_id), None)
         if process is None:
             raise AppError("not_found", "Процесс инициативы не найден.")
-        by_scenario = {s: _compute(model, [item], current, s).per_initiative for s in Scenario}
-        computed = by_scenario[Scenario.BASE]  # empty for a rejected initiative
+        own = {
+            scenario: next(
+                (e for e in economics.per_initiative if e.initiative_id == item.id), None
+            )
+            for scenario, economics in found.economics.items()
+        }  # all None for a rejected initiative
+        base = own[Scenario.BASE]
         items = current.by_key()
         return InitiativeDetail(
             initiative=item,
@@ -255,10 +356,63 @@ class ResultsService:
             findings=[f for f in result.findings if f.id in item.finding_ids],
             history=list(reversed(await self.state.repos.reviews.list_for_run(run_id, item.id))),
             issues=[i for i in result.issues if i.process_id == item.process_id],
-            economics={s: found[0].solo for s, found in by_scenario.items() if found},
-            assumptions=[items[key] for key in computed[0].assumption_keys] if computed else [],
+            economics={s: e.solo for s, e in own.items() if e},
+            attributed={s: e.attributed for s, e in own.items() if e and e.attributed},
+            in_portfolio=bool(base and base.in_portfolio),
+            excluded_reason=base.excluded_reason if base else None,
+            priority=found.priorities.get(item.id),
+            assumptions=[items[key] for key in base.assumption_keys] if base else [],
             assumptions_version=current.version,
+            priority_config_version=found.config.version,
         )
+
+    async def update_priority_config(
+        self,
+        run_id: str,
+        config: PriorityConfig,
+        *,
+        version: int,
+        user: str,
+        scenario: Scenario = Scenario.BASE,
+    ) -> PriorityUpdate:
+        """Save weights and thresholds as the next version, if `version` is still current."""
+        current = await self.priority_config(run_id)
+        if version != current.version:
+            raise AppError("version_conflict", details={"current_version": current.version})
+        if config == current.config:  # nothing changed: no new version, no event
+            table = await self.table(run_id, scenario=scenario)
+            return PriorityUpdate(config=current.config, version=current.version, initiatives=table)
+        now = datetime.now(UTC)
+        saved = PriorityConfigVersion(
+            run_id=run_id, version=current.version + 1, config=config, created_by=user,
+            created_at=now,
+        )  # fmt: skip
+        try:
+            await self.state.repos.priority_configs.add(saved)
+        except ConflictError:
+            latest = await self.state.repos.priority_configs.latest(run_id)
+            raise AppError(
+                "version_conflict",
+                details={"current_version": latest.version if latest else current.version},
+            ) from None
+        before = current.config.model_dump(mode="json")
+        after = config.model_dump(mode="json")
+        changed = [name for name in after if after[name] != before[name]]
+        await self.state.repos.reviews.add(
+            ReviewEvent(
+                id=new_id("rev"),
+                run_id=run_id,
+                entity_type="priority_config",
+                entity_id=PRIORITY_ENTITY,
+                action="edit",
+                patch={name: after[name] for name in changed},
+                previous={name: before[name] for name in changed},
+                user=user,
+                created_at=now,
+            )
+        )
+        table = await self.table(run_id, scenario=scenario)
+        return PriorityUpdate(config=config, version=saved.version, initiatives=table)
 
     async def update_assumptions(
         self,

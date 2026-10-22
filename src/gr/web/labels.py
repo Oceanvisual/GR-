@@ -168,6 +168,20 @@ LABELS.update(
             "high": "Высокий",
             "very_high": "Очень высокий",
         },
+        "group": {
+            "quick_win": "Quick Wins",
+            "strategic": "Strategic Projects",
+            "complex": "Complex Initiatives",
+            "not_recommended": "Not Recommended",
+        },
+        "criterion": {
+            "effect": "Эффект",
+            "feasibility": "Реализуемость",
+            "data_availability": "Доступность данных",
+            "integration": "Сложность интеграции (инв.)",
+            "risk": "Риски, худший из двух (инв.)",
+            "duration": "Срок внедрения (инв.)",
+        },
         "scenario": {
             "conservative": "Консервативный",
             "base": "Базовый",

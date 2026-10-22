@@ -75,7 +75,7 @@ async def test_html_table_detail_and_filters_are_safe(make_env: Callable[..., An
         assert "Операции и нормативные основания" in card.text
         assert "проверяет комплектность документов" in card.text
         assert "Рассмотренные альтернативы" in card.text
-        assert "Будет рассчитано" in card.text
+        assert "Балл: сумма вкладов" in card.text  # the priority breakdown (FR-070)
         assert "Срок внедрения: 3–6 месяцев" in card.text and "m3_6" not in card.text
         assert "<li>Нет данных</li>" in card.text  # no risks given: FR-071
         assert "Связанных инициатив нет" in card.text

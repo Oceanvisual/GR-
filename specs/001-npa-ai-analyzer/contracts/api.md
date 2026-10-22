@@ -139,7 +139,9 @@ Query-параметр `scenario` во всех запросах этого ра
 
 ### `GET /api/v1/analyses/{run_id}/initiatives/{initiative_id}` → `InitiativeDetail`
 Всё для экрана 5 (FR-070): инициатива, процесс и операции с цитатами, проблемы, экономика по
-трём сценариям, использованные допущения (ключи и значения), разбивка приоритета, статус
+трём сценариям (`economics` — автономный эффект, `attributed` — вклад в портфель,
+`in_portfolio`, `excluded_reason`), использованные допущения (ключи и значения), разбивка
+приоритета (`priority`: критерии, балл, ранг, группа, правило и причина), статус
 допустимости, связи, история решений по элементу.
 
 ### `GET /api/v1/analyses/{run_id}/economics` → `EconomicsResult`
@@ -162,9 +164,14 @@ action="edit")` с `patch` и `previous` по ключам. Изменённое
 сценариев возвращается в `warnings`, а не ошибкой.
 
 ### `GET /api/v1/analyses/{run_id}/priority-config` → `PriorityConfig` (+ `ETag`)
+Версия 1 создаётся при первом чтении из `config/priority_default.toml`.
 
 ### `PUT /api/v1/analyses/{run_id}/priority-config` (заголовок `If-Match`)
-Тело: `PriorityConfig`. Ответ — `200 {config, initiatives: InitiativeTable}`.
+Тело: `PriorityConfig` (невалидное — `400 validation_error`). Ответ — `200 {config, version,
+initiatives: InitiativeTable}` с `ETag` новой версии: рейтинг и портфель пересчитаны, ни одного
+вызова LLM. Та же конфигурация — та же версия, без события. Изменение пишет
+`ReviewEvent(entity_type="priority_config", entity_id="priority_config", action="edit")` с
+изменёнными полями в `patch` и `previous`.
 
 ## Экспертная проверка (US6)
 

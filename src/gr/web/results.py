@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
 from gr.api.deps import StateDep, require_user
-from gr.domain.enums import LegalGate, Scenario
+from gr.domain.enums import LegalGate, PriorityGroup, Scenario
 from gr.errors import AppError
 from gr.services.analyses import AnalysisService
 from gr.services.results import MODEL_DISCLAIMER, InitiativeDetail, ResultsService
@@ -22,14 +22,20 @@ async def initiatives_page(
     scenario: Scenario = Scenario.BASE,
     process_id: str | None = None,
     gate: str | None = None,
+    group: str | None = None,
 ) -> Response:
     try:
         try:
             selected_gate = LegalGate(gate) if gate else None
+            selected_group = PriorityGroup(group) if group else None
         except ValueError:
-            raise AppError("validation_error", "Неизвестный статус допустимости.") from None
+            raise AppError("validation_error", "Неизвестный фильтр.") from None
         table = await ResultsService(state).table(
-            run_id, scenario=scenario, process_id=process_id or None, gate=selected_gate
+            run_id,
+            scenario=scenario,
+            process_id=process_id or None,
+            gate=selected_gate,
+            group=selected_group,
         )
         run = await AnalysisService(state).get(run_id)
         model = await AnalysisService(state).processes(run_id)
@@ -47,6 +53,7 @@ async def initiatives_page(
             "process_names": {p.id: p.name.value for p in model.processes},
             "process_id": process_id,
             "gate": gate,
+            "group": group,
         },
     )
 

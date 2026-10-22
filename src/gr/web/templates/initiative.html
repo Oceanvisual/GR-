@@ -46,7 +46,30 @@
 <tbody>{% for a in detail.assumptions %}<tr><td>{{ assumption_labels[a.key] }}{% if a.requires_input %} <span class="badge badge-note">требует ввода</span>{% endif %}</td>{% for v in a.values.as_tuple %}<td>{{ v | plain }}</td>{% endfor %}<td>{{ a.unit }}</td><td>{{ labels.source[a.source] }}</td><td>{{ a.note or "" }}</td></tr>{% endfor %}</tbody>
 </table>
 <p><a href="/analyses/{{ run.id }}/settings">Изменить допущения</a></p>
+<h3>В портфеле</h3>
+{% if detail.in_portfolio %}
+<table class="table">
+<thead><tr><th>Вклад в портфель</th>{% for s in detail.attributed %}<th>{{ labels.scenario[s] }}</th>{% endfor %}</tr></thead>
+<tbody>
+<tr><th>Высвобождаемые часы в год</th>{% for e in detail.attributed.values() %}<td>{% for v in e.hours %}{{ v | number }}{% if not loop.last %} · {% endif %}{% endfor %}</td>{% endfor %}</tr>
+<tr><th>Накопленный чистый эффект</th>{% for e in detail.attributed.values() %}<td><strong>{{ e.cum_net | money }}</strong></td>{% endfor %}</tr>
+</tbody>
+</table>
+<p class="muted">Вклад — доля инициативы в совместном сокращении времени на операциях, общих с другими инициативами портфеля: итог портфеля равен сумме вкладов (FR-055).</p>
+{% else %}<p>Не входит в портфель: {{ detail.excluded_reason }}</p>{% endif %}
 {% else %}<p>Инициатива отклонена экспертом: эффект не рассчитывается.</p>{% endif %}
-<h2>Приоритет</h2><p>Будет рассчитано вместе с рейтингом инициатив.</p>
+<h2>Приоритет <span class="badge">Гипотеза</span></h2>
+{% if detail.priority %}{% set p = detail.priority %}
+<p>Балл <strong>{{ p.score | number }}</strong>{% if p.rank %} · место {{ p.rank }} в рейтинге{% else %} · вне рейтинга{% endif %} · группа «{{ labels.group[p.group] }}», правило {{ p.group_rule }}: {{ p.group_reason }}</p>
+<table class="table">
+<thead><tr><th>Критерий</th><th>Исходное значение</th><th>Нормированное</th><th>Вес</th><th>Вклад в балл</th></tr></thead>
+<tbody>{% for key, c in p.criteria.items() %}
+<tr><td>{{ labels.criterion[key] }}</td><td>{% if key == "effect" %}{{ c.raw | money }}{% elif key == "duration" %}{{ labels.duration[c.raw] }}{% else %}{{ labels.level[c.raw] }}{% endif %}{% if key == "feasibility" and detail.initiative.tech_guard and detail.initiative.tech_guard.requires_justification %} (минус штраф: требует обоснования){% endif %}</td><td>{{ c.normalized | number(2) }}</td><td>{{ c.weight | plain }}</td><td>{{ c.contribution | number(2) }}</td></tr>
+{% endfor %}
+<tr><th colspan="4">Балл: сумма вкладов, округлённая до 0,1</th><th>{{ p.score | number }}</th></tr>
+</tbody>
+</table>
+<p class="muted">Лёгкость внедрения {{ p.ease | number(2) }}. Веса и пороги — версия {{ detail.priority_config_version }}: <a href="/analyses/{{ run.id }}/settings#priority">изменить</a>.</p>
+{% else %}<p>Инициатива отклонена экспертом: приоритет не рассчитывается.</p>{% endif %}
 <h2>История решений</h2><ul>{% for event in detail.history %}<li>{{ event.created_at }} · {{ event.user }}: {{ event.action }} — {{ event.comment or "" }}</li>{% else %}<li>Решений эксперта пока нет.</li>{% endfor %}</ul>
 {% endblock %}

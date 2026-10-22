@@ -30,12 +30,14 @@ from gr.domain.assumptions import (
 )
 from gr.domain.enums import AssumptionSource
 from gr.domain.initiative import Initiative
+from gr.domain.priority import PriorityConfig
 from gr.domain.process import ProcessModel
 from gr.errors import AppError
 from gr.services.results import (
     MODEL_DISCLAIMER,
     AssumptionChange,
     AssumptionsPatch,
+    InitiativeTable,
     ResultsService,
     TripleIn,
 )
@@ -236,6 +238,121 @@ async def _context(
     }
 
 
+# --- weights and thresholds of the Priority Score (T049) -------------------------------------
+
+SCALARS: dict[str, tuple[str, str]] = {  # field → (label, what the model accepts)
+    "effect_ref": ("Опорный эффект, ₽: накопленный за горизонт эффект с оценкой 1", "больше 0"),
+    "tech_guard_penalty": ("Штраф реализуемости, если технология требует обоснования", "от 0 до 1"),
+    "cutoff_score": ("Порог отсечения балла (ниже — Not Recommended)", "от 0 до 100"),
+    "ease_threshold": ("Порог лёгкости внедрения для Quick Wins", "от 0 до 1"),
+    "effect_threshold": ("Порог нормированного эффекта для Strategic Projects", "от 0 до 1"),
+}
+MAPS: dict[str, tuple[str, str, str]] = {  # model field → (form prefix, title, error)
+    "weights": ("w", "Веса критериев", "Веса — неотрицательные числа с суммой больше 0."),
+    "level_map": ("lv", "Качественные оценки → число", "Значения — от 0 до 1."),
+    "duration_map": ("du", "Срок внедрения → число", "Значения — от 0 до 1."),
+}
+MAP_LABELS = {"weights": "criterion", "level_map": "level", "duration_map": "duration"}
+
+
+@dataclass(frozen=True)
+class Field:
+    name: str
+    label: str
+    value: str
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class FieldGroup:
+    key: str
+    title: str
+    fields: list[Field]
+    error: str | None = None
+
+
+def priority_groups(
+    config: PriorityConfig,
+    typed: Mapping[str, str] | None = None,
+    errors: Mapping[str, str] | None = None,
+) -> list[FieldGroup]:
+    typed, errors = typed or {}, errors or {}
+
+    def field(name: str, label: str, value: Decimal) -> Field:
+        return Field(name, label, typed.get(name, plain(value)), errors.get(name))
+
+    groups = []
+    for key, (prefix, title, _) in MAPS.items():
+        values: Mapping[str, Decimal] = getattr(config, key)
+        names: dict[str, str] = LABELS[MAP_LABELS[key]]
+        fields = [field(f"{prefix}:{k}", names[k], v) for k, v in values.items()]
+        groups.append(FieldGroup(key, title, fields, errors.get(key)))
+    scalars = [field(k, label, getattr(config, k)) for k, (label, _) in SCALARS.items()]
+    groups.insert(1, FieldGroup("thresholds", "Пороги и опорные величины", scalars))
+    return groups
+
+
+def read_priority_form(
+    form: Mapping[str, str], current: PriorityConfig
+) -> tuple[PriorityConfig | None, dict[str, str], dict[str, str]]:
+    """The configuration typed, errors by field or group, and the typed text (to show again)."""
+    errors: dict[str, str] = {}
+    typed: dict[str, str] = {}
+    data: dict[str, Any] = {}
+
+    def number(name: str) -> Decimal | None:
+        typed[name] = form.get(name, "").strip()
+        try:
+            return _number(typed[name])
+        except InvalidOperation:
+            errors[name] = "не число"
+            return None
+
+    for key, (prefix, _, _) in MAPS.items():
+        data[key] = {k: number(f"{prefix}:{k}") for k in getattr(current, key)}
+    for name in SCALARS:
+        data[name] = number(name)
+    if errors:
+        return None, errors, typed
+    try:
+        return PriorityConfig.model_validate(data), errors, typed
+    except ValidationError as exc:
+        for error in exc.errors():
+            loc = error.get("loc", ())
+            message = str(error.get("msg", ""))
+            target = next((key for key in MAPS if key in message or key in loc), None)
+            if target is not None:
+                errors[target] = MAPS[target][2]
+            elif loc and str(loc[0]) in SCALARS:
+                errors[str(loc[0])] = SCALARS[str(loc[0])][1].capitalize() + "."
+        if not errors:
+            errors["thresholds"] = "Некорректная конфигурация."
+        return None, errors, typed
+
+
+async def _priority_context(
+    state: AppState,
+    run_id: str,
+    *,
+    table: InitiativeTable | None = None,
+    typed: Mapping[str, str] | None = None,
+    errors: Mapping[str, str] | None = None,
+    message: str | None = None,
+    problem: str | None = None,
+) -> dict[str, Any]:
+    service = ResultsService(state)
+    current = await service.priority_config(run_id)
+    table = table or await service.table(run_id)
+    return {
+        "run": await service.analyses.get(run_id),
+        "priority_version": current.version,
+        "priority_groups": priority_groups(current.config, typed, errors),
+        "ranking": table.rows,
+        "priority_message": message,
+        "priority_problem": problem,
+    }
+
+
 def _error_page(request: Request, error: AppError) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "error.html", {"error": error}, status_code=error.status
@@ -246,9 +363,13 @@ def _error_page(request: Request, error: AppError) -> HTMLResponse:
 async def settings_page(request: Request, run_id: str, state: StateDep) -> Response:
     try:
         context = await _context(state, run_id)
+        context |= await _priority_context(state, run_id, table=context["table"])
     except AppError as error:
         return _error_page(request, error)
-    if request.query_params.get("saved"):
+    saved = request.query_params.get("saved")
+    if saved == "priority":
+        context["priority_message"] = "Сохранено. Рейтинг пересчитан без обращения к LLM."
+    elif saved:
         context["message"] = "Сохранено. Экономика пересчитана без обращения к LLM."
     return templates.TemplateResponse(request, "settings.html", context)
 
@@ -307,10 +428,61 @@ async def save_settings(request: Request, run_id: str, state: StateDep, user: Us
     context = await _context(
         state, run_id, typed=typed, errors=errors, message=message, problem=problem
     )
+    if not htmx:
+        context |= await _priority_context(state, run_id, table=context["table"])
     failed = problem is not None
     return templates.TemplateResponse(
         request,
         "partials/settings_form.html" if htmx else "settings.html",
         context,
         status_code=400 if failed and not htmx else 200,  # HTMX swaps only 2xx answers
+    )
+
+
+@router.post("/analyses/{run_id}/settings/priority", response_class=HTMLResponse)
+async def save_priority(request: Request, run_id: str, state: StateDep, user: UserDep) -> Response:
+    htmx = request.headers.get("HX-Request") == "true"
+    service = ResultsService(state)
+    try:
+        current = await service.priority_config(run_id)
+    except AppError as error:
+        return _error_page(request, error)
+    form = await request.form(max_files=0, max_fields=100)
+    values = {key: value for key, value in form.items() if isinstance(value, str)}
+    config, errors, typed = read_priority_form(values, current.config)
+    message: str | None = None
+    problem: str | None = None
+    version = values.get("priority_version", "")
+    if not version.isdigit():
+        problem = "Форма устарела: обновите страницу."
+    elif config is None:
+        problem = "Часть значений не принята: исправьте отмеченные поля."
+    else:
+        try:
+            update = await service.update_priority_config(
+                run_id, config, version=int(version), user=user
+            )
+        except AppError as error:
+            problem = error.message_ru
+        else:
+            if not htmx:
+                return RedirectResponse(
+                    f"/analyses/{run_id}/settings?saved=priority#priority", status_code=303
+                )
+            message = (
+                "Изменений нет."
+                if update.version == int(version)
+                else f"Сохранено: версия {update.version}. Рейтинг пересчитан без обращения к LLM."
+            )
+            typed = {}
+    context = await _priority_context(
+        state, run_id, typed=typed, errors=errors, message=message, problem=problem
+    )
+    if not htmx:
+        context = await _context(state, run_id) | context
+    return templates.TemplateResponse(
+        request,
+        "partials/priority_form.html" if htmx else "settings.html",
+        context,
+        status_code=400 if problem and not htmx else 200,
     )
