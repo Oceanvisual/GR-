@@ -6,7 +6,7 @@ import pytest
 from structure_helpers import FIXTURES, extract
 
 from gr.domain.document import Block, DocumentMetadata, IngestionDiagnostics, RawDocument
-from gr.domain.enums import DocFormat, TextLayerStatus
+from gr.domain.enums import DocFormat, TextLayerStatus, TextSource
 from gr.structure.builder import build_structure
 from gr.structure.metadata import extract_metadata, normalize_date
 
@@ -124,3 +124,52 @@ def test_citations_are_exact_and_inside_their_fragment(path: str) -> None:
 )
 def test_normalize_date(raw: str, normalized: str) -> None:
     assert normalize_date(raw) == normalized
+
+
+def _scan(*texts: str) -> RawDocument:
+    return RawDocument(
+        format=DocFormat.PDF,
+        blocks=[Block(text=t, page=1, text_source=TextSource.OCR) for t in texts],
+        diagnostics=IngestionDiagnostics(text_layer=TextLayerStatus.NEEDS_OCR),
+    )
+
+
+def test_a_scan_takes_its_date_and_number_from_its_head_only() -> None:
+    # The handwritten date and number of the order were lost; the first date OCR reads is
+    # the cited federal law's, and it must not become the order's.
+    result = build_structure(_scan(
+        "МИНИСТЕРСТВО ЗДРАВООХРАНЕНИЯ",
+        "ПРИКАЗ",
+        "25 Chimsbpk 1023 № _ SHE ow",
+        "Об утверждении стандартов медицинской помощи",
+        "В соответствии с Федеральным законом от 21 ноября 2011 г. № 323-ФЗ приказываю:",
+        "1. Утвердить стандарты.",
+    ), "d")  # fmt: skip
+    metadata = extract_metadata(result.fragments, result.text.text)
+    assert metadata.act_type.value == "Приказ"
+    assert (metadata.date.value, metadata.number.value) == (None, None)
+
+
+def test_a_scan_with_a_readable_head_keeps_its_requisites() -> None:
+    result = build_structure(_scan(
+        "МИНИСТЕРСТВО ЗДРАВООХРАНЕНИЯ",
+        "ПРИКАЗ",
+        "от 25 октября 2023 г. № 572н",
+        "Об утверждении стандартов медицинской помощи",
+        "1. Утвердить стандарты.",
+    ), "d")  # fmt: skip
+    metadata = extract_metadata(result.fragments, result.text.text)
+    assert (metadata.date.value, metadata.number.value) == ("25.10.2023", "572н")
+
+
+def test_an_act_cited_in_the_body_is_not_taken_for_the_document() -> None:
+    result = build_structure(_scan(
+        "МИНИСТЕРСТВО ЗДРАВООХРАНЕНИЯ",
+        "ПРИКАЗ неразборчиво",
+        "Об утверждении стандартов медицинской помощи",
+        "1. Утвердить стандарты.",
+        "2. Признать утратившими силу:",
+        "приказ Министерства здравоохранения от 24 декабря 2012 г. № 1556н «Об утверждении»;",
+    ), "d")  # fmt: skip
+    metadata = extract_metadata(result.fragments, result.text.text)
+    assert (metadata.date.value, metadata.number.value) == (None, None)

@@ -11,7 +11,7 @@ from importlib import resources
 from typing import Any
 
 from gr.domain.document import Citation, DocumentMetadata, Fragment, GroundingResult, MetaField
-from gr.domain.enums import FragmentKind, GroundingStatus
+from gr.domain.enums import FragmentKind, GroundingStatus, TextSource
 
 MONTHS = {
     "января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6, "июля": 7,
@@ -89,6 +89,11 @@ class _Extractor:
         self.text = text
         self.config = config
         self.lines: list[Line] = []
+        # A recognised head: its own date and number are often handwritten and lost, and the
+        # first ones OCR does read belong to the acts it cites (T070, U1).
+        self.recognised_head = any(
+            f.text_source == TextSource.OCR and f.start < config.head_chars for f in fragments
+        )
         offset = 0
         for raw in text[: config.head_chars].split("\n"):
             self.lines.append(Line(offset, offset + len(raw), raw))
@@ -157,7 +162,11 @@ class _Extractor:
                     and (not before or _capitals(before))
                 ):
                     official = official or (index, act, position)
-                elif position == 0 and re.search(r"\bот\s+\d", after):
+                elif (
+                    position == 0
+                    and re.search(r"\bот\s+\d", after)
+                    and line.end <= self.body_start  # in the body it cites another act
+                ):
                     cover = cover or (index, act, position)
                 break
             if official:
@@ -209,7 +218,8 @@ class _Extractor:
         windows: list[tuple[list[Line], bool]] = []
         if act_index is not None:
             windows.append((self.lines[act_index : act_index + 3], True))
-        windows.append(([line for line in self.lines if line.end <= self.body_start], False))
+        if not self.recognised_head:  # recognised: the act's lines only, empty beats wrong
+            windows.append(([line for line in self.lines if line.end <= self.body_start], False))
         for window, act_lines in windows:
             for line in window:
                 if not self._own_line(line):
@@ -230,6 +240,8 @@ class _Extractor:
                     self.cite(base + match.start("number"), base + match.end("number"),
                               match.group("number")),
                 )  # fmt: skip
+        if self.recognised_head:
+            return MetaField(), MetaField()
         return self.signature() or (MetaField(), MetaField())
 
     # --- title, edition, registration --------------------------------------------------
