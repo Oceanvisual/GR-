@@ -827,7 +827,7 @@ UI карты процессов.
 
 **Independent Test**: quickstart Q7.
 
-- [ ] T047 [P] [US5] Скоринг — `src/gr/analysis/scoring.py`
+- [X] T047 [P] [US5] Скоринг — `src/gr/analysis/scoring.py`
   - **Цель**: FR-060…FR-062, FR-065 (data-model §6).
   - **Зависит**: T044
   - **Файлы**: `config/priority_default.toml`, `analysis/scoring.py`,

@@ -337,6 +337,14 @@ effect_threshold: 0.4
 - `score = round_half_even(100 × Σ w_k·s_k / Σ w_k, 1)`
 - `ease = mean(s_feasibility, s_integration, s_duration)`
 
+Реализация — `analysis/scoring.py` (T047), значения по умолчанию — `config/priority_default.toml`
+(версия 1 конфигурации запуска). `raw` критерия: эффект — `CumNet_base_solo` (Decimal),
+риск — худший из двух уровней, остальные — уровень или корзина срока из S6. Вклад критерия
+`100·w·s/Σw` хранится с полной точностью: сумма вкладов — балл до округления. До группировки
+результат — `ScoreCard` (критерии, балл, `ease`, эффект, статус допустимости); группу добавляет
+`grouping.py` (T048). Ранг: округлённый балл по убыванию, затем эффект по убыванию, затем
+`initiative_id` (FR-065); `blocked` без ранга и не занимает место.
+
 ### `PriorityResult` (вычисляемый)
 `initiative_id`, `criteria: dict[str, {raw, normalized, weight, contribution}]`, `score`,
 `ease`, `group: PriorityGroup`, `group_rule: int`, `group_reason: str`, `gate: LegalGate`,
