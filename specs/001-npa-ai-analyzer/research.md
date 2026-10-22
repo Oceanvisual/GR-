@@ -353,7 +353,8 @@ T072 закрыт. Наивная сборка строк PDF по фрагме�
   передаётся текст ошибки. Затем — ошибка этапа `llm_invalid_output`.
 - Сетевые ошибки, 429 и 5xx: `max_retries=2` с экспоненциальной паузой (встроено в SDK),
   `timeout=LLM_TIMEOUT_S` (120), `max_tokens` задаётся явно для каждого этапа, `temperature=0`.
-- Модели задаются на этап: `LLM_MODEL_EXTRACTION` (этапы S3–S4), `LLM_MODEL_ANALYSIS` (S6).
+- Модели задаются на этап: `LLM_MODEL_EXTRACTION` (этапы S3–S4), `LLM_MODEL_ANALYSIS` (S6),
+  необязательная `LLM_MODEL_DISCOVERY` (только S3).
   По умолчанию обе — модель класса Sonnet. Окончательная модель — самая дешёвая из
   прошедших eval.
 - LLM-схемы (`extraction/schemas.py`) отделены от доменных моделей и делаются плоскими,
@@ -365,6 +366,11 @@ T072 закрыт. Наивная сборка строк PDF по фрагме�
 - Стартовые модели: `anthropic/claude-sonnet-5.5` для обоих этапов ($2 / $10 за 1M токенов
   вход/выход). Кандидат на удешевление — `anthropic/claude-haiku-5.5` ($0,1 / $0,5); замена
   только по итогам eval (T036, T059). Цены и список моделей — из `GET /api/v1/models` на 2026-10-21.
+- **Решено 2026-10-23 (eval T059, baseline `20261022T223329Z`):** S3 — `anthropic/claude-sonnet-5.5`
+  через `LLM_MODEL_DISCOVERY`, S4 и S6 — `anthropic/claude-haiku-5.5`. На Haiku точность процессов
+  0,73 при цели 0,80, с Sonnet на S3 — 0,95; S3 дорожает на $0,04–0,14 за документ. Sonnet на
+  OpenRouter не принимает `reasoning.enabled=false` («Reasoning is mandatory») — для него
+  `effort=low` по моделям в `config/llm.toml`.
 - По `supported_parameters` у Claude 5.x есть `response_format` и `structured_outputs`, но **нет
   `temperature`**. Проверить в T074: игнорируется ли `temperature=0` или запрос отклоняется, и
   как это сочетается с `provider.require_parameters=true`.

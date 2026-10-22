@@ -100,6 +100,9 @@ description: "Task list for 001-npa-ai-analyzer"
 - [ ] T071 [P] [manual] Dev-корпус НПА разных типов — `tests/fixtures/corpus/SOURCES.md`
   - **Цель**: проверка универсальности разбора без LLM (R-21, SC-012).
   - **Зависит**: T001
+  - **Статус**: 2026-10-23 — расширение корпуса, не блокирует: T036 закрыта на муниципальном
+    регламенте berezovsky_1073_2025, снимки T068 — на текущем корпусе (9 документов разных типов,
+    уровней и источников, SC-012 выполнен). Не хватает только регионального регламента.
   - **Файлы**: `tests/fixtures/corpus/*` (документы, `SOURCES.md`),
     `tests/fixtures/corpus/*.structure.json` (снимки, создаются в T068), `evals/markers.toml`
   - **Результат**: ≥ 6 НПА по матрице R-21 (типы, уровни власти, источники, форматы, один скан)
@@ -245,7 +248,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Тесты**: `test_policy.py`, `test_fake.py`.
 
 - [X] T013 LLM: OpenAI-совместимый клиент и кэш — `src/gr/llm/openai_compat.py`
-  - **Цель**: структурированные вызовы с retries, repair, учётом токенов (R-08).
+  - **Цель**: NFR-012; структурированные вызовы с retries, repair, учётом токенов, кэш ответов (R-08).
   - **Зависит**: T012, T009
   - **Файлы**: `llm/openai_compat.py`, `llm/cache.py`, `tests/unit/llm/test_openai_compat.py`
   - **Результат**: режимы `json_schema`, `json_object`, `auto`; один repair-повтор при
@@ -260,7 +263,8 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Тесты**: `test_openai_compat.py`, `test_cache.py`.
 
 - [X] T014 Фоновый runner — `src/gr/pipeline/runner.py`
-  - **Цель**: очередь, параллелизм, сохранение по этапам, возобновление (R-03).
+  - **Цель**: FR-091, NFR-010; очередь в процессе без брокера, параллелизм, сохранение по этапам,
+    возобновление (R-03).
   - **Зависит**: T009
   - **Файлы**: `pipeline/runner.py`, `pipeline/stages.py` (протокол `Stage`),
     `tests/integration/test_runner.py`
@@ -444,7 +448,7 @@ description: "Task list for 001-npa-ai-analyzer"
   - **Тесты**: `test_documents_api.py`.
 
 - [X] T023 [US1] Экраны документов — `src/gr/web/templates/documents.html`, `document.html`
-  - **Цель**: экраны 1, 2 из ui.md.
+  - **Цель**: FR-084, FR-090; экраны 1, 2 из ui.md.
     Трассировка: FR-013.
   - **Зависит**: T022
   - **Файлы**: `web/routes.py`, `templates/documents.html`, `document.html`,
@@ -535,7 +539,7 @@ UI карты процессов.
   - **Тесты**: `test_render.py`.
 
 - [X] T029 [US2] S3 Discover — `src/gr/extraction/discovery.py`
-  - **Цель**: [llm.md § S3](./contracts/llm.md#s3--discover--карта-процессов).
+  - **Цель**: FR-020; [llm.md § S3](./contracts/llm.md#s3--discover--карта-процессов).
   - **Зависит**: T024, T027, T028, T012
   - **Файлы**: `extraction/discovery.py`, `extraction/prompts/discover.md`,
     `tests/integration/extraction/test_discovery.py`, `tests/fixtures/llm/discover_*.json`
@@ -547,7 +551,7 @@ UI карты процессов.
   - **Тесты**: `test_discovery.py`.
 
 - [X] T030 [US2] S4 Detail — `src/gr/extraction/detailing.py`
-  - **Цель**: [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций).
+  - **Цель**: FR-022; [llm.md § S4](./contracts/llm.md#s4--detail--декомпозиция-процесса-до-операций).
     Трассировка: FR-021, FR-023, NFR-004.
   - **Зависит**: T029
   - **Файлы**: `extraction/detailing.py`, `extraction/prompts/detail.md`,
@@ -605,7 +609,7 @@ UI карты процессов.
   - **Тесты**: `test_mermaid.py`.
 
 - [X] T034 [US2] Экраны статуса и карты процессов — `src/gr/web/templates/run.html`, `processes.html`
-  - **Цель**: экраны 2a и 3 из ui.md.
+  - **Цель**: FR-072, NFR-011; экраны 2a и 3 из ui.md.
     Трассировка: FR-071.
   - **Зависит**: T032, T033
   - **Файлы**: `web/routes.py`, `templates/run.html`, `processes.html`, `partials/*`,
@@ -629,7 +633,7 @@ UI карты процессов.
 
 - [X] T036 [US2] [manual] Eval-харнесс и эталонная разметка — `evals/`
   - **Цель**: eval-гейт (принцип V, R-17). Используется skill `/eval`.
-  - **Зависит**: T032, T006, T071, T074
+  - **Зависит**: T032, T006, T074
   - **Файлы**: `evals/dataset.jsonl`, `target.py`, `config.toml`, `metrics.py`, `run.py`,
     `replay.py`, `review.py`, `golden/*.json`, `markers.toml`, `tests/unit/evals/`
   - **Результат**: метрики — полнота и точность процессов, полнота операций, доля `verified`,
@@ -697,7 +701,7 @@ UI карты процессов.
   - **Тесты**: `test_relations.py`.
 
 - [X] T040 [US3] S6 Opportunities — `src/gr/extraction/opportunities.py`
-  - **Цель**: [llm.md § S6](./contracts/llm.md#s6--opportunities--проблемы-и-инициативы).
+  - **Цель**: FR-040, FR-041; [llm.md § S6](./contracts/llm.md#s6--opportunities--проблемы-и-инициативы).
     Трассировка: FR-042, FR-046.
   - **Зависит**: T027, T031, T037
   - **Файлы**: `extraction/opportunities.py`, `extraction/prompts/opportunities.md`,
@@ -709,7 +713,7 @@ UI карты процессов.
   - **Тесты**: `test_opportunities.py`.
 
 - [X] T041 [US3] S7 Postprocess и подключение к runner — `src/gr/validation/postprocess.py`
-  - **Цель**: llm.md § S6 «Валидация» (п. 1–6).
+  - **Цель**: FR-047; llm.md § S6 «Валидация» (п. 1–6).
     Трассировка: FR-042, FR-044.
   - **Зависит**: T038, T039, T040
   - **Файлы**: `validation/postprocess.py`, `pipeline/analysis.py`,
@@ -938,9 +942,9 @@ UI карты процессов.
     eval reg261 перенесены по тексту, все 101 указывают на те же абзацы. Запасной путь даты
     редакции из списка изменяющих документов удалён: цитаты у него больше нет (FR-006).
 
-- [X] T068 [US1] Профили нумерации: законы, составные приказы, таблицы — `src/gr/structure/profiles.py`
+- [X] T068 [US1] Профили нумерации: законы, составные приказы, таблицы — `src/gr/structure/regulation.py`, `patterns.py`, `builder.py`
   - **Цель**: FR-010, FR-011, FR-016 для актов, отличных от регламентов (R-06).
-  - **Зависит**: T020, T067, T071, T078
+  - **Зависит**: T020, T067, T078
   - **Файлы**: `structure/profiles.py`, `structure/builder.py`, `config/structure_patterns.toml`,
     `tests/unit/structure/test_profiles.py`, `tests/corpus/test_structure_regression.py`
   - **Результат**: автоматический выбор профиля `regulation` / `law` / `generic`; «§»; снимки
@@ -1155,7 +1159,7 @@ UI карты процессов.
 
 **Independent Test**: quickstart «Запуск (сервер)», Q13.
 
-- [X] T056 [US8] Docker и доставка через `/deploy-kit` — `Dockerfile`, `docker-compose.yml`
+- [X] T056 [US8] Docker и доставка через `/deploy-kit` — `Dockerfile`, `deploy/compose.prod.yml`
   - **Цель**: R-16. Изменение CI и деплоя — согласовать до выполнения.
   - **Зависит**: T032, T073
   - **Файлы**: `Dockerfile`, `compose.prod.yml`, `.github/workflows/*`, runbook (генерирует
