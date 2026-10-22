@@ -207,7 +207,7 @@ async def _context(
     problem: str | None = None,
 ) -> dict[str, Any]:
     service = ResultsService(state)
-    model, result, current = await service.inputs(run_id)
+    effective, current = await service.inputs(run_id)
     table = await service.table(run_id)
     shown = [
         replace(
@@ -223,7 +223,7 @@ async def _context(
                 for group in section.groups
             ],
         )
-        for section in sections(model, result.initiatives, current)
+        for section in sections(effective.calculation_model(), effective.calculable(), current)
     ]
     return {
         "run": await service.analyses.get(run_id),
@@ -379,14 +379,14 @@ async def save_settings(request: Request, run_id: str, state: StateDep, user: Us
     htmx = request.headers.get("HX-Request") == "true"
     service = ResultsService(state)
     try:
-        model, result, current = await service.inputs(run_id)
+        effective, current = await service.inputs(run_id)
     except AppError as error:
         return _error_page(request, error)
     form = await request.form(max_files=0, max_fields=MAX_FIELDS)
     values = {key: value for key, value in form.items() if isinstance(value, str)}
     rows = [
         row
-        for section in sections(model, result.initiatives, current)
+        for section in sections(effective.calculation_model(), effective.calculable(), current)
         for group in section.groups
         for row in group.rows
     ]

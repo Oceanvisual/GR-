@@ -4,6 +4,8 @@ Economics is computed on every read from the current assumption set (FR-056, R-1
 is stored but the assumptions. An edit saves the next version of the set (If-Match against
 lost updates), logs the change for history and returns the recomputed table, with no LLM
 call. Keys of elements that appeared later are filled from the profile when the set is read.
+Everything is computed from the analysis as the expert left it (data-model §8): rejected
+elements are out of the calculations, edited ones count with their new values.
 """
 
 from collections.abc import Callable, Sequence
@@ -17,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from gr.analysis.defaults import SYSTEM_USER, assumption_unit, build_assumptions
 from gr.analysis.economics import AssumptionValidationError, compute_solo
 from gr.analysis.grouping import build_priorities
+from gr.analysis.overlay import EffectiveState
 from gr.analysis.portfolio import build_portfolio
 from gr.analysis.scoring import load_priority_config, score_initiatives
 from gr.api.deps import AppState
@@ -29,21 +32,14 @@ from gr.domain.enums import (
     ProblemPattern,
     ReviewStatus,
     Scenario,
-    StageName,
 )
 from gr.domain.ids import new_id
-from gr.domain.initiative import (
-    Finding,
-    Initiative,
-    InitiativeSet,
-    NoChangeDecision,
-    PostprocessIssue,
-)
+from gr.domain.initiative import Finding, Initiative, NoChangeDecision, PostprocessIssue
 from gr.domain.priority import PriorityConfig, PriorityConfigVersion, PriorityResult
-from gr.domain.process import Operation, Process, ProcessModel
+from gr.domain.process import Operation, Process
 from gr.domain.review import ReviewEvent
 from gr.errors import AppError
-from gr.services.analyses import AnalysisService
+from gr.services.analyses import AnalysisService, Outputs
 from gr.storage.repositories import ConflictError
 
 MODEL_DISCLAIMER = (
@@ -55,6 +51,10 @@ DEFAULTS_BANNER = (
     "организации на экране «Настройки модели»."
 )
 INCOMPLETE_BANNER = "Анализ неполный: часть процессов или инициатив не обработана."
+STALE_BANNER = (
+    "Часть инициатив требует пересмотра: эксперт изменил процесс, операцию или проблему, "
+    "на которых они построены."
+)
 # entity_id of assumption-set and priority-config events: one of each per run, any version.
 ASSUMPTIONS_ENTITY = "assumptions"
 PRIORITY_ENTITY = "priority_config"
@@ -64,8 +64,9 @@ class InitiativeRow(BaseModel):
     initiative: Initiative
     process_name: str
     finding_patterns: list[ProblemPattern]
-    economics: InitiativeEconomics | None = None  # solo and attributed; None if rejected
-    priority: PriorityResult | None = None  # None for a rejected initiative
+    economics: InitiativeEconomics | None = None  # solo and attributed; None if excluded
+    priority: PriorityResult | None = None  # None for an excluded initiative
+    excluded_reason: str | None = None  # out of the calculations by the expert's decisions
 
 
 class InitiativeTable(BaseModel):
@@ -106,8 +107,7 @@ class PriorityUpdate(BaseModel):
 class Evaluation:
     """Everything computed on read for a run: economics, priorities, portfolio."""
 
-    model: ProcessModel
-    result: InitiativeSet
+    effective: EffectiveState  # the analysis as the expert left it
     assumptions: AssumptionSet
     config: PriorityConfigVersion
     priorities: dict[str, PriorityResult]  # by initiative id; base scenario (FR-061)
@@ -181,26 +181,20 @@ class ResultsService:
         self.state = state
         self.analyses = AnalysisService(state)
 
-    async def initiative_set(self, run_id: str) -> InitiativeSet:
-        await self.analyses.get(run_id)
-        output = await self.state.repos.stage_outputs.get(run_id, StageName.POSTPROCESS)
-        if output is None:
-            raise AppError("not_found", "Инициативы ещё не готовы.")
-        return InitiativeSet.model_validate(output)
+    async def inputs(self, run_id: str) -> tuple[EffectiveState, AssumptionSet]:
+        """What the economics of the run is computed from: the analysis as the expert left it
+        and the current assumptions. Their keys follow the stored outputs, so a decision adds or
+        drops none (a reopened operation finds its values again)."""
+        outputs = await self.analyses.outputs(run_id, initiatives=True)
+        return outputs.effective, await self._current(run_id, outputs)
 
-    async def inputs(self, run_id: str) -> tuple[ProcessModel, InitiativeSet, AssumptionSet]:
-        """What the economics of the run is computed from: processes, initiatives, assumptions."""
-        result = await self.initiative_set(run_id)
-        model = await self.analyses.processes(run_id)
-        return model, result, await self._current(run_id, model, result)
-
-    async def _current(
-        self, run_id: str, model: ProcessModel, result: InitiativeSet
-    ) -> AssumptionSet:
+    async def _current(self, run_id: str, outputs: Outputs) -> AssumptionSet:
         """The latest set, created from the profile or completed with keys of new elements."""
         repository = self.state.repos.assumptions
         latest = await repository.latest(run_id)
-        built = build_assumptions(model, result.initiatives, existing=latest, run_id=run_id)
+        built = build_assumptions(
+            outputs.model, outputs.result.initiatives, existing=latest, run_id=run_id
+        )
         if built is latest:
             return built
         try:
@@ -212,7 +206,7 @@ class ResultsService:
         return built
 
     async def assumptions(self, run_id: str) -> AssumptionSet:
-        _, _, current = await self.inputs(run_id)
+        _, current = await self.inputs(run_id)
         return current
 
     async def priority_config(self, run_id: str) -> PriorityConfigVersion:
@@ -242,9 +236,9 @@ class ResultsService:
     ) -> Evaluation:
         """Solo economics of the base scenario → priorities → portfolio of each scenario
         (data-model §7). Nothing is stored, nothing calls the LLM."""
-        model, result, assumptions = await self.inputs(run_id)
+        effective, assumptions = await self.inputs(run_id)
         config = await self.priority_config(run_id)
-        initiatives = result.initiatives
+        model, initiatives = effective.calculation_model(), effective.calculable()
         base = _checked(compute_solo, model, initiatives, assumptions, Scenario.BASE)
         priorities = build_priorities(
             score_initiatives(initiatives, base, config.config),
@@ -263,8 +257,7 @@ class ResultsService:
                 build_portfolio, initiatives, assumptions, solo, priorities
             )
         return Evaluation(
-            model=model,
-            result=result,
+            effective=effective,
             assumptions=assumptions,
             config=config,
             priorities={p.initiative_id: p for p in priorities},
@@ -286,10 +279,11 @@ class ResultsService:
     ) -> InitiativeTable:
         run = await self.analyses.get(run_id)
         found = await self.evaluate(run_id, [scenario])
-        model, result, current = found.model, found.result, found.assumptions
+        effective, current = found.effective, found.assumptions
+        result = effective.result
         economics = found.economics[scenario]
         by_id = {e.initiative_id: e for e in economics.per_initiative}
-        names = {p.id: p.name.value for p in model.processes}
+        names = {p.id: p.name.value for p in effective.model.processes}
         finding_patterns = {f.id: f.pattern for f in result.findings}
         rows = [
             InitiativeRow(
@@ -300,6 +294,7 @@ class ResultsService:
                 ),
                 economics=by_id.get(i.id),
                 priority=found.priorities.get(i.id),
+                excluded_reason=effective.excluded.get(i.id),
             )
             for i in result.initiatives
             if (process_id is None or i.process_id == process_id)
@@ -317,6 +312,8 @@ class ResultsService:
         if any(items[key].source == AssumptionSource.DEFAULT_PROFILE for key in used):
             banners.append(DEFAULTS_BANNER)
         banners += economics.warnings
+        if any(row.initiative.stale for row in rows):
+            banners.append(STALE_BANNER)
         if not run.completeness.complete:
             banners.append(INCOMPLETE_BANNER)
         return InitiativeTable(
@@ -334,11 +331,11 @@ class ResultsService:
 
     async def detail(self, run_id: str, initiative_id: str) -> InitiativeDetail:
         found = await self.evaluate(run_id, list(Scenario))
-        model, result, current = found.model, found.result, found.assumptions
-        item = next((i for i in result.initiatives if i.id == initiative_id), None)
+        effective, current = found.effective, found.assumptions
+        item = next((i for i in effective.initiatives if i.id == initiative_id), None)
         if item is None:
             raise AppError("not_found", "Инициатива не найдена.")
-        process = next((p for p in model.processes if p.id == item.process_id), None)
+        process = next((p for p in effective.model.processes if p.id == item.process_id), None)
         if process is None:
             raise AppError("not_found", "Процесс инициативы не найден.")
         own = {
@@ -346,20 +343,20 @@ class ResultsService:
                 (e for e in economics.per_initiative if e.initiative_id == item.id), None
             )
             for scenario, economics in found.economics.items()
-        }  # all None for a rejected initiative
+        }  # all None for an excluded initiative
         base = own[Scenario.BASE]
         items = current.by_key()
         return InitiativeDetail(
             initiative=item,
             process=process,
             operations=[o for o in process.operations if o.id in item.operation_ids],
-            findings=[f for f in result.findings if f.id in item.finding_ids],
+            findings=[f for f in effective.findings if f.id in item.finding_ids],
             history=list(reversed(await self.state.repos.reviews.list_for_run(run_id, item.id))),
-            issues=[i for i in result.issues if i.process_id == item.process_id],
+            issues=[i for i in effective.result.issues if i.process_id == item.process_id],
             economics={s: e.solo for s, e in own.items() if e},
             attributed={s: e.attributed for s, e in own.items() if e and e.attributed},
             in_portfolio=bool(base and base.in_portfolio),
-            excluded_reason=base.excluded_reason if base else None,
+            excluded_reason=effective.excluded.get(item.id, base.excluded_reason if base else None),
             priority=found.priorities.get(item.id),
             assumptions=[items[key] for key in base.assumption_keys] if base else [],
             assumptions_version=current.version,
@@ -424,12 +421,12 @@ class ResultsService:
         scenario: Scenario = Scenario.BASE,
     ) -> AssumptionsUpdate:
         """Save the changes as the next version, if `version` is still the current one."""
-        model, result, current = await self.inputs(run_id)
+        effective, current = await self.inputs(run_id)
         if version != current.version:
             raise AppError("version_conflict", details={"current_version": current.version})
         now = datetime.now(UTC)
         items = current.by_key()
-        processes = {p.id for p in model.processes}
+        processes = {p.id for p in effective.model.processes}
         problems: dict[str, str] = {}
         changed: dict[str, Assumption] = {}
         patch_log: dict[str, Any] = {}
@@ -479,9 +476,10 @@ class ResultsService:
         # A value may break the calculation in some scenario (a zero working year of an FTE):
         # check all three before saving.
         computed: dict[Scenario, EconomicsResult] = {}
+        model, initiatives = effective.calculation_model(), effective.calculable()
         for each in Scenario:
             try:
-                computed[each] = compute_solo(model, result.initiatives, updated, each)
+                computed[each] = compute_solo(model, initiatives, updated, each)
             except AssumptionValidationError as exc:
                 problems |= exc.problems
         if problems:

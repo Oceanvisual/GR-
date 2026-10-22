@@ -2,20 +2,24 @@
 
 The run config is frozen at start (models, prompt versions, chunking and grounding
 thresholds) so a result can be traced to what produced it (FR-030). Token use of an active
-run is summed live; cost comes from LLM_PRICE_* when both are set.
+run is summed live; cost comes from LLM_PRICE_* when both are set. Results are read with the
+expert's decisions applied (data-model §8): the stage outputs stay as stored.
 """
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
 
 from gr.analysis.mermaid import process_to_mermaid
+from gr.analysis.overlay import EffectiveState, apply_reviews
 from gr.api.deps import AppState
 from gr.domain.enums import RunStatus, StageName, StageStatus
 from gr.domain.ids import new_id
+from gr.domain.initiative import InitiativeSet
 from gr.domain.process import Process, ProcessModel
+from gr.domain.review import ReviewEvent
 from gr.domain.run import AnalysisRun, Completeness, InvalidTransitionError, RunConfig, UsageTotals
 from gr.errors import AppError
 from gr.extraction.prompt_files import load_prompt
@@ -54,6 +58,17 @@ class ProcessDetail(Process):
     """A process with its flowchart."""
 
     mermaid: str
+
+
+@dataclass(frozen=True)
+class Outputs:
+    """S5 and S7 of a run as stored, the review log and the analysis as the expert left it."""
+
+    run: AnalysisRun
+    model: ProcessModel
+    result: InitiativeSet  # empty until S7 is done
+    events: list[ReviewEvent]
+    effective: EffectiveState
 
 
 def price(usage: UsageTotals, settings: Settings) -> UsageTotals:
@@ -173,12 +188,24 @@ class AnalysisService:
             for run in await self.repos.runs.list_for_document(doc_id)
         ]
 
-    async def processes(self, run_id: str) -> ProcessModel:
-        await self.get(run_id)
-        output = await self.repos.stage_outputs.get(run_id, StageName.VALIDATE)
-        if output is None:
+    async def outputs(self, run_id: str, *, initiatives: bool = False) -> Outputs:
+        """The stored outputs with the decisions of the review log over them; `initiatives`:
+        S7 must be done."""
+        run = await self.get(run_id)
+        result = await self.repos.stage_outputs.get(run_id, StageName.POSTPROCESS)
+        if result is None and initiatives:
+            raise AppError("not_found", "Инициативы ещё не готовы.")
+        model = await self.repos.stage_outputs.get(run_id, StageName.VALIDATE)
+        if model is None:
             raise AppError("not_found", "Карта процессов ещё не готова.")
-        return ProcessModel.model_validate(output)
+        stored = ProcessModel.model_validate(model)
+        proposals = InitiativeSet.model_validate(result) if result is not None else InitiativeSet()
+        events = await self.repos.reviews.list_for_run(run_id)
+        return Outputs(run, stored, proposals, events, apply_reviews(stored, proposals, events))
+
+    async def processes(self, run_id: str) -> ProcessModel:
+        """The process map with the expert's decisions (api.md `ProcessMap`)."""
+        return (await self.outputs(run_id)).effective.model
 
     async def process(self, run_id: str, process_id: str) -> ProcessDetail:
         model = await self.processes(run_id)

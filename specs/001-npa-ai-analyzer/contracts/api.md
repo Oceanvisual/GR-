@@ -130,12 +130,13 @@ Query-параметр `scenario` во всех запросах этого ра
 ```text
 {scenario, assumptions_version, priority_config_version,
  rows: list[{initiative: Initiative, process_name, finding_patterns,
-             economics: InitiativeEconomics, priority: PriorityResult}],
+             economics: InitiativeEconomics, priority: PriorityResult,
+             excluded_reason}],   # вне расчёта по решениям эксперта (T051)
  portfolio: PortfolioEconomics,
  banners: list[str]}          # «модельные допущения», «объёмы не заданы» и т. п.
 ```
-Сортировка: неблокированные по `priority.rank`, затем `blocked`. Фильтры: `group`, `process_id`,
-`gate`, `include_rejected=false`.
+Сортировка: неблокированные по `priority.rank`, затем `blocked`, затем вне расчёта. Фильтры:
+`group`, `process_id`, `gate`, `include_rejected=false`.
 
 ### `GET /api/v1/analyses/{run_id}/initiatives/{initiative_id}` → `InitiativeDetail`
 Всё для экрана 5 (FR-070): инициатива, процесс и операции с цитатами, проблемы, экономика по
@@ -176,15 +177,36 @@ initiatives: InitiativeTable}` с `ETag` новой версии: рейтинг
 ## Экспертная проверка (US6)
 
 ### `POST /api/v1/analyses/{run_id}/reviews`
-Тело: `{entity_type, entity_id, action, patch?, comment?}`. Правила:
-- для `reject` требуется `comment`;
-- `patch` — только поля из белого списка типа сущности, иначе `400`;
-- для `set_gate` поле `patch.status` должно быть `LegalGate`.
+Тело: `{entity_type, entity_id, action, patch?, comment?}`. `entity_type` — `process`,
+`operation`, `decision_point`, `finding`, `initiative` или `relation` (допущения и веса
+меняются своими версионируемыми маршрутами). Правила:
+- для `reject` требуется `comment` (пустой или из пробелов — `400`);
+- `patch` — только у `edit` и `set_gate` и только поля из белого списка типа сущности
+  (data-model §8), иначе `400`;
+- для `set_gate` поле `patch.status` должно быть `LegalGate`;
+- цитата в поле с основанием — `{value, citation: {fragment_id, quote}}` — проверяется по
+  тексту акта, как цитаты модели (FR-025): `verified` и `relocated` (ссылка исправляется на
+  фрагмент с цитатой) сохраняются с результатом проверки, иначе — `400`,
+  `details.fields` — поле → причина; цитата из утратившего силу фрагмента не принимается;
+- `relation`: `entity_id` — два id инициатив через «|» в любом порядке, хранится по алфавиту;
+- решение принимается, только если весь журнал с ним применим (переход статуса по диаграмме,
+  допустимое значение), иначе `400`; решения одного запуска записываются по одному.
 
-Ответ — `201 {event: ReviewEvent, entity: <обновлённая сущность>, stale_initiative_ids: list[str]}`.
+Неизвестный запуск или элемент — `404`. Ответ — `201 {event: ReviewEvent, entity:
+<сущность после решения>, stale_initiative_ids: list[str]}`: для связи `entity` —
+`{initiative_ids, relation}`; `stale_initiative_ids` — все инициативы запуска, требующие
+пересмотра после решения. `event.previous` у `edit` и `set_gate` — прежние значения
+изменённых полей (для `ratings` — только переоценённых критериев).
+
+Решения применяются при каждом чтении карты процессов, инициатив, экономики, допущений и
+экрана настроек (T051): отклонённое исключено из расчётов, исправленное считается с новым
+значением, выход этапов не меняется (FR-081). В строке таблицы инициатив `excluded_reason` —
+почему инициатива вне расчёта (тогда `economics` и `priority` — `null`), баннер — если есть
+инициативы, требующие пересмотра.
 
 ### `GET /api/v1/analyses/{run_id}/reviews` → `list[ReviewEvent]`
-Фильтры: `entity_type`, `entity_id`, `user`. Сортировка по `created_at` по убыванию.
+Фильтры: `entity_type`, `entity_id`, `user`. Сортировка по `created_at` по убыванию. Журнал
+полный: и решения по элементам, и правки допущений и весов.
 
 ## Экспорт (US7)
 

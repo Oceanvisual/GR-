@@ -17,7 +17,7 @@ as the model produced them (FR-081: the original value is kept).
   expert's gate) and relations (with the expert's overrides).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -37,6 +37,8 @@ from gr.domain.initiative import Finding, Initiative, InitiativeSet
 from gr.domain.process import DecisionPoint, Operation, Process, ProcessModel
 from gr.domain.review import EntityType, ReviewEvent, ReviewState
 from gr.domain.run import InvalidTransitionError
+
+type Element = Process | Operation | DecisionPoint | Finding | Initiative
 
 # The fields an expert may edit, per entity. Ids, links, citations and computed fields are not
 # among them: links change by regeneration (T052), computed fields follow from the rules.
@@ -95,10 +97,19 @@ class EffectiveState(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     model: ProcessModel  # every element with its review status and edits
-    findings: list[Finding]
-    initiatives: list[Initiative]  # calculable ones with their links pruned and rules applied
+    # Findings and initiatives likewise (calculable ones with their links pruned and the rules
+    # applied); `no_change` and `issues` as S7 stored them.
+    result: InitiativeSet
     excluded: dict[str, str]  # initiative id → why it is out of the calculations
     stale_initiative_ids: list[str]
+
+    @property
+    def findings(self) -> list[Finding]:
+        return self.result.findings
+
+    @property
+    def initiatives(self) -> list[Initiative]:
+        return self.result.initiatives
 
     def calculable(self) -> list[Initiative]:
         return [i for i in self.initiatives if i.id not in self.excluded]
@@ -130,8 +141,20 @@ class EffectiveState(BaseModel):
             )
         return self.model.model_copy(update={"processes": processes})
 
+    def element(self, entity_type: str, entity_id: str) -> Element | None:
+        """The element a decision is about, as it is now; None if the outputs have no such."""
+        processes = self.model.processes
+        found: dict[str, Iterable[Element]] = {
+            "process": processes,
+            "operation": (o for p in processes for o in p.operations),
+            "decision_point": (d for p in processes for d in p.decision_points),
+            "finding": self.findings,
+            "initiative": self.initiatives,
+        }
+        return next((e for e in found.get(entity_type, ()) if e.id == entity_id), None)
 
-def _rejected(item: Operation | DecisionPoint | Process | Finding | Initiative) -> bool:
+
+def _rejected(item: Element) -> bool:
     return item.review.status == ReviewStatus.REJECTED
 
 
@@ -146,6 +169,8 @@ def check_event(event: ReviewEvent) -> None:
         raise ReviewError(f"решения по «{event.entity_type}» хранятся версиями, не в журнале")
     if event.entity_type == "relation" and event.action != "edit":
         raise ReviewError("связь можно только переопределить (edit)")
+    if event.patch and event.action not in ("edit", "set_gate"):
+        raise ReviewError(f"{event.action}: patch не нужен")
     if event.action == "set_gate":
         if event.entity_type != "initiative":
             raise ReviewError("статус допустимости задаётся только инициативе")
@@ -259,8 +284,9 @@ def apply_reviews(
     touched: dict[str, set[str]] = {"process": set(), "operation": set(), "finding": set()}
     for event in ordered:
         check_event(event)
-        if event.entity_type == "relation":
-            overrides[event.entity_id] = InitiativeRelation((event.patch or {})["relation"])
+        if event.entity_type == "relation":  # the later decision on a pair wins
+            pair = relation_key(*event.entity_id.split("|"))
+            overrides[pair] = InitiativeRelation((event.patch or {})["relation"])
             continue
         store = stores[event.entity_type]
         item = store.get(event.entity_id)
@@ -353,8 +379,12 @@ def apply_reviews(
         effective[related.id] = related
     return EffectiveState(
         model=effective_model,
-        findings=list(findings.values()),
-        initiatives=[effective[k] for k in proposals],
+        result=initiatives.model_copy(
+            update={
+                "findings": list(findings.values()),
+                "initiatives": [effective[k] for k in proposals],
+            }
+        ),
         excluded=excluded,
         stale_initiative_ids=sorted(stale | {k for k, i in effective.items() if i.stale}),
     )

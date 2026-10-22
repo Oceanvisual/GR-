@@ -288,6 +288,22 @@ def test_the_expert_overrides_a_relation() -> None:
         InitiativeRelation.COMPLEMENTARY,
         "expert",
     )
+    # The pair in either order is one relation: the later decision wins, no conflict.
+    again = state(
+        event(1, "relation", "ini_b|ini_a", "edit", {"relation": "alternative"}),
+        event(2, "relation", "ini_a|ini_b", "edit", {"relation": "complementary"}),
+    )
+    assert again.initiatives == found.initiatives
+
+
+def test_an_element_is_found_by_the_type_and_id_of_a_decision() -> None:
+    found = state(event(1, "operation", "proc_1.op_2", "edit", {"name": "Сверка"}))
+    edited = found.element("operation", "proc_1.op_2")
+    assert isinstance(edited, Operation) and edited.name == "Сверка"
+    assert found.element("decision_point", "proc_1.dp_1") is not None
+    assert found.element("finding", "f3") is not None and found.element("initiative", "ini_c")
+    assert found.element("operation", "proc_9.op_1") is None
+    assert found.element("relation", "ini_a|ini_b") is None
 
 
 # --- what is refused ------------------------------------------------------------------------
@@ -310,6 +326,7 @@ def test_the_expert_overrides_a_relation() -> None:
         (event(1, "relation", "ini_a|ini_b", "edit", {"relation": "rival"}), "complementary"),
         (event(1, "relation", "ini_a|ini_a", "edit", {"relation": "alternative"}), "двумя"),
         (event(1, "assumption_set", "assumptions", "edit", {"x": 1}), "версиями"),
+        (event(1, "process", "proc_1", "confirm", {"name": "x"}), "patch не нужен"),
     ],
 )  # fmt: skip
 def test_edits_outside_the_whitelist_or_with_bad_values_are_refused(

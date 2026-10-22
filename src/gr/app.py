@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 import gr
-from gr.api import analyses, documents, health, results
+from gr.api import analyses, documents, health, results, reviews
 from gr.api.deps import AppState
 from gr.auth import BasicAuthenticator, SameOriginGuard
 from gr.errors import install_error_handlers
@@ -106,6 +106,7 @@ def create_app(
     app.include_router(documents.router)
     app.include_router(analyses.router)
     app.include_router(results.router)
+    app.include_router(reviews.router)
     app.include_router(web.router)
     app.include_router(web_analyses.router)
     app.include_router(web_results.router)

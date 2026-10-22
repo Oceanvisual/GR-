@@ -7,6 +7,7 @@
 <h1>{{ i.title }}</h1><span class="badge">Гипотеза</span>
 <div class="alert alert-warn">{{ disclaimer }}</div>
 {% if not run.completeness.complete %}<div class="alert alert-warn">Анализ неполный.</div>{% endif %}
+{% if i.stale %}<div class="alert alert-warn">Требует пересмотра: эксперт изменил процесс, операцию или проблему, на которых построена инициатива.</div>{% endif %}
 <p>{{ detail.process.name.value }} · Уверенность модели процесса: {{ labels.confidence[detail.process.confidence] }}</p>
 <h2>Проблемы</h2>{% for finding in detail.findings %}<p><strong>{{ labels.problem[finding.pattern] }}</strong>: {{ finding.description }}</p>{% endfor %}
 <h2>Решение</h2><p>{{ labels.solution[i.solution_category] }}: {{ i.description }}</p>
@@ -57,7 +58,7 @@
 </table>
 <p class="muted">Вклад — доля инициативы в совместном сокращении времени на операциях, общих с другими инициативами портфеля: итог портфеля равен сумме вкладов (FR-055).</p>
 {% else %}<p>Не входит в портфель: {{ detail.excluded_reason }}</p>{% endif %}
-{% else %}<p>Инициатива отклонена экспертом: эффект не рассчитывается.</p>{% endif %}
+{% else %}<p>{{ detail.excluded_reason or "Инициатива вне расчёта." }} Эффект не рассчитывается.</p>{% endif %}
 <h2>Приоритет <span class="badge">Гипотеза</span></h2>
 {% if detail.priority %}{% set p = detail.priority %}
 <p>Балл <strong>{{ p.score | number }}</strong>{% if p.rank %} · место {{ p.rank }} в рейтинге{% else %} · вне рейтинга{% endif %} · группа «{{ labels.group[p.group] }}», правило {{ p.group_rule }}: {{ p.group_reason }}</p>
@@ -70,6 +71,6 @@
 </tbody>
 </table>
 <p class="muted">Лёгкость внедрения {{ p.ease | number(2) }}. Веса и пороги — версия {{ detail.priority_config_version }}: <a href="/analyses/{{ run.id }}/settings#priority">изменить</a>.</p>
-{% else %}<p>Инициатива отклонена экспертом: приоритет не рассчитывается.</p>{% endif %}
+{% else %}<p>{{ detail.excluded_reason or "Инициатива вне расчёта." }} Приоритет не рассчитывается.</p>{% endif %}
 <h2>История решений</h2><ul>{% for event in detail.history %}<li>{{ event.created_at }} · {{ event.user }}: {{ event.action }} — {{ event.comment or "" }}</li>{% else %}<li>Решений эксперта пока нет.</li>{% endfor %}</ul>
 {% endblock %}
