@@ -67,7 +67,8 @@ def registry(limits: ParseLimits) -> ExtractorRegistry:
 
 
 def _ocr_info(diagnostics: IngestionDiagnostics) -> OcrInfo:
-    if diagnostics.text_layer in (TextLayerStatus.OK,) or not diagnostics.empty_pages:
+    attempted = diagnostics.ocr.status != OcrStatus.NOT_NEEDED  # recognised in the extractor
+    if attempted or diagnostics.text_layer in (TextLayerStatus.OK,) or not diagnostics.empty_pages:
         return diagnostics.ocr
     return OcrInfo(
         status=OcrStatus.UNAVAILABLE, pages=diagnostics.empty_pages, error=OCR_NOT_CONNECTED

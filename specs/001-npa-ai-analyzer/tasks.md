@@ -944,7 +944,7 @@ UI карты процессов.
       совпадают, снимки проверены человеком (SC-012).
   - **Тесты**: `test_profiles.py`, `test_structure_regression.py`.
 
-- [ ] T069 [P] [US1] OCR-движок — `src/gr/ingestion/ocr.py`
+- [X] T069 [P] [US1] OCR-движок — `src/gr/ingestion/ocr.py`
   - **Цель**: FR-008 (R-04): распознавание страниц без текстового слоя.
   - **Зависит**: T016
   - **Файлы**: `ingestion/ocr.py`, `settings.py` (`OCR_*`), `tests/unit/ingestion/test_ocr.py`
@@ -959,6 +959,13 @@ UI карты процессов.
 
     Тесты с реальным движком помечены маркером `ocr` и пропускаются, если движка нет; в
     Docker-образе и CI они выполняются.
+  - **Сделано**: `ingestion/ocr.py` (`OcrEngine`, `TesseractEngine`, разбор TSV в строки PDF,
+    `ocr_available`), рендер страницы в серый PGM и распознавание пустых страниц в
+    `PdfExtractor(ocr=OcrOptions(...))` — блоки `text_source=ocr`, `diagnostics.ocr` (страницы,
+    средняя уверенность, страницы ниже порога, ошибки, лимит `OCR_MAX_PAGES`). Вызов синхронный
+    в воркере (PDFium и tesseract в одном процессе), без shell, с таймаутом. Тесты `ocr`
+    прогнаны в образе спайка (tesseract 5.3.0): CER 0,29 %, шум — низкая уверенность; локально
+    tesseract нет, тесты пропускаются.
   - **Тесты**: `test_ocr.py`.
 
 - [ ] T070 [US1] OCR в потоке загрузки: фон, статусы, UI — `src/gr/services/documents.py`

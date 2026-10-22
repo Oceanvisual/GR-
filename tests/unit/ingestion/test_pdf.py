@@ -25,8 +25,8 @@ FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 SYNTHETIC = FIXTURES / "synthetic"
 
 
-def pdf(path: Path, **kwargs: int) -> list[str]:
-    return [b.text for b in PdfExtractor(**kwargs).extract(path.read_bytes()).blocks]
+def pdf(path: Path, max_pages: int = 300) -> list[str]:
+    return [b.text for b in PdfExtractor(max_pages).extract(path.read_bytes()).blocks]
 
 
 def lost_paragraphs(pdf_path: Path, docx_path: Path) -> list[str]:
