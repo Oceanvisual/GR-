@@ -126,7 +126,6 @@ class OperationOut(LLMSchema):
 class OutcomeOut(LLMSchema):
     label: str
     next_operation: str = Field(default="", description="ключ операции; пусто, если конец")
-    ends_process: bool = False
 
 
 class DecisionPointOut(LLMSchema):
@@ -137,6 +136,10 @@ class DecisionPointOut(LLMSchema):
     criteria: list[Fact] = Field(default_factory=list, description="например, основания отказа")
 
 
+# DetailOut is at the edge of what Anthropic compiles in strict mode («The compiled grammar is
+# too large», T059): with one more field it was refused and fell back to json_object, where
+# Haiku broke the JSON of a few processes in every run. Whether an outcome ends the process is
+# not asked: an empty next_operation says it. Adding a field here: check strict mode first.
 class DetailOut(LLMSchema):
     process: ProcessOut
     operations: list[OperationOut]

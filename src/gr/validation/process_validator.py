@@ -293,7 +293,7 @@ class ProcessValidator:
                     DecisionOutcome(
                         label=outcome.label.strip() or "—",
                         next_operation_id=target,
-                        ends_process=outcome.ends_process,
+                        ends_process=not outcome.next_operation,
                     )
                 )
             criteria = []
