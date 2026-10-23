@@ -12,6 +12,19 @@
 - История: `DEPLOY_DIR/.deploy-history`.
 
 ## Включить деплой (один раз на сервер)
+
+Быстрый путь — шаги 1, 2 и 4 одной командой на чистом Ubuntu 24.04
+(`deploy/bootstrap-server.sh`): Docker и compose, пользователь `deploy`, `/opt/gr`, ключ CI,
+Caddy с автоматическим TLS, ufw. Имя сайта без домена — `<ip-через-дефисы>.sslip.io`, оно
+подставится само:
+```bash
+scp deploy/bootstrap-server.sh root@<ip>:/root/ && ssh root@<ip> 'bash /root/bootstrap-server.sh'
+# свой домен и ключ CI, сгенерированный у себя (ssh-keygen -t ed25519 -f deploy_key -N ''):
+ssh root@<ip> 'bash /root/bootstrap-server.sh npa.example.ru "$(cat deploy_key.pub)"'
+```
+В конце скрипт печатает команды `gh secret set` с подставленными значениями. Остаётся шаг 3 и 5.
+
+Руками:
 1. Сервер с Docker + compose plugin. Пользователь `deploy` в группе `docker`:
    `sudo useradd -m -G docker deploy && sudo mkdir -p /opt/gr && sudo chown deploy /opt/gr`
 2. SSH-ключ только для CI: `ssh-keygen -t ed25519 -f deploy_key -N ''`, публичный → `~deploy/.ssh/authorized_keys`.
