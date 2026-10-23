@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Инициативы — AI-анализ НПА{% endblock %}
+{% block content %}
+<p><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a> · <a href="/analyses/{{ run.id }}/history">История решений</a></p>
+<h1>Возможности оптимизации</h1>
+{% for banner in table.banners %}<div class="alert alert-warn">{{ banner }}</div>{% endfor %}
+
+<h2>Итог портфеля <span class="badge">Допущение</span></h2>
+{% set total = table.portfolio.total if table.portfolio else none %}
+{% if total %}
+<p>Инициатив в портфеле: {{ table.portfolio.initiative_ids | length }}. Накопленный чистый эффект за горизонт: <strong>{{ total.cum_net | money }}</strong> · высвобождается {{ total.hours[0] | number }} ч в 1-й год ({{ total.fte[0] | number(2) }} FTE) · ROI {{ total.roi | percent }} · окупаемость {{ (total.payback_months ~ " мес.") if total.payback_months else "не окупается за горизонт" }}.</p>
+<p class="muted">Денежный эквивалент высвобождаемого рабочего времени (модельная оценка). Итог — сумма вкладов инициатив с учётом пересечений по операциям, а не сумма их автономных эффектов.</p>
+{% else %}<p>В портфель не вошла ни одна инициатива.</p>{% endif %}
+
+<form method="get" class="actions">
+<label>Сценарий <select name="scenario">{% for key, text in labels.scenario.items() %}<option value="{{ key }}" {% if table.scenario == key %}selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
+<label>Группа <select name="group"><option value="">Все</option>{% for key, text in labels.group.items() %}<option value="{{ key }}" {% if group == key %}selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
+<label>Процесс <select name="process_id"><option value="">Все</option>{% for p in processes %}<option value="{{ p.id }}" {% if process_id == p.id %}selected{% endif %}>{{ p.name.value }}</option>{% endfor %}</select></label>
+<label>Допустимость <select name="gate"><option value="">Все</option>{% for key, text in labels.gate.items() %}<option value="{{ key }}" {% if gate == key %}selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
+<button type="submit">Применить</button>
+</form>
+{% set api = "/api/v1/analyses/" ~ run.id %}
+<div class="actions export" id="export">
+<span class="muted small">Выгрузить (сценарий «{{ labels.scenario[table.scenario] }}», с решениями эксперта):</span>
+<a class="button" href="{{ api }}/export.json?scenario={{ table.scenario }}" download>Полный результат, JSON</a>
+<a class="button" href="{{ api }}/export/initiatives.csv?scenario={{ table.scenario }}" download>Таблица инициатив, CSV</a>
+<a class="button" href="{{ api }}/export/operations.csv" download>Операции, CSV</a>
+<a class="small" href="/api/v1/schema/analysis-export.json">Схема JSON</a>
+</div>
+<table class="table">
+<thead><tr><th>№</th><th>Процесс</th><th>Проблема</th><th>Решение</th><th>Экономия*</th><th>Риск</th><th>Приоритет</th><th>Допустимость</th></tr></thead>
+<tbody>{% for row in table.rows %}{% set i = row.initiative %}{% set p = row.priority %}
+<tr><td>{{ p.rank if p and p.rank else "—" }}</td><td>{{ row.process_name }}</td><td>{% for pattern in row.finding_patterns %}{{ labels.problem[pattern] }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+<td><a href="/analyses/{{ run.id }}/initiatives/{{ i.id }}">{{ i.title }}</a><br><span class="badge">Гипотеза</span>{% if i.stale %} <span class="badge badge-note">Требует пересмотра</span>{% endif %} {{ labels.solution[i.solution_category] }}{% if i.tech_guard and i.tech_guard.requires_justification %}<p>Требует обоснования</p>{% endif %}</td>
+<td>{% if row.economics %}{% set e = row.economics %}<strong>{{ e.solo.cum_net | money }}</strong><br><span class="muted">{{ e.solo.hours[0] | number }} ч в 1-й год</span> <span class="badge">Допущение</span><br>{% if e.attributed %}<span class="muted">вклад в портфель: {{ e.attributed.cum_net | money }}</span>{% else %}<span class="muted" title="{{ e.excluded_reason or '' }}">не в портфеле</span>{% endif %}{% else %}<span class="muted">{{ row.excluded_reason or "—" }}</span>{% endif %}</td>
+<td>{{ labels.level[i.ratings.legal_risk.level] }}</td>
+<td>{% if p %}<strong>{{ p.score | number }}</strong><br><span class="badge">{{ labels.group[p.group] }}</span>{% else %}—{% endif %}</td>
+<td>{{ labels.gate[i.gate.status] if i.gate else "Не определена" }}{% if i.gate and i.gate.status == "blocked" %}<br><span class="muted">{{ i.gate.reasons | join(" ") }}</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="8">Инициатив по выбранным фильтрам нет.</td></tr>{% endfor %}</tbody>
+</table>
+<p class="muted">* Денежный эквивалент высвобождаемого рабочего времени (модельная оценка): накопленный чистый эффект за горизонт при внедрении инициативы отдельно, ниже — её вклад в портфель; сценарий «{{ labels.scenario[table.scenario] }}», допущения версии {{ table.assumptions_version }}, веса версии {{ table.priority_config_version }}. Порядок — по рангу (балл, затем эффект, затем идентификатор), недопустимые — в конце.</p>
+{% if table.no_change %}<h2>Оптимизация не требуется</h2>{% for item in table.no_change %}<p><strong>{{ process_names.get(item.process_id, item.process_id) }}</strong>: {{ item.justification }}</p>{% endfor %}{% endif %}
+{% if table.issues %}<h2>Замечания к предложениям</h2><ul>{% for issue in table.issues %}<li>{{ process_names.get(issue.process_id, issue.process_id) }}: {{ issue.message }}</li>{% endfor %}</ul>{% endif %}
+{% endblock %}

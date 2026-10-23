@@ -1,0 +1,105 @@
+# deploy-kit: доставка gr.
+#  publish — после зелёного CI на main собирает образ и пушит в GHCR (теги: sha, latest). Секреты не нужны.
+#  deploy  — только при vars.DEPLOY_ENABLED == 'true': копирует deploy/ на сервер и запускает remote.sh.
+#  Откат/ручной деплой: Actions → Deliver → Run workflow → tag=<sha>.
+# Настройка сервера и секретов: docs/runbooks/deploy.md
+name: Deliver
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "sha образа для деплоя/отката (пусто = собрать текущий main)"
+        required: false
+
+concurrency:
+  group: deliver
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  meta:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.m.outputs.image }}
+      sha: ${{ steps.m.outputs.sha }}
+      tag: ${{ steps.m.outputs.tag }}
+    steps:
+      - id: m
+        env:
+          REPO: ${{ github.repository }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          echo "image=ghcr.io/${REPO,,}" >> "$GITHUB_OUTPUT"
+          echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=${INPUT_TAG:-$RUN_SHA}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: meta
+    if: inputs.tag == ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ needs.meta.outputs.image }}:${{ needs.meta.outputs.sha }}
+            ${{ needs.meta.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [meta, publish]
+    if: >-
+      always() && vars.DEPLOY_ENABLED == 'true' && needs.meta.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          sparse-checkout: deploy
+      - name: Upload deploy/ to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "deploy/compose.prod.yml,deploy/remote.sh"
+          target: ${{ vars.DEPLOY_DIR || '/opt/gr' }}
+          strip_components: 1
+      - name: Run remote.sh
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE: ${{ needs.meta.outputs.image }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/gr' }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: IMAGE,TAG,APP_ENV,REGISTRY_USER,REGISTRY_TOKEN,DEPLOY_DIR
+          script: bash "$DEPLOY_DIR/remote.sh"

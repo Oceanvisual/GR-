@@ -1,0 +1,88 @@
+{# Expert review of one element (FR-080, FR-081): its status and the decisions it allows.
+   Plain forms: the server checks every decision and sends the browser back to `back`. #}
+
+{% macro review_badge(review) -%}
+<span class="badge badge-review-{{ review.status }}">{{ labels.review[review.status] }}</span>
+{%- endmacro %}
+
+{# «исправлено» next to a value the expert corrected. #}
+{% macro edited(item, field) -%}
+{%- if field in item.review.edited_fields %} <span class="badge badge-edited" title="Исправлено экспертом; исходное значение — в истории решений">исправлено</span>{% endif -%}
+{%- endmacro %}
+
+{% macro hidden(entity_type, entity_id, action, back) -%}
+<input type="hidden" name="entity_type" value="{{ entity_type }}">
+<input type="hidden" name="entity_id" value="{{ entity_id }}">
+<input type="hidden" name="action" value="{{ action }}">
+<input type="hidden" name="back" value="{{ back }}">
+{%- endmacro %}
+
+{# The decisions of the diagram (data-model §8) for the element's status; the caller, if any,
+   gives the inputs of the edit form. #}
+{% macro review_actions(run_id, entity_type, item, back, history) -%}
+{%- set status = item.review.status -%}
+{%- set url = "/analyses/" ~ run_id ~ "/reviews" -%}
+<details class="review">
+  <summary>Проверка · {{ labels.review[status] | lower }}</summary>
+  <div class="actions">
+    {% if status == "pending" %}
+    <form method="post" action="{{ url }}">{{ hidden(entity_type, item.id, "confirm", back) }}<button type="submit">Подтвердить</button></form>
+    {% else %}
+    <form method="post" action="{{ url }}">{{ hidden(entity_type, item.id, "reopen", back) }}<button type="submit" class="secondary">Вернуть на проверку</button></form>
+    {% endif %}
+    <a href="{{ history }}">История решений</a>
+  </div>
+  {% if status != "rejected" %}
+  {% if caller is defined %}
+  <form method="post" action="{{ url }}" class="grid-form review-edit">
+    {{ hidden(entity_type, item.id, "edit", back) }}
+    {{ caller() }}
+    <label class="wide">Комментарий к правке<textarea name="comment" rows="2" maxlength="2000"></textarea></label>
+    <div><button type="submit">Сохранить исправление</button></div>
+  </form>
+  {% endif %}
+  <form method="post" action="{{ url }}" class="grid-form">
+    {{ hidden(entity_type, item.id, "reject", back) }}
+    <label class="wide">Причина отклонения (обязательно)<textarea name="comment" rows="2" maxlength="2000" required></textarea></label>
+    <div><button type="submit" class="danger">Отклонить</button></div>
+  </form>
+  {% endif %}
+</details>
+{%- endmacro %}
+
+{# Inputs of the edit forms: `f:<field>` is the value, `q:<field>` an optional quote of the act. #}
+{% macro text_input(name, label, value, rows=0) -%}
+<label{% if rows %} class="wide"{% endif %}>{{ label }}
+{%- if rows %}<textarea name="f:{{ name }}" rows="{{ rows }}" maxlength="4000">{{ value or "" }}</textarea>
+{%- else %}<input type="text" name="f:{{ name }}" value="{{ value or '' }}" maxlength="2000">{% endif %}</label>
+{%- endmacro %}
+
+{% macro grounded_input(name, label, value) -%}
+<div class="grounded-input">
+<label>{{ label }}<input type="text" name="f:{{ name }}" value="{{ value.value if value else '' }}" maxlength="2000"></label>
+<label>{{ label }}: цитата из НПА (необязательно)<input type="text" name="q:{{ name }}" maxlength="600" placeholder="дословно: значение станет фактом"></label>
+</div>
+{%- endmacro %}
+
+{% macro choice_input(name, label, options, current) -%}
+<label>{{ label }}<select name="f:{{ name }}">{% for key, text in options.items() %}<option value="{{ key }}"{% if key == current %} selected{% endif %}>{{ text or key }}</option>{% endfor %}</select></label>
+{%- endmacro %}
+
+{% macro flag_input(name, label, current) -%}
+<label>{{ label }}<select name="f:{{ name }}"><option value="yes"{% if current %} selected{% endif %}>да</option><option value="no"{% if not current %} selected{% endif %}>нет</option></select></label>
+{%- endmacro %}
+
+{% macro deadline_input(deadline) -%}
+<label>Срок: число<input type="text" name="f:deadline.value" value="{{ deadline.value if deadline and deadline.value is not none else '' }}" inputmode="numeric" maxlength="6"></label>
+<label>Срок: единица<select name="f:deadline.unit"><option value="">срока нет</option>{% for key, text in labels.deadline_unit.items() %}<option value="{{ key }}"{% if deadline and deadline.unit == key %} selected{% endif %}>{{ text or "другое" }}</option>{% endfor %}</select></label>
+<label>Срок: от какого события<input type="text" name="f:deadline.anchor" value="{{ (deadline.anchor or '') if deadline else '' }}" maxlength="2000"></label>
+<label>Срок как в НПА<input type="text" name="f:deadline.raw" value="{{ deadline.raw.value if deadline else '' }}" maxlength="2000"></label>
+{%- endmacro %}
+
+{% macro ratings_input(ratings) -%}
+{% for key, rating in ratings.model_dump().items() %}
+{% if key == "duration" %}{{ choice_input("ratings.duration.bucket", labels.rating[key], labels.duration, rating.bucket) }}
+{% else %}{{ choice_input("ratings." ~ key ~ ".level", labels.rating[key], labels.level, rating.level) }}{% endif %}
+<label>{{ labels.rating[key] }}: обоснование<input type="text" name="f:ratings.{{ key }}.justification" value="{{ rating.justification }}" maxlength="2000"></label>
+{% endfor %}
+{%- endmacro %}

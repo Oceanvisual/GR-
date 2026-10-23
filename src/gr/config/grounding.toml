@@ -1,0 +1,19 @@
+# Quote verification thresholds (R-11, FR-025). Scores are rapidfuzz partial ratios, 0–100.
+
+[quote]
+min_chars = 12          # shorter (after normalisation) proves nothing: invalid_quote
+max_chars = 600         # longer is a pasted passage, not a quote: invalid_quote
+fuzzy_ok = 92           # at or above: verified (or relocated when found elsewhere)
+fuzzy_partial = 80      # [fuzzy_partial, fuzzy_ok) in the cited fragment: partial, not passed
+min_part_chars = 4      # parts of an elided quote ("…") shorter than this are ignored
+
+[index]
+ngram = 3                    # character n-grams of the normalised text
+rare_ngrams = 32             # the quote's rarest n-grams that vote for candidate windows
+bucket_chars = 256           # granularity of candidate windows
+candidates = 6               # windows compared with rapidfuzz per quote and region
+direct_max_chars = 6000      # regions up to this size are compared directly, without the index
+
+[role]
+stem_chars = 5          # words are compared by their first characters: case endings differ
+min_share = 0.75        # share of the role's words that must appear in the quote

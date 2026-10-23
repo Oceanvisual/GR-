@@ -1,0 +1,33 @@
+{% from "partials/macros.html" import fragment_link, fragment_badges %}
+
+{% macro tree_node(doc_id, by_id, node_id, depth, open_depth) -%}
+{%- set node = by_id[node_id] -%}
+{%- set caption = node.heading or node.text_preview | truncate(90, true, "…") -%}
+{%- if node.children -%}
+<li>
+  <details{% if depth < open_depth and node.kind != "preamble" %} open{% endif %}>
+    <summary>
+      {{ fragment_link(doc_id, node.id, node.label) }}
+      <span class="caption">{{ caption }}</span>
+      {{ fragment_badges(node) }}
+    </summary>
+    <ul class="tree">
+      {%- for child in node.children %}{{ tree_node(doc_id, by_id, child, depth + 1, open_depth) }}{% endfor -%}
+    </ul>
+  </details>
+</li>
+{%- else -%}
+<li class="leaf">
+  {{ fragment_link(doc_id, node.id, node.label) }}
+  <span class="caption">{{ caption }}</span>
+  {{ fragment_badges(node) }}
+</li>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro tree(doc_id, structure, by_id, open_depth) -%}
+{%- set root = structure.nodes[0] -%}
+<ul class="tree tree-root">
+  {%- for child in root.children %}{{ tree_node(doc_id, by_id, child, 0, open_depth) }}{% endfor -%}
+</ul>
+{%- endmacro %}

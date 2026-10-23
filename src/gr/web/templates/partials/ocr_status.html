@@ -1,0 +1,18 @@
+{# OCR of the pages without text (T070). Polls itself every 3 s while queued or running; when it
+   ends the whole page reloads (HX-Refresh): the text and the structure are new then. #}
+{% set ocr = document.diagnostics.ocr %}
+{% set active = ocr.status in ("queued", "running") %}
+<dd id="ocr-status"{% if active %} hx-get="/documents/{{ document.id }}/ocr" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {{ labels.ocr[ocr.status] }}
+  {% if active and ocr.progress %} · обработано страниц: {{ ocr.progress.done }} из {{ ocr.progress.total }} <span class="muted small">· обновляется автоматически</span>{% endif %}
+  {% if ocr.status == "done" %} · распознано страниц: {{ ocr.pages | length }}{% endif %}
+  {% if ocr.mean_confidence is not none %} · средняя уверенность {{ "%.0f" | format(ocr.mean_confidence) }}%{% endif %}
+  {% if ocr.low_confidence_pages %} · <span class="warn">низкое качество: стр. {{ ocr.low_confidence_pages | join(", ") }}</span>{% endif %}
+  {% if ocr.error %}<div class="muted">{{ ocr.error }}</div>{% endif %}
+  {% if ocr.engine_version and ocr.status == "done" %}<div class="muted small">{{ ocr.engine_version }}</div>{% endif %}
+  {% if ocr_retry %}
+  <form method="post" action="/documents/{{ document.id }}/ocr" class="actions">
+    <button type="submit">Повторить распознавание</button>
+  </form>
+  {% endif %}
+</dd>

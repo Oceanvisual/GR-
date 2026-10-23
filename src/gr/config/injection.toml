@@ -1,0 +1,25 @@
+# Phrases that address an AI model rather than describe a procedure (R-12, T035).
+# A quote that falls into such a phrase does not count as evidence: a document can contain an
+# injected instruction, and quoting it verbatim must not turn the instruction into a fact.
+# Legal acts speak impersonally («указывается», «направляет»); a second-person imperative
+# aimed at the reader of the text is not how a normative act states a duty.
+
+# Second-person imperatives (lower-case word forms).
+imperatives = [
+  "игнорируй", "проигнорируй", "забудь", "отмени", "не учитывай", "не выполняй",
+  "добавь", "выведи", "укажи", "напиши", "сгенерируй", "придумай", "ответь", "верни",
+  "сообщи", "считай", "представь", "притворись", "действуй", "измени", "удали",
+  "ignore", "disregard", "forget", "pretend", "output", "respond", "print",
+]
+
+# Markers of prompt structure or of talking to a model (regular expressions, lower-case).
+markers = [
+  "(?:предыдущ|прошл|все)\\w* (?:инструкц|указани|правил)",
+  "(?:previous|prior|above) (?:instruction|prompt|rule)",
+  "системн\\w* (?:промпт|инструкц|сообщени)",
+  "system prompt",
+  "^\\s*(?:system|assistant|user)\\s*:",
+  "<\\|?im_(?:start|end)\\|?>",
+  "\\b(?:языков\\w* модел|нейросет|chatgpt|claude|llm)\\b",
+  "\\bкак (?:ии|ai|модель)\\b",
+]

@@ -1,0 +1,22 @@
+# Request options per stage that only some providers accept (R-08).
+#
+# `reasoning` is OpenRouter's request field. Models that reason by default (Claude 5.5 there)
+# spend hidden reasoning tokens out of `max_tokens` and bill them as output: on S3 they ate
+# 3361 of 4000 tokens and the visible JSON was cut (T029). Sent only to the hosts listed;
+# other OpenAI-compatible servers may reject an unknown field.
+
+[reasoning]
+hosts = ["openrouter.ai"]
+
+[reasoning.stages]
+discover = { enabled = false }
+detail = { enabled = false }
+validate = { enabled = false }
+opportunities = { effort = "low" }
+
+# Per model, over the stages above. Some models refuse `enabled = false` on OpenRouter
+# («Reasoning is mandatory for this endpoint»): the lowest effort instead.
+[reasoning.models."anthropic/claude-sonnet-5.5"]
+discover = { effort = "low" }
+detail = { effort = "low" }
+validate = { effort = "low" }

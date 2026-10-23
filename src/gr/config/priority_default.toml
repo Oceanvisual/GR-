@@ -1,0 +1,31 @@
+# Default Priority Score configuration (FR-060…FR-065, data-model.md §6, T047).
+#
+# Every value is [Предположение]: tune it for the organisation. A run keeps its own versions
+# of the configuration (T049); this file is only where version 1 comes from.
+
+effect_ref = 5_000_000     # ₽: the cumulative base solo effect over the horizon that scores 1
+tech_guard_penalty = 0.25  # taken off feasibility when the technology needs justification
+cutoff_score = 35          # below it: Not Recommended (grouping rule 2)
+ease_threshold = 0.6       # Quick Wins from this ease (grouping rule 4)
+effect_threshold = 0.4     # Strategic Projects from this normalised effect (grouping rule 5)
+
+[weights] # >= 0, positive sum; only the proportions matter
+effect = 30
+feasibility = 20
+data_availability = 15
+integration = 10
+risk = 15
+duration = 10
+
+[level_map] # a qualitative level of S6 as a number in [0; 1]
+very_low = 0
+low = 0.25
+medium = 0.5
+high = 0.75
+very_high = 1
+
+[duration_map] # the implementation time bucket; shorter is better
+lt_3m = 1.0
+m3_6 = 0.7
+m6_12 = 0.4
+gt_12m = 0.1

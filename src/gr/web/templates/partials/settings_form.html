@@ -1,0 +1,43 @@
+<div id="settings">
+<div class="alert alert-warn">{{ disclaimer }}</div>
+{% for banner in table.banners if banner != disclaimer %}<div class="alert alert-warn">{{ banner }}</div>{% endfor %}
+{% if message %}<div class="alert alert-info" role="status">{{ message }}</div>{% endif %}
+{% if problem %}<div class="alert alert-error" role="alert">{{ problem }}</div>{% endif %}
+
+<form method="post" action="/analyses/{{ run.id }}/settings" hx-post="/analyses/{{ run.id }}/settings" hx-target="#settings" hx-swap="outerHTML show:#settings:top">
+<input type="hidden" name="version" value="{{ version }}">
+<p class="muted">Версия допущений {{ version }}. Значения по сценариям: консервативный, базовый, оптимистичный. Дробные числа — через запятую или точку.</p>
+{% for section in sections %}
+<h2>{{ section.title }}</h2>
+{% for group in section.groups %}
+{% if group.title %}<h3>{{ group.title }}</h3>{% endif %}
+<table class="table settings">
+<thead><tr><th>Параметр</th>{% for s in scenarios %}<th>{{ labels.scenario[s] }}</th>{% endfor %}<th>Ед.</th><th>Источник</th><th>Комментарий</th></tr></thead>
+<tbody>
+{% for row in group.rows %}
+<tr{% if row.error %} class="row-error"{% endif %}>
+<td>{{ row.label }}{% if row.requires_input %} <span class="badge badge-note">требует ввода</span>{% endif %}{% if row.out_of_order %} <span class="badge badge-note">сценарии не по порядку</span>{% endif %}{% if row.derivation %}<div class="derivation">{{ row.derivation }}</div>{% endif %}{% if row.error %}<div class="field-error" role="alert">{{ row.error }}</div>{% endif %}</td>
+{% for s in scenarios %}<td><input name="{{ s }}:{{ row.key }}" value="{{ row.values[loop.index0] }}" inputmode="decimal" size="9" aria-label="{{ row.label }}: {{ labels.scenario[s] | lower }}"></td>{% endfor %}
+<td>{{ row.unit }}</td>
+<td>{% if row.source %}<span class="badge{% if row.source == 'user' %} badge-user{% endif %}">{{ labels.source[row.source] }}</span>{% else %}не задано{% endif %}</td>
+<td><input name="note:{{ row.key }}" value="{{ row.note }}" maxlength="2000" aria-label="{{ row.label }}: комментарий"></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}<p class="muted">Нет данных.</p>
+{% endfor %}
+{% endfor %}
+<label class="wide">Комментарий к изменению <input name="comment" maxlength="2000"></label>
+<div class="actions"><button type="submit">Сохранить и пересчитать</button><a href="/analyses/{{ run.id }}/initiatives">К инициативам</a></div>
+</form>
+
+<h2>Итог расчёта (сценарий «{{ labels.scenario[table.scenario] }}»)</h2>
+<p class="muted">Денежный эквивалент высвобождаемого рабочего времени (модельная оценка). Пересчитывается при каждом сохранении без обращения к LLM.</p>
+<table class="table">
+<thead><tr><th>Инициатива</th><th>Процесс</th><th>Часы, 1-й год</th><th>Чистый эффект за горизонт</th><th>Окупаемость</th></tr></thead>
+<tbody>{% for row in table.rows if row.economics %}{% set e = row.economics.solo %}
+<tr><td><a href="/analyses/{{ run.id }}/initiatives/{{ row.initiative.id }}">{{ row.initiative.title }}</a></td><td>{{ row.process_name }}</td><td>{{ e.hours[0] | number }}</td><td>{{ e.cum_net | money }}</td><td>{{ (e.payback_months ~ " мес.") if e.payback_months else "не окупается за горизонт" }}</td></tr>
+{% else %}<tr><td colspan="5">Инициатив для расчёта нет.</td></tr>{% endfor %}</tbody>
+</table>
+</div>

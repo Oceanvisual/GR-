@@ -1,0 +1,224 @@
+{
+  "source": "20261022T081359Z",
+  "mode": "offline exact request hashes, saved discovery, replay detail and validate",
+  "cost_usd": 0,
+  "documents": {
+    "reg261": {
+      "failed_processes": 0,
+      "score": {
+        "metrics": {
+          "process_recall": 1.0,
+          "process_precision": 0.7222222222222222,
+          "operation_recall": 0.9487179487179487,
+          "deadline_recall": 0.8666666666666667,
+          "verified_share": 0.9448818897637795,
+          "coverage": 0.4483870967741935,
+          "deadlines_not_in_text": 0.0,
+          "processes_predicted": 18.0,
+          "unverified": 21.0
+        },
+        "matches": [
+          {
+            "golden": "reception",
+            "predicted": "Прием и регистрация Заявительных документов, отказ в приеме Заявительных документов",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 11,
+            "operations_total": 11,
+            "missed_operations": []
+          },
+          {
+            "golden": "decision_routing",
+            "predicted": "Принятие решения о предоставлении государственной услуги или об отказе в ее предоставлении",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 8,
+            "operations_total": 8,
+            "missed_operations": []
+          },
+          {
+            "golden": "land_decision",
+            "predicted": "Принятие решения о предоставлении земельного участка без проведения торгов",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 7,
+            "operations_total": 9,
+            "missed_operations": [
+              "возвращает проект на доработку (повтор пп. 3.6.1–3.6.3)",
+              "готовит проекты договоров и направляет их заявителю"
+            ]
+          },
+          {
+            "golden": "mfc_registration_review",
+            "predicted": "Регистрация и рассмотрение документов должностным лицом Росимущества, принятие решения о предоставлении земельного участка",
+            "share": 1.0,
+            "name_score": 71.5,
+            "operations_found": 0,
+            "operations_total": 0,
+            "missed_operations": []
+          },
+          {
+            "golden": "issuance",
+            "predicted": "Выдача документов о предоставлении земельного участка Заявителю либо об отказе",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 4,
+            "operations_total": 4,
+            "missed_operations": []
+          },
+          {
+            "golden": "mfc_reception",
+            "predicted": "Прием документов либо отказ в приеме документов через многофункциональный центр",
+            "share": 1.0,
+            "name_score": 93.1,
+            "operations_found": 0,
+            "operations_total": 0,
+            "missed_operations": []
+          },
+          {
+            "golden": "mfc_issuance",
+            "predicted": "Выдача Заявителю результата предоставления государственной услуги через многофункциональный центр",
+            "share": 1.0,
+            "name_score": 71.9,
+            "operations_found": 0,
+            "operations_total": 0,
+            "missed_operations": []
+          },
+          {
+            "golden": "corrections",
+            "predicted": "Исправление допущенных опечаток и (или) ошибок в выданных документах",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 3,
+            "operations_total": 3,
+            "missed_operations": []
+          },
+          {
+            "golden": "mfc_forwarding",
+            "predicted": "Направление многофункциональным центром документов, полученных от заявителей",
+            "share": 1.0,
+            "name_score": 87.0,
+            "operations_found": 0,
+            "operations_total": 0,
+            "missed_operations": []
+          },
+          {
+            "golden": "interagency_request",
+            "predicted": "Запрос документов, необходимых для предоставления государственной услуги, находящихся в распоряжении государственных органов",
+            "share": 1.0,
+            "name_score": 84.0,
+            "operations_found": 2,
+            "operations_total": 2,
+            "missed_operations": []
+          },
+          {
+            "golden": "review",
+            "predicted": "Рассмотрение Заявительных документов",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 2,
+            "operations_total": 2,
+            "missed_operations": []
+          },
+          {
+            "golden": "mfc_informing",
+            "predicted": "Информирование заявителей о порядке предоставления государственной услуги в многофункциональном центре",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 0,
+            "operations_total": 0,
+            "missed_operations": []
+          },
+          {
+            "golden": "mfc_result_forwarding",
+            "predicted": "Направление Росимуществом результата предоставления государственной услуги в многофункциональный центр",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 0,
+            "operations_total": 0,
+            "missed_operations": []
+          }
+        ],
+        "missed": [],
+        "extra": [
+          "Предоставление земельного участка без проведения торгов",
+          "Отказ в приеме заявления и документов",
+          "Приостановление или отказ в предоставлении государственной услуги",
+          "Регистрация заявления",
+          "Оставление запроса без рассмотрения"
+        ],
+        "bad_deadlines": []
+      }
+    },
+    "fz59": {
+      "failed_processes": 0,
+      "score": {
+        "metrics": {
+          "process_recall": 1.0,
+          "process_precision": 1.0,
+          "operation_recall": 0.7272727272727273,
+          "deadline_recall": 0.7142857142857143,
+          "verified_share": 0.9369369369369369,
+          "coverage": 0.35877862595419846,
+          "deadlines_not_in_text": 0.0,
+          "processes_predicted": 4.0,
+          "unverified": 7.0
+        },
+        "matches": [
+          {
+            "golden": "consideration",
+            "predicted": "Рассмотрение письменного обращения гражданина",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 8,
+            "operations_total": 9,
+            "missed_operations": [
+              "предоставляет документы и материалы по запросу органа, рассматривающего обращение"
+            ]
+          },
+          {
+            "golden": "registration_forwarding",
+            "predicted": "Направление и регистрация письменного обращения",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 5,
+            "operations_total": 6,
+            "missed_operations": [
+              "возвращает жалобу гражданину с разъяснением права обжаловать в суд"
+            ]
+          },
+          {
+            "golden": "personal_reception",
+            "predicted": "Личный прием граждан",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 7,
+            "operations_total": 9,
+            "missed_operations": [
+              "проводит личный прием граждан",
+              "доводит до граждан информацию о месте, днях и часах приема"
+            ]
+          },
+          {
+            "golden": "special_cases",
+            "predicted": "Оставление обращения без ответа по существу",
+            "share": 1.0,
+            "name_score": 100.0,
+            "operations_found": 4,
+            "operations_total": 9,
+            "missed_operations": [
+              "не дает ответ на обращение без фамилии или почтового адреса",
+              "направляет обращение о противоправном деянии в государственный орган по компетенции",
+              "возвращает обращение с обжалованием судебного решения с разъяснением порядка обжалования",
+              "сообщает адрес сайта, где размещен ответ на вопрос",
+              "сообщает о невозможности ответа из-за охраняемой законом тайны"
+            ]
+          }
+        ],
+        "missed": [],
+        "extra": [],
+        "bad_deadlines": []
+      }
+    }
+  }
+}

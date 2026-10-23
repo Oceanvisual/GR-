@@ -1,0 +1,212 @@
+[
+ [
+  "root",
+  "root",
+  "документ"
+ ],
+ [
+  "preamble",
+  "preamble",
+  "вводная часть"
+ ],
+ [
+  "preamble/a1",
+  "paragraph",
+  "абз. 1 вводной части"
+ ],
+ [
+  "preamble/a2",
+  "paragraph",
+  "абз. 2 вводной части"
+ ],
+ [
+  "preamble/a3",
+  "paragraph",
+  "абз. 3 вводной части"
+ ],
+ [
+  "preamble/a4",
+  "paragraph",
+  "абз. 4 вводной части"
+ ],
+ [
+  "preamble/1",
+  "point",
+  "п. 1 вводной части"
+ ],
+ [
+  "preamble/2",
+  "point",
+  "п. 2 вводной части"
+ ],
+ [
+  "preamble/2/a2",
+  "paragraph",
+  "абз. 2 п. 2 вводной части"
+ ],
+ [
+  "body",
+  "approved_document",
+  "утверждаемый документ"
+ ],
+ [
+  "body/I",
+  "section",
+  "разд. I"
+ ],
+ [
+  "body/I/1.1",
+  "point",
+  "п. 1.1"
+ ],
+ [
+  "body/I/1.2",
+  "point",
+  "п. 1.2"
+ ],
+ [
+  "body/II",
+  "section",
+  "разд. II"
+ ],
+ [
+  "body/II/2.1",
+  "point",
+  "п. 2.1"
+ ],
+ [
+  "body/II/2.2",
+  "point",
+  "п. 2.2"
+ ],
+ [
+  "body/II/2.2/sp1",
+  "subpoint",
+  "пп. 1 п. 2.2"
+ ],
+ [
+  "body/II/2.2/sp2",
+  "subpoint",
+  "пп. 2 п. 2.2"
+ ],
+ [
+  "body/II/2.2/sp3",
+  "subpoint",
+  "пп. 3 п. 2.2"
+ ],
+ [
+  "body/II/2.3",
+  "point",
+  "п. 2.3"
+ ],
+ [
+  "body/II/2.3/sp1",
+  "subpoint",
+  "пп. 1 п. 2.3"
+ ],
+ [
+  "body/II/2.3/sp2",
+  "subpoint",
+  "пп. 2 п. 2.3"
+ ],
+ [
+  "body/II/2.3/sp3",
+  "subpoint",
+  "пп. 3 п. 2.3"
+ ],
+ [
+  "body/III",
+  "section",
+  "разд. III"
+ ],
+ [
+  "body/III/3.1",
+  "point",
+  "п. 3.1"
+ ],
+ [
+  "body/III/3.1/a2",
+  "list_item",
+  "абз. 2 п. 3.1"
+ ],
+ [
+  "body/III/3.1/a3",
+  "list_item",
+  "абз. 3 п. 3.1"
+ ],
+ [
+  "body/III/3.1/a4",
+  "list_item",
+  "абз. 4 п. 3.1"
+ ],
+ [
+  "body/III/3.2",
+  "point",
+  "п. 3.2"
+ ],
+ [
+  "body/III/3.2/3.2.1",
+  "point",
+  "п. 3.2.1"
+ ],
+ [
+  "body/III/3.2/3.2.2",
+  "point",
+  "п. 3.2.2"
+ ],
+ [
+  "body/III/3.3",
+  "point",
+  "п. 3.3"
+ ],
+ [
+  "body/III/3.3/3.3.1",
+  "point",
+  "п. 3.3.1"
+ ],
+ [
+  "body/III/3.3/3.3.2",
+  "point",
+  "п. 3.3.2"
+ ],
+ [
+  "body/III/3.4",
+  "point",
+  "п. 3.4"
+ ],
+ [
+  "body/III/3.4/3.4.1",
+  "point",
+  "п. 3.4.1"
+ ],
+ [
+  "body/III/3.4/3.4.2",
+  "point",
+  "п. 3.4.2"
+ ],
+ [
+  "body/IV",
+  "section",
+  "разд. IV"
+ ],
+ [
+  "body/IV/4.1",
+  "point",
+  "п. 4.1"
+ ],
+ [
+  "body/IV/4.2",
+  "point",
+  "п. 4.2"
+ ],
+ [
+  "body/app1",
+  "appendix",
+  "прил. 1"
+ ],
+ [
+  "body/app1/a1",
+  "paragraph",
+  "абз. 1 прил. 1"
+ ]
+]

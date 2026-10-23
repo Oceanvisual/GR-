@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}История решений — AI-анализ НПА{% endblock %}
+{% block content %}
+<p class="muted small"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/initiatives">Инициативы</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a></p>
+<h1>История решений</h1>
+<p class="muted">Журнал только на добавление: решения эксперта по элементам анализа, правки допущений, весов и порогов. Выходы анализа не меняются — исходное значение видно в колонке «Было».</p>
+{% if element %}<p>Элемент: <strong>{{ element }}</strong> · <a href="/analyses/{{ run.id }}/history">вся история</a></p>{% endif %}
+<form method="get" class="actions">
+  <label>Что <select name="entity_type"><option value="">Все</option>{% for key, text in labels.entity.items() %}<option value="{{ key }}"{% if entity_type == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
+  <label>Кто <select name="user"><option value="">Все</option>{% for u in users %}<option value="{{ u }}"{% if user == u %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></label>
+  {% if entity_id %}<input type="hidden" name="entity_id" value="{{ entity_id }}">{% endif %}
+  <button type="submit">Показать</button>
+</form>
+<table class="table history">
+<thead><tr><th>Когда (UTC)</th><th>Кто</th><th>Что</th><th>Решение</th><th>Было → стало</th><th>Комментарий</th></tr></thead>
+<tbody>
+{% for e in entries %}
+<tr>
+<td class="small">{{ e.event.created_at.strftime("%d.%m.%Y %H:%M:%S") }}</td>
+<td>{{ e.event.user }}</td>
+<td><span class="muted small">{{ labels.entity[e.event.entity_type] }}</span><br>{% if e.link %}<a href="{{ e.link }}">{{ e.element }}</a>{% else %}{{ e.element }}{% endif %}{% if e.earlier %} <span class="badge badge-note" title="Инициативы процесса перегенерированы: решение относится к прежней версии">{{ e.earlier }}</span>{% endif %}</td>
+<td>{{ labels.review_action[e.event.action] }}</td>
+<td>{% for c in e.changes %}<div><strong>{{ c.field }}</strong>: {{ c.before }} → {{ c.after }}</div>{% else %}<span class="muted">—</span>{% endfor %}</td>
+<td>{{ e.event.comment or "" }}</td>
+</tr>
+{% else %}<tr><td colspan="6" class="muted">Решений пока нет.</td></tr>{% endfor %}
+</tbody>
+</table>
+{% endblock %}

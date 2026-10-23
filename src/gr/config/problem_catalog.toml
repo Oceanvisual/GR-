@@ -1,0 +1,47 @@
+# Minimum sufficient technology for each problem pattern (FR-043).
+# These defaults guide review; a higher category requires explicit justification.
+# The numeric feasibility penalty belongs to PriorityConfig (T047).
+
+[patterns.manual_document_processing]
+label = "Ручная обработка документов"
+min_category = "classic_automation"
+
+[patterns.duplicate_data_entry]
+label = "Повторный ввод данных"
+min_category = "classic_automation"
+
+[patterns.lookup_and_reconciliation]
+label = "Поиск и сверка сведений"
+min_category = "classic_automation"
+
+[patterns.request_classification]
+label = "Классификация обращений"
+min_category = "ai_nlp"
+
+[patterns.template_document_preparation]
+label = "Подготовка типовых документов"
+min_category = "classic_automation"
+
+[patterns.duplicate_checks]
+label = "Дублирование проверок"
+min_category = "classic_automation"
+
+[patterns.long_approvals]
+label = "Длительные согласования"
+min_category = "classic_automation"
+
+[patterns.interdepartmental_handoff]
+label = "Передача между подразделениями"
+min_category = "classic_automation"
+
+[patterns.large_text_analysis]
+label = "Анализ большого объёма текста"
+min_category = "ai_nlp"
+
+[patterns.other]
+label = "Иное — минимальный класс подлежит уточнению экспертом"
+min_category = "classic_automation"
+
+[operation_minima]
+# completeness_check is an OperationType, not an additional ProblemPattern.
+completeness_check = "classic_automation"

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import fragment_link %}
+{% from "partials/tree.html" import tree as structure_tree %}
+{% block title %}{{ document.metadata.title.value or document.filename }} — AI-анализ НПА{% endblock %}
+{% block content %}
+{% set meta = document.metadata %}
+{% set diag = document.diagnostics %}
+<p class="muted small"><a href="/">← Документы</a></p>
+<h1>{{ meta.title.value or document.filename }}</h1>
+<p class="muted">
+  {{ document.filename }} · {{ document.format.value | upper }}
+  {% if document.page_count %} · {{ document.page_count }} стр.{% endif %}
+  · {{ "{:,}".format(document.char_count).replace(",", " ") }} символов
+  · загружен {{ document.uploaded_at.strftime("%d.%m.%Y %H:%M") }}
+</p>
+{% if duplicate %}
+<div class="alert alert-info" role="status">Этот файл уже загружен раньше — открыт существующий документ.</div>
+{% endif %}
+{% if diag.ocr.status in ("queued", "running") %}
+<div class="alert alert-info" role="status">Страницы без текста распознаются (OCR). Структура и анализ станут доступны, когда распознавание закончится; страница обновится сама.</div>
+{% elif not diag.analyzable %}
+<div class="alert alert-error" role="alert">Документ нельзя анализировать: см. диагностику.</div>
+{% endif %}
+
+<section class="card" id="metadata">
+  <h2>Реквизиты</h2>
+  <table class="table requisites">
+    <tbody>
+    {% for name, title in labels.metadata_fields.items() %}
+      {% set field = meta[name] %}
+      <tr>
+        <th>{{ title }}</th>
+        <td>{% if field.value %}{{ field.value }}{% else %}<span class="muted">не найдено</span>{% endif %}</td>
+        <td class="source">
+          {% if field.source == "user" %}
+            <span class="badge badge-user">введено вручную</span>
+          {% elif field.citation %}
+            {% set c = field.citation %}
+            «{{ c.quote | truncate(120, true, "…") }}» —
+            {{ fragment_link(document.id, c.fragment_id, by_id[c.fragment_id].label if c.fragment_id in by_id else c.fragment_id, c.grounding.matched_start, c.grounding.matched_end, reveal=True) }}
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    {% if document.user_source %}<tr><th>Источник</th><td colspan="2">{{ document.user_source }}</td></tr>{% endif %}
+    {% if document.relevance_checked_at %}
+      <tr><th>Актуальность проверена</th><td colspan="2">{{ document.relevance_checked_at.strftime("%d.%m.%Y") }}{% if document.relevance_note %} — {{ document.relevance_note }}{% endif %}</td></tr>
+    {% endif %}
+    </tbody>
+  </table>
+  <details class="edit">
+    <summary>Исправить реквизиты</summary>
+    <form method="post" action="/documents/{{ document.id }}/metadata" class="grid-form">
+      {% for name, title in labels.metadata_fields.items() %}
+      <label>{{ title }}
+        <input type="text" name="{{ name }}" value="{{ meta[name].value or '' }}" maxlength="2000">
+      </label>
+      {% endfor %}
+      <label>Источник текста
+        <input type="text" name="user_source" value="{{ document.user_source or '' }}" maxlength="2000">
+      </label>
+      <label>Актуальность проверена
+        <input type="date" name="relevance_checked_at" value="{{ document.relevance_checked_at or '' }}">
+      </label>
+      <label class="wide">Комментарий к актуальности
+        <input type="text" name="relevance_note" value="{{ document.relevance_note or '' }}" maxlength="2000">
+      </label>
+      <p class="muted small wide">Изменённые поля помечаются «введено вручную» и теряют цитату.</p>
+      <button type="submit">Сохранить</button>
+    </form>
+  </details>
+</section>
+
+<section class="card" id="diagnostics">
+  <h2>Диагностика</h2>
+  <dl class="diag">
+    <dt>Текстовый слой</dt>
+    <dd>
+      <span class="badge badge-layer-{{ diag.text_layer.value }}">{{ labels.text_layer[diag.text_layer] }}</span>
+      {% if diag.empty_pages %}<span class="muted">страницы без текста: {{ diag.empty_pages | join(", ") }}</span>{% endif %}
+    </dd>
+    {% if diag.ocr.status != "not_needed" %}
+    <dt>OCR</dt>
+    {% include "partials/ocr_status.html" %}
+    {% endif %}
+    {% if diag.encoding %}<dt>Кодировка</dt><dd>{{ diag.encoding }}</dd>{% endif %}
+    <dt>Структура</dt>
+    <dd>
+      {% if diag.structure %}
+        {% set choice = diag.structure %}
+        {{ labels.strategy.get(choice.strategy, choice.strategy) }} ({{ labels.profile[diag.numbering_profile] }}),
+        <span class="{{ 'warn' if choice.confidence < min_confidence else '' }}">уверенность {{ "%.2f" | format(choice.confidence) }}</span>
+        <div class="muted small">
+          {% for name, value in choice.scores | dictsort(by='value', reverse=true) %}{{ labels.strategy.get(name, name) }}: {{ "%.2f" | format(value) }}{% if not loop.last %}; {% endif %}{% endfor %}
+          {% for name, reason in choice.failed_strategies | dictsort %}<div>{{ labels.strategy.get(name, name) }} не применилась: {{ reason }}</div>{% endfor %}
+        </div>
+        <div class="muted small">
+          {% set counts = [("разделов", tree.stats.sections), ("статей", tree.stats.articles), ("пунктов", tree.stats.points), ("подпунктов", tree.stats.subpoints)] | selectattr(1) | list %}
+          {% for title, n in counts %}{{ title }} {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+      {% else %}
+        <span class="muted">не построена</span>
+      {% endif %}
+    </dd>
+    {% set noise = diag.removed_noise %}
+    {% if noise.header_footer_lines or noise.spps_lines or noise.editorial_notes or noise.contents_lines %}
+    <dt>Удалённый шум</dt>
+    <dd>
+      {% if noise.header_footer_lines %}колонтитулы и номера страниц: {{ noise.header_footer_lines }} строк{% endif %}
+      {% if noise.spps_lines %}· служебные строки справочной системы: {{ noise.spps_lines }}{% endif %}
+      {% if noise.editorial_notes %}· пометки редакции: {{ noise.editorial_notes }}{% endif %}
+      {% if noise.contents_lines %}· строки оглавления: {{ noise.contents_lines }}{% endif %}
+    </dd>
+    {% endif %}
+    {% if diag.columns_pages %}<dt>Колонки</dt><dd>многоколоночная вёрстка на стр. {{ diag.columns_pages | join(", ") }}</dd>{% endif %}
+    {% if diag.warnings %}
+    <dt>Предупреждения</dt>
+    <dd><ul class="warnings">{% for warning in diag.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></dd>
+    {% endif %}
+  </dl>
+</section>
+
+<section class="card" id="structure">
+  <h2>Структура</h2>
+  <div class="structure">
+    <div class="tree-pane">
+      {% if tree.nodes | length > 1 %}
+        {{ structure_tree(document.id, tree, by_id, open_depth) }}
+      {% else %}
+        <p class="muted">Структура пуста.</p>
+      {% endif %}
+    </div>
+    <div class="fragment-pane" id="fragment" aria-live="polite">
+      {% if selected %}
+        {% include "partials/fragment.html" %}
+      {% else %}
+        <p class="muted">Выберите пункт в дереве, чтобы увидеть его текст.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="card" id="runs">
+  <h2>Версии анализа</h2>
+  {% if diag.analyzable %}
+  <form method="post" action="/documents/{{ document.id }}/analyses" class="actions">
+    <button type="submit">Запустить анализ</button>
+    <span class="muted small">Текст документа будет отправлен в LLM по политике «{{ {"disabled": "не настроена", "local_only": "только локальная", "external_allowed": "внешняя разрешена"}[llm_policy] }}».</span>
+  </form>
+  {% endif %}
+  {% if runs %}
+  <table class="table">
+    <thead><tr><th>Запуск</th><th>Статус</th><th>Создан</th><th></th></tr></thead>
+    <tbody>
+    {% for run in runs %}
+      <tr>
+        <td><a href="/analyses/{{ run.id }}"><code>{{ run.id }}</code></a></td>
+        <td>{{ labels.run[run.status] }}{% if not run.completeness.complete %} <span class="badge badge-note">неполный</span>{% endif %}</td>
+        <td>{{ run.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+        <td>{% if run.status == "succeeded" %}<a href="/analyses/{{ run.id }}/processes">карта процессов</a>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Анализ ещё не запускался.</p>
+  {% endif %}
+</section>
+{% endblock %}

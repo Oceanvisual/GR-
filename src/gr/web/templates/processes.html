@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import grounded, citation, confidence_badge %}
+{% from "partials/review_form.html" import review_badge, review_actions, edited, text_input, grounded_input, choice_input, flag_input, deadline_input %}
+{% block title %}Карта процессов — {{ document.metadata.title.value or document.filename }}{% endblock %}
+{% block content %}
+{% set doc_id = document.id %}
+{% set history = "/analyses/" ~ run.id ~ "/history" %}
+<p class="muted small"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/documents/{{ doc_id }}">{{ document.metadata.title.value or document.filename }}</a> · <a href="{{ history }}">История решений</a></p>
+<h1>Карта процессов</h1>
+{% if not run.completeness.complete %}
+<div class="alert alert-warn" role="status"><strong>Анализ неполный:</strong> часть процессов не обработана, см. <a href="/analyses/{{ run.id }}">статус анализа</a>.</div>
+{% endif %}
+
+<div class="processes">
+  <nav class="process-list card" aria-label="Процессы">
+    <h2>Процессы ({{ model.processes | length }})</h2>
+    {% if model.processes %}
+    <ol>
+      {% for p in model.processes %}
+      <li{% if selected and p.id == selected.id %} class="current"{% endif %}>
+        <a href="?process={{ p.id }}">{{ p.name.value }}</a>
+        <div class="small">{{ p.operations | length }} оп. · {{ confidence_badge(p.confidence) }}{% if p.validation.has_errors %} <span class="badge badge-repealed">ошибки</span>{% endif %}{% if p.review.status != "pending" %} {{ review_badge(p.review) }}{% endif %}</div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">Процессы не найдены.</p>
+    {% endif %}
+  </nav>
+
+  <div class="process-detail">
+  {% if selected %}
+    {% set p = selected %}
+    {% set back = "/analyses/" ~ run.id ~ "/processes?process=" ~ p.id %}
+    <section class="card" id="process">
+      <h2>{{ p.name.value }} {{ confidence_badge(p.confidence) }} {{ review_badge(p.review) }}</h2>
+      {% if p.review.status == "rejected" %}<div class="alert alert-warn" role="status">Процесс отклонён экспертом: его операции, точки решения и инициативы не входят в расчёты.</div>{% endif %}
+      <dl class="diag">
+        <dt>Название</dt><dd>{{ grounded(doc_id, p.name, fragment_labels) }}{{ edited(p, "name") }}</dd>
+        <dt>Запуск</dt><dd>{{ grounded(doc_id, p.trigger, fragment_labels) }}{{ edited(p, "trigger") }}</dd>
+        <dt>Результат</dt><dd>{{ grounded(doc_id, p.result, fragment_labels) }}{{ edited(p, "result") }}</dd>
+        {% if p.goal %}<dt>Цель</dt><dd>{{ grounded(doc_id, p.goal, fragment_labels) }}{{ edited(p, "goal") }}</dd>{% endif %}
+        <dt>Участники</dt><dd>{% for r in p.participants %}<div>{{ grounded(doc_id, r.name, fragment_labels, false) }}</div>{% else %}<span class="muted">не указаны</span>{% endfor %}</dd>
+        <dt>Сроки</dt><dd>{% for d in p.deadlines %}<div><strong>{% if d.value is not none %}{{ d.value }} {% endif %}{{ labels.deadline_unit[d.unit] }}</strong> {{ grounded(doc_id, d.raw, fragment_labels, false) }}</div>{% else %}<span class="muted">не указаны</span>{% endfor %}</dd>
+        {% if p.inputs %}<dt>Документы</dt><dd>{% for i in p.inputs %}<div>{{ grounded(doc_id, i.name, fragment_labels, false) }}{% if i.mandatory %} <span class="badge">обязательный</span>{% endif %}</div>{% endfor %}</dd>{% endif %}
+        {% if p.information_systems %}<dt>Информационные системы</dt><dd>{% for s in p.information_systems %}<div>{{ grounded(doc_id, s, fragment_labels, false) }}</div>{% endfor %}</dd>{% endif %}
+      </dl>
+      {% call review_actions(run.id, "process", p, back, history ~ "?entity_id=" ~ p.id) %}
+        {{ grounded_input("name", "Название", p.name) }}
+        {{ grounded_input("goal", "Цель", p.goal) }}
+        {{ grounded_input("trigger", "Запуск", p.trigger) }}
+        {{ grounded_input("result", "Результат", p.result) }}
+      {% endcall %}
+    </section>
+
+    {% if initiatives is not none %}
+    <section class="card" id="initiatives">
+      <h2>Инициативы процесса</h2>
+      <p>Версия {{ initiatives.version }} · инициатив: {{ initiatives.count }}{% if initiatives.stale %} · <span class="badge badge-note">требуют пересмотра: {{ initiatives.stale }}</span>{% endif %} · <a href="/analyses/{{ run.id }}/initiatives?process_id={{ p.id }}">открыть</a></p>
+      {% if initiatives.stale %}<p class="small">Эксперт изменил процесс, операции или проблемы, на которых построены инициативы. Перегенерация заново получит инициативы по процессу с учётом решений; прежняя версия и решения по ней сохранятся, введённые допущения перейдут к инициативам с теми же операциями и категорией решения.</p>{% endif %}
+      <form method="post" action="/analyses/{{ run.id }}/processes/{{ p.id }}/regenerate"><button type="submit"{% if not initiatives.stale %} class="secondary"{% endif %}>Перегенерировать инициативы</button></form>
+    </section>
+    {% endif %}
+
+    <section class="card" id="diagram">
+      <h2>Схема</h2>
+      <pre class="mermaid">{{ mermaid }}</pre>
+    </section>
+
+    <section class="card" id="operations">
+      <h2>Операции</h2>
+      <table class="table operations">
+        <thead><tr><th>№</th><th>Операция</th><th>Исполнитель</th><th>Срок</th><th>Основание</th><th>Тип</th><th>Уверенность</th></tr></thead>
+        <tbody>
+        {% for op in p.operations %}
+          <tr id="{{ op.id }}"{% if op.review.status == "rejected" %} class="rejected"{% endif %}>
+            <td>{{ op.seq + 1 }}</td>
+            <td>
+              <strong>{{ op.name }}</strong>{{ edited(op, "name") }} {{ review_badge(op.review) }}{% if op.legally_significant %} <span class="badge badge-note" title="Юридически значимая операция">ЮЗ</span>{% endif %}{{ edited(op, "legally_significant") }}{% if op.handles_personal_data %} <span class="badge">ПДн</span>{% endif %}{{ edited(op, "handles_personal_data") }}{% if op.is_loop_back %} <span class="badge">возврат</span>{% endif %}
+              <div class="small">{{ op.action.value }} <span class="badge badge-layer-{{ op.action.layer }}">{{ labels.layer[op.action.layer] }}</span>{{ edited(op, "action") }}</div>
+              {% for c in op.conditions %}<div class="small">Условие: {{ grounded(doc_id, c, fragment_labels, false) }}</div>{% endfor %}
+            </td>
+            <td>{{ grounded(doc_id, op.performer, fragment_labels, false) }}{{ edited(op, "performer") }}</td>
+            <td>{% if op.deadline %}<strong>{% if op.deadline.value is not none %}{{ op.deadline.value }} {% endif %}{{ labels.deadline_unit[op.deadline.unit] }}</strong>{% if op.deadline.raw.value %}<div class="small">{{ op.deadline.raw.value }}</div>{% endif %}{% else %}<span class="muted">—</span>{% endif %}{{ edited(op, "deadline") }}</td>
+            <td>{% for c in op.action.citations %}{{ citation(doc_id, c, fragment_labels) }}{% endfor %}</td>
+            <td class="small">{{ labels.operation_type[op.operation_type] }}{{ edited(op, "operation_type") }}</td>
+            <td>{{ confidence_badge(op.confidence) }}</td>
+          </tr>
+          <tr class="review-row"><td></td><td colspan="6">
+            {% call review_actions(run.id, "operation", op, back ~ "#" ~ op.id, history ~ "?entity_id=" ~ op.id) %}
+              {{ text_input("name", "Название", op.name) }}
+              {{ grounded_input("action", "Действие", op.action) }}
+              {{ grounded_input("performer", "Исполнитель", op.performer) }}
+              {{ text_input("object", "Объект", op.object) }}
+              {{ deadline_input(op.deadline) }}
+              {{ choice_input("operation_type", "Тип операции", labels.operation_type, op.operation_type) }}
+              {{ flag_input("legally_significant", "Юридически значимая (снять — только с комментарием)", op.legally_significant) }}
+              {{ flag_input("handles_personal_data", "Обрабатывает персональные данные", op.handles_personal_data) }}
+              {{ flag_input("is_loop_back", "Возврат на доработку", op.is_loop_back) }}
+            {% endcall %}
+          </td></tr>
+        {% else %}
+          <tr><td colspan="7" class="muted">Подтверждённых операций нет.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {% if p.decision_points %}
+    <section class="card" id="decisions">
+      <h2>Точки решения</h2>
+      {% for dp in p.decision_points %}
+      <div class="decision{% if dp.review.status == 'rejected' %} rejected{% endif %}" id="{{ dp.id }}">
+        <strong>{{ dp.condition.value }}</strong>{{ edited(dp, "condition") }} {{ review_badge(dp.review) }} — после операции {{ dp.after_operation_id.rsplit(".", 1)[-1] }}
+        {% for c in dp.condition.citations %}<div>{{ citation(doc_id, c, fragment_labels) }}</div>{% endfor %}
+        <ul class="small">{% for o in dp.outcomes %}<li>{{ o.label }} → {% if o.next_operation_id %}{{ o.next_operation_id.rsplit(".", 1)[-1] }}{% elif o.ends_process %}завершение процесса{% else %}—{% endif %}</li>{% endfor %}</ul>
+        {% if dp.criteria %}<div class="small">Критерии:</div><ul class="small">{% for c in dp.criteria %}<li>{{ grounded(doc_id, c, fragment_labels, false) }}</li>{% endfor %}</ul>{% endif %}
+        {% call review_actions(run.id, "decision_point", dp, back ~ "#decisions", history ~ "?entity_id=" ~ dp.id) %}
+          {{ grounded_input("condition", "Условие", dp.condition) }}
+        {% endcall %}
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="card" id="validation">
+      <h2>Проверка модели</h2>
+      {% if p.validation.issues %}
+      <ul class="small">{% for i in p.validation.issues %}<li class="issue-{{ i.severity }}">{% if i.severity == "error" %}<strong>Ошибка:</strong> {% endif %}{{ i.message }} <span class="muted">({{ i.code }})</span></li>{% endfor %}</ul>
+      {% else %}
+      <p class="muted">Замечаний нет.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="unverified">
+      <h2>Не подтверждено ({{ unverified | length }})</h2>
+      <p class="muted small">Утверждения модели, которых нет в тексте акта. В карту процессов и расчёты они не входят.</p>
+      {% if unverified %}
+      <table class="table small">
+        <thead><tr><th>Что</th><th>Утверждение</th><th>Причина</th><th>Цитата модели</th></tr></thead>
+        <tbody>
+        {% for u in unverified %}
+          <tr><td>{{ labels.unverified_element[u.element_type] }}</td><td>{{ u.value }}</td><td>{{ u.reason }}</td><td>{% if u.citation %}<q>{{ u.citation.quote | truncate(160, true, "…") }}</q>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </section>
+  {% endif %}
+
+    <section class="card" id="coverage">
+      <h2>Покрытие документа</h2>
+      {% set cov = model.coverage %}
+      <p>Использовано фрагментов: {{ cov.fragments_used }} из {{ cov.fragments_total }}{% if cov.fragments_total %} ({{ (100 * cov.fragments_used / cov.fragments_total) | round | int }} %){% endif %}.</p>
+      {% if cov.uncovered_action_fragments %}
+      <p class="small">Фрагменты с описанием действий, не вошедшие ни в один процесс ({{ cov.uncovered_action_fragments | length }}):</p>
+      <ul class="small columns">{% for f in uncovered %}<li><a href="/documents/{{ doc_id }}?fragment={{ f | path_quote }}#fragment" target="_blank" rel="noopener">{{ fragment_labels.get(f, f) }}</a></li>{% endfor %}</ul>
+      {% else %}
+      <p class="muted small">Все фрагменты с описанием действий привязаны к процессам.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='vendor/mermaid.min.js') }}"></script>
+<script src="{{ url_for('static', path='processes.js') }}"></script>
+{% endblock %}
