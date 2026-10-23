@@ -55,4 +55,12 @@ ssh root@<ip> 'bash /root/bootstrap-server.sh npa.example.ru "$(cat deploy_key.p
 ## Операции
 - Откат: Actions → Deliver → Run workflow → `tag=<sha>` (или на сервере: `IMAGE=... TAG=<sha> ./remote.sh`).
 - Выключить деплой, не трогая сборку: `gh variable set DEPLOY_ENABLED --body false`.
+- Руками на сервере (compose ждёт `IMAGE` и `TAG`, выложенный тег — в `.deployed-tag`):
+  ```bash
+  cd /opt/gr && export IMAGE=ghcr.io/<owner>/<repo> TAG=$(cat .deployed-tag)
+  docker compose -f compose.prod.yml restart app      # идущий анализ станет «прерван»
+  docker compose -f compose.prod.yml logs -f app
+  ```
+- Имя репозитория должно годиться в имя образа: строчные буквы, цифры, `-`, `_`, `.` и не
+  заканчиваться разделителем (`GR-` ломает тег `ghcr.io/<owner>/gr-:<sha>`).
 - Локальная проверка образа: `docker build -t gr:dev . && docker run --rm -p 8000:8000 --env-file .env gr:dev`.
