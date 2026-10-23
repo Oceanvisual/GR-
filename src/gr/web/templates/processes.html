@@ -5,7 +5,7 @@
 {% block content %}
 {% set doc_id = document.id %}
 {% set history = "/analyses/" ~ run.id ~ "/history" %}
-<p class="muted small"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/documents/{{ doc_id }}">{{ document.metadata.title.value or document.filename }}</a> · <a href="{{ history }}">История решений</a></p>
+<p class="muted small crumbs"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/documents/{{ doc_id }}">{{ (document.metadata.title.value or document.filename) | truncate(70, true, "…") }}</a> · <a href="{{ history }}">История решений</a></p>
 <h1>Карта процессов</h1>
 {% if not run.completeness.complete %}
 <div class="alert alert-warn" role="status"><strong>Анализ неполный:</strong> часть процессов не обработана, см. <a href="/analyses/{{ run.id }}">статус анализа</a>.</div>
@@ -69,7 +69,7 @@
 
     <section class="card" id="operations">
       <h2>Операции</h2>
-      <table class="table operations">
+      <div class="table-wrap"><table class="table operations">
         <thead><tr><th>№</th><th>Операция</th><th>Исполнитель</th><th>Срок</th><th>Основание</th><th>Тип</th><th>Уверенность</th></tr></thead>
         <tbody>
         {% for op in p.operations %}
@@ -103,7 +103,7 @@
           <tr><td colspan="7" class="muted">Подтверждённых операций нет.</td></tr>
         {% endfor %}
         </tbody>
-      </table>
+      </table></div>
     </section>
 
     {% if p.decision_points %}
@@ -136,14 +136,14 @@
       <h2>Не подтверждено ({{ unverified | length }})</h2>
       <p class="muted small">Утверждения модели, которых нет в тексте акта. В карту процессов и расчёты они не входят.</p>
       {% if unverified %}
-      <table class="table small">
+      <div class="table-wrap"><table class="table small">
         <thead><tr><th>Что</th><th>Утверждение</th><th>Причина</th><th>Цитата модели</th></tr></thead>
         <tbody>
         {% for u in unverified %}
           <tr><td>{{ labels.unverified_element[u.element_type] }}</td><td>{{ u.value }}</td><td>{{ u.reason }}</td><td>{% if u.citation %}<q>{{ u.citation.quote | truncate(160, true, "…") }}</q>{% endif %}</td></tr>
         {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       {% endif %}
     </section>
   {% endif %}

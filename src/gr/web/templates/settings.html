@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Настройки модели — AI-анализ НПА{% endblock %}
 {% block content %}
-<p><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/initiatives">Инициативы</a></p>
+<p class="muted small crumbs"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/initiatives">Инициативы</a></p>
 <h1>Настройки модели</h1>
 <p>Допущения экономической модели: по ним считается денежный эквивалент высвобождаемого рабочего времени. Значения профиля по умолчанию — заглушки, замените их данными организации. Ниже — <a href="#priority">веса и пороги приоритизации</a>.</p>
 {% include "partials/settings_form.html" %}

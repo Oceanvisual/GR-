@@ -30,7 +30,7 @@
 </section>
 
 {% if documents %}
-<table class="table">
+<div class="table-wrap"><table class="table">
   <thead>
     <tr><th>Документ</th><th>Формат</th><th>Текст</th><th>Загружен</th><th>Анализ</th></tr>
   </thead>
@@ -48,7 +48,7 @@
     </tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 {% else %}
 <p class="muted">Документов пока нет.</p>
 {% endif %}

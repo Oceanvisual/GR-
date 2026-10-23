@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Инициативы — AI-анализ НПА{% endblock %}
 {% block content %}
-<p><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a> · <a href="/analyses/{{ run.id }}/history">История решений</a></p>
+<p class="muted small crumbs"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a> · <a href="/analyses/{{ run.id }}/history">История решений</a></p>
 <h1>Возможности оптимизации</h1>
 {% for banner in table.banners %}<div class="alert alert-warn">{{ banner }}</div>{% endfor %}
 
@@ -22,12 +22,12 @@
 {% set api = "/api/v1/analyses/" ~ run.id %}
 <div class="actions export" id="export">
 <span class="muted small">Выгрузить (сценарий «{{ labels.scenario[table.scenario] }}», с решениями эксперта):</span>
-<a class="button" href="{{ api }}/export.json?scenario={{ table.scenario }}" download>Полный результат, JSON</a>
-<a class="button" href="{{ api }}/export/initiatives.csv?scenario={{ table.scenario }}" download>Таблица инициатив, CSV</a>
-<a class="button" href="{{ api }}/export/operations.csv" download>Операции, CSV</a>
+<a class="button secondary" href="{{ api }}/export.json?scenario={{ table.scenario }}" download>Полный результат, JSON</a>
+<a class="button secondary" href="{{ api }}/export/initiatives.csv?scenario={{ table.scenario }}" download>Таблица инициатив, CSV</a>
+<a class="button secondary" href="{{ api }}/export/operations.csv" download>Операции, CSV</a>
 <a class="small" href="/api/v1/schema/analysis-export.json">Схема JSON</a>
 </div>
-<table class="table">
+<div class="table-wrap"><table class="table">
 <thead><tr><th>№</th><th>Процесс</th><th>Проблема</th><th>Решение</th><th>Экономия*</th><th>Риск</th><th>Приоритет</th><th>Допустимость</th></tr></thead>
 <tbody>{% for row in table.rows %}{% set i = row.initiative %}{% set p = row.priority %}
 <tr><td>{{ p.rank if p and p.rank else "—" }}</td><td>{{ row.process_name }}</td><td>{% for pattern in row.finding_patterns %}{{ labels.problem[pattern] }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
@@ -37,7 +37,7 @@
 <td>{% if p %}<strong>{{ p.score | number }}</strong><br><span class="badge">{{ labels.group[p.group] }}</span>{% else %}—{% endif %}</td>
 <td>{{ labels.gate[i.gate.status] if i.gate else "Не определена" }}{% if i.gate and i.gate.status == "blocked" %}<br><span class="muted">{{ i.gate.reasons | join(" ") }}</span>{% endif %}</td></tr>
 {% else %}<tr><td colspan="8">Инициатив по выбранным фильтрам нет.</td></tr>{% endfor %}</tbody>
-</table>
+</table></div>
 <p class="muted">* Денежный эквивалент высвобождаемого рабочего времени (модельная оценка): накопленный чистый эффект за горизонт при внедрении инициативы отдельно, ниже — её вклад в портфель; сценарий «{{ labels.scenario[table.scenario] }}», допущения версии {{ table.assumptions_version }}, веса версии {{ table.priority_config_version }}. Порядок — по рангу (балл, затем эффект, затем идентификатор), недопустимые — в конце.</p>
 {% if table.no_change %}<h2>Оптимизация не требуется</h2>{% for item in table.no_change %}<p><strong>{{ process_names.get(item.process_id, item.process_id) }}</strong>: {{ item.justification }}</p>{% endfor %}{% endif %}
 {% if table.issues %}<h2>Замечания к предложениям</h2><ul>{% for issue in table.issues %}<li>{{ process_names.get(issue.process_id, issue.process_id) }}: {{ issue.message }}</li>{% endfor %}</ul>{% endif %}

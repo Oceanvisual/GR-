@@ -16,10 +16,10 @@
 </form>
 
 <h3>Рейтинг (сценарий «Базовый»)</h3>
-<table class="table">
+<div class="table-wrap"><table class="table">
 <thead><tr><th>№</th><th>Инициатива</th><th>Балл</th><th>Группа</th><th>Почему</th></tr></thead>
 <tbody>{% for row in ranking if row.priority %}{% set p = row.priority %}
 <tr><td>{{ p.rank or "—" }}</td><td><a href="/analyses/{{ run.id }}/initiatives/{{ row.initiative.id }}">{{ row.initiative.title }}</a></td><td>{{ p.score | number }}</td><td>{{ labels.group[p.group] }}</td><td>{{ p.group_reason }}</td></tr>
 {% else %}<tr><td colspan="5">Инициатив для рейтинга нет.</td></tr>{% endfor %}</tbody>
-</table>
+</table></div>
 </div>
