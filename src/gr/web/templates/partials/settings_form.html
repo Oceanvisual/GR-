@@ -11,7 +11,7 @@
 <h2>{{ section.title }}</h2>
 {% for group in section.groups %}
 {% if group.title %}<h3>{{ group.title }}</h3>{% endif %}
-<table class="table settings">
+<div class="table-wrap"><table class="table settings">
 <thead><tr><th>Параметр</th>{% for s in scenarios %}<th>{{ labels.scenario[s] }}</th>{% endfor %}<th>Ед.</th><th>Источник</th><th>Комментарий</th></tr></thead>
 <tbody>
 {% for row in group.rows %}
@@ -24,7 +24,7 @@
 </tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
 {% else %}<p class="muted">Нет данных.</p>
 {% endfor %}
 {% endfor %}
@@ -34,10 +34,10 @@
 
 <h2>Итог расчёта (сценарий «{{ labels.scenario[table.scenario] }}»)</h2>
 <p class="muted">Денежный эквивалент высвобождаемого рабочего времени (модельная оценка). Пересчитывается при каждом сохранении без обращения к LLM.</p>
-<table class="table">
+<div class="table-wrap"><table class="table">
 <thead><tr><th>Инициатива</th><th>Процесс</th><th>Часы, 1-й год</th><th>Чистый эффект за горизонт</th><th>Окупаемость</th></tr></thead>
 <tbody>{% for row in table.rows if row.economics %}{% set e = row.economics.solo %}
 <tr><td><a href="/analyses/{{ run.id }}/initiatives/{{ row.initiative.id }}">{{ row.initiative.title }}</a></td><td>{{ row.process_name }}</td><td>{{ e.hours[0] | number }}</td><td>{{ e.cum_net | money }}</td><td>{{ (e.payback_months ~ " мес.") if e.payback_months else "не окупается за горизонт" }}</td></tr>
 {% else %}<tr><td colspan="5">Инициатив для расчёта нет.</td></tr>{% endfor %}</tbody>
-</table>
+</table></div>
 </div>

@@ -5,7 +5,7 @@
 {% block content %}
 {% set meta = document.metadata %}
 {% set diag = document.diagnostics %}
-<p class="muted small"><a href="/">← Документы</a></p>
+<p class="muted small crumbs"><a href="/">← Документы</a></p>
 <h1>{{ meta.title.value or document.filename }}</h1>
 <p class="muted">
   {{ document.filename }} · {{ document.format.value | upper }}
@@ -24,7 +24,7 @@
 
 <section class="card" id="metadata">
   <h2>Реквизиты</h2>
-  <table class="table requisites">
+  <div class="table-wrap"><table class="table requisites">
     <tbody>
     {% for name, title in labels.metadata_fields.items() %}
       {% set field = meta[name] %}
@@ -47,7 +47,7 @@
       <tr><th>Актуальность проверена</th><td colspan="2">{{ document.relevance_checked_at.strftime("%d.%m.%Y") }}{% if document.relevance_note %} — {{ document.relevance_note }}{% endif %}</td></tr>
     {% endif %}
     </tbody>
-  </table>
+  </table></div>
   <details class="edit">
     <summary>Исправить реквизиты</summary>
     <form method="post" action="/documents/{{ document.id }}/metadata" class="grid-form">
@@ -149,7 +149,7 @@
   </form>
   {% endif %}
   {% if runs %}
-  <table class="table">
+  <div class="table-wrap"><table class="table">
     <thead><tr><th>Запуск</th><th>Статус</th><th>Создан</th><th></th></tr></thead>
     <tbody>
     {% for run in runs %}
@@ -161,7 +161,7 @@
       </tr>
     {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="muted">Анализ ещё не запускался.</p>
   {% endif %}

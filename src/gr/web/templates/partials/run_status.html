@@ -14,7 +14,7 @@
     <ul class="small">{% for item in run.completeness.failed_items %}<li>{{ labels.stage[item.stage] }}: {{ item.process_key }} ({{ item.error_code }})</li>{% endfor %}</ul>
   </div>
   {% endif %}
-  <table class="table stages">
+  <div class="table-wrap"><table class="table stages">
     <thead><tr><th>Этап</th><th>Статус</th><th>Прогресс</th><th>Попыток</th><th>Ошибка</th></tr></thead>
     <tbody>
     {% for stage in run.stages %}
@@ -27,7 +27,7 @@
       </tr>
     {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   <p class="small">
     Вызовов LLM: {{ run.usage.calls }} · токенов: {{ run.usage.in_tokens }} на входе, {{ run.usage.out_tokens }} на выходе
     {%- if run.usage.estimated %} (оценка){% endif %}

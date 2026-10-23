@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}История решений — AI-анализ НПА{% endblock %}
 {% block content %}
-<p class="muted small"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/initiatives">Инициативы</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a></p>
+<p class="muted small crumbs"><a href="/analyses/{{ run.id }}">← Анализ</a> · <a href="/analyses/{{ run.id }}/processes">Карта процессов</a> · <a href="/analyses/{{ run.id }}/initiatives">Инициативы</a> · <a href="/analyses/{{ run.id }}/settings">Настройки модели</a></p>
 <h1>История решений</h1>
 <p class="muted">Журнал только на добавление: решения эксперта по элементам анализа, правки допущений, весов и порогов. Выходы анализа не меняются — исходное значение видно в колонке «Было».</p>
 {% if element %}<p>Элемент: <strong>{{ element }}</strong> · <a href="/analyses/{{ run.id }}/history">вся история</a></p>{% endif %}
@@ -11,7 +11,7 @@
   {% if entity_id %}<input type="hidden" name="entity_id" value="{{ entity_id }}">{% endif %}
   <button type="submit">Показать</button>
 </form>
-<table class="table history">
+<div class="table-wrap"><table class="table history">
 <thead><tr><th>Когда (UTC)</th><th>Кто</th><th>Что</th><th>Решение</th><th>Было → стало</th><th>Комментарий</th></tr></thead>
 <tbody>
 {% for e in entries %}
@@ -25,5 +25,5 @@
 </tr>
 {% else %}<tr><td colspan="6" class="muted">Решений пока нет.</td></tr>{% endfor %}
 </tbody>
-</table>
+</table></div>
 {% endblock %}

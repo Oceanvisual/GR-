@@ -2,11 +2,11 @@
 {% block title %}{{ "Перегенерация" if run.parent_run_id else "Анализ" }} — {{ document.metadata.title.value or document.filename }}{% endblock %}
 {% block content %}
 {% if run.parent_run_id %}
-<p class="muted small"><a href="/analyses/{{ run.parent_run_id }}/processes?process={{ run.process_id }}">← Карта процессов анализа</a></p>
+<p class="muted small crumbs"><a href="/analyses/{{ run.parent_run_id }}/processes?process={{ run.process_id }}">← Карта процессов анализа</a></p>
 <h1>Перегенерация инициатив процесса</h1>
 <p>«{{ process_name }}»: инициативы заново по процессу с учётом решений эксперта. Прежняя версия и решения по ней сохраняются.</p>
 {% else %}
-<p class="muted small"><a href="/documents/{{ document.id }}#runs">← {{ document.metadata.title.value or document.filename }}</a></p>
+<p class="muted small crumbs"><a href="/documents/{{ document.id }}#runs">← {{ (document.metadata.title.value or document.filename) | truncate(70, true, "…") }}</a></p>
 <h1>Анализ документа</h1>
 {% endif %}
 <p class="muted small">
